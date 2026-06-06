@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autopwn"
+version = "4.0.dev0"
+description = "AutoPwn - Automated Binary Exploitation Framework"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [
+    { name = "qzdx_soc", email = "soc@qzdx.example" },
+]
+keywords = ["pwn", "ctf", "exploit", "binary", "rop", "shellcode"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Education",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+dependencies = [
+    "pwntools>=4.9.0",
+    "LibcSearcher>=1.1.5",
+    "ropper>=1.13.5",
+    "python-docx>=0.8.11",
+    "pyelftools>=0.29",
+]
+
+[project.urls]
+Homepage = "https://github.com/f4cknet/autopwn"
+Repository = "https://github.com/f4cknet/autopwn.git"
+Issues = "https://github.com/f4cknet/autopwn/issues"
+BasedOn = "https://github.com/heimao-box/pwnpasi"
+
+[project.scripts]
+autopwn = "autopwn.cli:main"
+
+[tool.setuptools]
+packages = [
+    "autopwn",
+    "autopwn.core",
+    "autopwn.recon",
+    "autopwn.detect",
+    "autopwn.primitives",
+    "autopwn.exp",
+    "autopwn.exp.strategies",
+    "autopwn.report",
+]
+
+[tool.setuptools.package-data]
+autopwn = ["py.typed"]

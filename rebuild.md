@@ -72,7 +72,7 @@
 
 | # | 里程碑 | 阶段 | 目标产物 | 验收 | 状态 |
 |---|---|---|---|---|---|
-| **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | 🔄 P0.0/P0.6 ✅ P0.1–P0.5 ⏳ |
+| **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | 🔄 P0 ✅ P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_recon_*` 全绿 | ⏳ |
 | **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个二进制 | ⏳ |
@@ -94,11 +94,11 @@
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
 | **P0.0** | **全局重命名 `pwnpasi` → `autopwn`**（**临时需求 #1**） | ✅ | @Ba1_Ma0 | 3h | 0.5h | #P0.0 | 已完成；R12 Resolved；验证：banner/help/烟雾测试三关通过；详见 §6.1 P0.0 验证段 |
-| P0.1 | 新建 `autopwn/` 目录及子包目录（`core recon detect primitives exp report`） | ⏳ | — | 1h | — | — | 见 §6.1 |
-| P0.2 | 写各包 `__init__.py`（含 `__all__` 占位） | ⏳ | — | 1h | — | — | |
-| P0.3 | 写 `pyproject.toml`（PEP 621），声明依赖 | ⏳ | — | 2h | — | — | |
-| P0.4 | `autopwn.py` 改为 shim，转发到 `autopwn.cli.main` | ⏳ | — | 1h | — | — | |
-| P0.5 | 验证 `python autopwn.py -l Challenge/canary` 与重构前行为一致 | ⏳ | — | 1h | — | — | |
+| P0.1 | 新建 `autopwn/` 目录及子包目录（`core recon detect primitives exp report`） | ✅ | @Ba1_Ma0 | 1h | 0.2h | #P0.1-P0.5 | 8 个包目录 + 占位 __init__.py |
+| P0.2 | 写各包 `__init__.py`（含 `__all__` 占位） | ✅ | @Ba1_Ma0 | 1h | 0.1h | #P0.1-P0.5 | autopwn/__init__.py 带版本/作者/组织；re-export cli；子包标准 __all__ |
+| P0.3 | 写 `pyproject.toml`（PEP 621），声明依赖 | ✅ | @Ba1_Ma0 | 2h | 0.2h | #P0.1-P0.5 | name=autopwn / deps 5 项 / entry_points autopwn=autopwn.cli:main |
+| P0.4 | `autopwn.py` 改为 shim，转发到 `autopwn.cli.main` | ✅ | @Ba1_Ma0 | 1h | 0.1h | #P0.1-P0.5 | 5 行 shim；monolith 移入 autopwn/_legacy.py（git mv 保留历史）|
+| P0.5 | 验证 `python autopwn.py -l Challenge/canary` 与重构前行为一致 | ✅ | @Ba1_Ma0 | 1h | 0.3h | #P0.1-P0.5 | 5 项：语法/import/`--help`×2 入口/canary 烟雾测试 全过 |
 | **P0.6** | **文档交叉引用**：`rebuild.md` §0 顶部加"必读 `AGENTS.md`"指引 | ✅ | @Ba1_Ma0 | 0.5h | 0.2h | #P0.6 | doc-only，与 P0.0 同步完成 |
 
 ### 4.2 P1 — 基础设施层
@@ -248,7 +248,7 @@ P1 ───┘           ├── P3 ──┤
 
 ### 6.1 P0 — 改名 + 包骨架 + shim
 
-**🟢 状态**：🔄 P0.0+P0.6 ✅ Done（2026-06-06）｜P0.1–P0.5 ⏳ Pending｜**🔴 优先级**：P0｜**⏱ 预估**：10.5h｜**👤 Owner**：@Ba1_Ma0
+**🟢 状态**：🔄 P0 全部 ✅ Done（2026-06-06）｜**🔴 优先级**：P0｜**⏱ 预估**：10.5h（实际 1.4h）｜**👤 Owner**：@Ba1_Ma0
 
 **目标**：
 1. **P0.0**：全局重命名 `pwnpasi` → `autopwn`（临时需求 #1）

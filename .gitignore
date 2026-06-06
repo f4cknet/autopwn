@@ -1,0 +1,84 @@
+# ============================================================
+# AutoPwn / Python / Toolchain gitignore
+# 维护: f4cknet <zmzsg100@gmail.com> 2026-06-06
+# ============================================================
+
+# ----- Python -----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ----- Virtual environments -----
+venv/
+env/
+.venv/
+ENV/
+.python-version
+
+# ----- IDE / Editor -----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ----- autopwn 旧实现产生的临时文件（pwnpasi.py 留下的问题，P0/P1 重构后会消失） -----
+ropper.txt
+Objdump_Scan.txt
+libc_path.txt
+Information_Collection.txt
+core*
+core.[0-9]*
+
+# ----- autopwn 生成的报告（可由 --report-dir 重新生成，不入仓） -----
+*.docx
+!docs/**/*.docx
+
+# ----- 测试 / 临时 / 日志 -----
+*.log
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.cache/
+
+# ----- 凭据 / 加密 -----
+*.pem
+*.key
+.env
+.env.local
+.env.*.local
+*.p12
+
+# ----- 系统 / 杂项 -----
+*.bak
+*.tmp
+*.orig
+*.rej
+node_modules/
+
+# ----- agent 内部配置（不属于项目代码） -----
+.agents/
+skills-lock.json

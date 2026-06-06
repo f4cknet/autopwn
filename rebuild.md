@@ -1174,7 +1174,23 @@ Refs: rebuild.md#P4.1
 
 | 阻塞 ID | 阻塞任务 | 等待内容 | 责任人 | 起始时间 | 状态 |
 |---|---|---|---|---|---|
-| **B-001** | P0.0 品牌变更决策（R12） | GitHub=`f4cknet/autopwn` / 团队=`qzdx_soc`(衢州电信安全运营中心) / 版本=`4.0.dev0` / 署名=方案 B | Owner | 2026-06-06 | ✅ Resolved 2026-06-06 |
+| ~~**B-001**~~ | ~~P0.0 品牌变更决策（R12）~~ | GitHub=`f4cknet/autopwn` / 团队=`qzdx_soc` / 版本=`4.0.dev0` / 署名=方案 B | Owner | 2026-06-06 | ✅ Resolved 2026-06-06 |
+
+---
+
+### §10.1 已就位的基础设施（Operational state · 2026-06-06）
+
+| 项 | 值 |
+|---|---|
+| GitHub repo | https://github.com/f4cknet/autopwn |
+| 首个 commit | `51bf49c` — "[P0.0] rename pwnpasi → autopwn" |
+| Commit URL | https://github.com/f4cknet/autopwn/commit/51bf49c29f65c35608dd87fd513c6d0dd8f90dbf |
+| SSH key | `ed25519` / fingerprint `SHA256:0fFiu7Jr19hPPqIQWW07S+vagVYtmFXvzVnscMZAUAo` |
+| git config | user.name=`f4cknet` / user.email=`zmzsg100@gmail.com` |
+| remote | `git@github.com:f4cknet/autopwn.git` (SSH) |
+| 跟踪分支 | `main` ↔ `origin/main` 已同步 |
+| `.gitignore` | 84 行（Python / 临时文件 / .agents/ / .docx / 凭据） |
+| CI / Actions | 尚未配置（**P9** 阶段落地） |
 
 > 阻塞超过 3 天升级到 Owner。
 

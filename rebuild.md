@@ -1613,7 +1613,7 @@ def generate_docx(info: ExploitInfo, out_dir: Path) -> Optional[Path]:
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期）
 - **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
 - **1 处待 P3.3 清理**：`from autopwn._legacy import generate_exploitation_code`（P3.3 移到 `report.code` 后此 import 切换）
-- **commit 引用**：（待 commit 后回填）
+- **commit 引用**：`e58710a`（P3.2）— `6460707` (P3.1) → `e58710a` (P3.2)
 
 ---
 

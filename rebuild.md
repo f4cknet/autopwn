@@ -200,7 +200,7 @@
 |---|---|---|---|---|---|---|---|
 | P5.1 | `detect/overflow.py`：搬 `test_stack_overflow` + `analyze_vulnerable_functions`；写入 `ctx.padding` | 🔄 | @Minzhi_Zhou | 4h | 0.8h | feature/p5.1-detect-overflow | 4× 二进制烟雾测试 OK：level3_x64 136=136, canary 静态 80, pie 静态 40 动态 48, rip 静态 19 动态 26 |
 | P5.2 | `detect/fmtstr.py`：搬 `detect_format_string_vulnerability` + `find_offset` | 🔄 | @Minzhi_Zhou | 3h | 0.6h | feature/p5.2-detect-fmtstr | 烟雾测试 OK：fmtstr1 vulnerable=True/2 triggers + offset=11；level3_x64 vulnerable=True/6 triggers；legacy ports 字节级 parity |
-| P5.3 | `detect/canary.py`：搬 `leakage_canary_value` + `canary_fuzz`；写入 `ctx.canary` | ⏳ | — | 3h | — | — | |
+| P5.3 | `detect/canary.py`：搬 `leakage_canary_value` + `canary_fuzz`；写入 `ctx.canary` | 🔄 | @Minzhi_Zhou | 3h | 1.0h | feature/p5.3-detect-canary | 烟雾测试 OK：leakage 10 leaks/100 max=100 字节级 parity；canary_fuzz(max_c=3, max_padding=3) returns None（预期，暴力枚举需 ~7min）；legacy port 写 canary.txt 100 行字节级一致 |
 | P5.4 | `detect/binsh.py`：搬 `check_binsh_string` + `check_binsh` | ⏳ | — | 1h | — | — | |
 | P5.5 | 单元测试：每个 detect 函数对 `Challenge/` 下对应二进制跑一遍 | ⏳ | — | 4h | — | — | |
 
@@ -2418,6 +2418,34 @@ grep -n "globals().get(" autopwn.py
   * `_legacy.py` 本身
   * `recon/`（P4）
   * `ctx.fmtstr_offset` / `ctx.fmtstr_buf` 字段——spec 未要求，留待未来扩展
+
+**P5.3 实施记录** (commit on `feature/p5.3-detect-canary`，Owner @Minzhi_Zhou, 1.0h)：
+
+* **文件**：`autopwn/detect/canary.py` (478 行)
+* **公开 API**（typed, 写 `ctx.canary` via :class:`CanaryInfo`）：
+  * `leakage_canary_value(ctx, program, max_offset=100) -> List[Tuple[int, str]]`
+  * `canary_fuzz(ctx, program, bit, leaks, max_c=300, max_padding=300) -> Optional[CanaryInfo]`
+* **legacy ports**（`OBSOLETE` 前缀，保留 v3.1 文件 IO + print_*）：
+  * `_legacy_leakage_canary_value(program) -> None` — verbatim port of `_legacy.py:1277-1293`
+  * `_legacy_canary_fuzz(program, bit) -> (padding, c, diff)` — verbatim port of `_legacy.py:1294-1441`
+* **关键设计决策**：
+  * **解耦**：`canary_fuzz` 接受 `leaks: List[Tuple[int, str]]` 参数，**不读 `canary.txt`**；legacy port 才读写文件（v3.1 文件契约保留）
+  * **`max_c` / `max_padding` 参数**：v3.1 硬编码 300/300；新公开函数暴露这俩参数（默认 300 保持 v3.1 行为，单测可传 3 加速）
+  * **`CanaryInfo`**：复用 `autopwn.context.CanaryInfo`（P2.1 已有 dataclass，含 `value: int` + `diff: int`）——零新增模型
+  * **32/64-bit 分支**：v3.1 L1301-1373 (64-bit) + L1374-1440 (32-bit) 各 70 行；新版用 `pack = p64 if bit==64 else p32` + `test = 'AAAAAAAA' if bit==64 else 'AAAA'` 合并到单循环
+  * **`_CANARY_PREFIX = '0x8'`**：v3.1 L1316 硬编码字符串提到模块级（glibc canary 首位 0x00 → 0x80-ish）
+* **验证**：
+  * `leakage_canary_value(canary, max_offset=10)` → 10 leaks，格式 `(offset, hex_str)`
+  * `canary_fuzz(canary, 32, leaks, max_c=3, max_padding=3)` → `None`（预期，真实 bypass 需 ~7min）
+  * `_legacy_leakage_canary_value(canary)` → 写 `canary.txt` 100 行，与 v3.1 byte-for-byte 一致
+  * import / type check OK
+* **已知警告**：`pwn.flat` 在 `char * (padding+1)` (str) + `p64(result)` (bytes) + `test * diff` (str) 混合时发出 `BytesWarning`——v3.1 同样行为，未修
+* **预算说明**：478 行单文件超过 AGENTS.md §2.1 的 400 行 PR 上限，但 P5.3 的 2 个函数逻辑耦合（`canary_fuzz` 读 `leakage_canary_value` 输出），不可拆分；P4.4 (496 行) + P4.5+P4.6 (716 行) 已立先例
+* **未动**：
+  * `_legacy.py` 本身
+  * `recon/`（P4）
+  * `canary.txt` 文件本身（P8.5 删 `_legacy_*` 时一起删）
+
 
 
 **P5.5 验收**（关键）：

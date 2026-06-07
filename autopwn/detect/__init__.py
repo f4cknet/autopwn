@@ -16,6 +16,10 @@ P5 layer is the **only** layer authorized to mutate ``ctx`` per
     returning a :class:`FormatStringProbe` dataclass, and
     ``find_offset(ctx, program)`` returning the 1-based offset
     of the ``0x41414141`` sentinel in a leaked stack walk.
+  * **P5.3** (``canary``) — ``leakage_canary_value(ctx, program)``
+    returns list of ``(offset, hex_string)`` pairs; ``canary_fuzz(ctx, program, bit, leaks)``
+    returns a :class:`CanaryInfo` (or ``None``) and writes it
+    into ``ctx.canary``.
 """
 from __future__ import annotations
 
@@ -28,6 +32,10 @@ from autopwn.detect.fmtstr import (
     detect_format_string_vulnerability as detect_format_string_vulnerability,
     find_offset as find_offset,
 )
+from autopwn.detect.canary import (
+    leakage_canary_value as leakage_canary_value,
+    canary_fuzz as canary_fuzz,
+)
 
 __all__: list[str] = [
     "test_stack_overflow",
@@ -35,4 +43,6 @@ __all__: list[str] = [
     "FormatStringProbe",
     "detect_format_string_vulnerability",
     "find_offset",
+    "leakage_canary_value",
+    "canary_fuzz",
 ]

@@ -63,6 +63,15 @@ from autopwn.core.fs import (  # noqa: F401, E402
     set_permission, add_current_directory_prefix, temp_workdir,
 )
 
+# Subprocess wrappers (P1.3 + P1.3a-d: moved to autopwn.core.runner, used inline in P1.5)
+from autopwn.core.runner import (  # noqa: F401, E402
+    ToolError,
+    run_checksec, run_ropper, run_objdump_disasm, run_ldd,
+    run_file, run_readelf, run_strings, run_nm,
+    run_ropgadget, run_cyclic_create, run_cyclic_find, run_one_gadget,
+    run_strace, run_ltrace, run_seccomp, run_gdb_batch,
+)
+
 # Global variables for exploit information
 exploit_info = {
     'target_binary': '',
@@ -355,22 +364,24 @@ def detect_libc(program):
     print_debug(f"libc: detecting via ldd for {program}")
     print_info("detecting libc path automatically")
     libc_path = None
-    
+
     try:
-        os.system(f"ldd {program} | awk '{{$1=$1; print}}' > libc_path.txt")
-        
-        with open("libc_path.txt", "r") as file:
-            for line in file:
-                if 'libc.so.6' in line:
-                    parts = line.split('=>')
-                    if len(parts) > 1:
-                        libc_path = parts[1].strip().split()[0]
-                        print_success(f"libc path detected: {Colors.YELLOW}{libc_path}{Colors.END}")
-                        break
-        
+        # P1.5: replaced `os.system("ldd X | awk ... > libc_path.txt")` +
+        # open("libc_path.txt") + readlines() with in-memory run_ldd + Python
+        # .strip() (the awk `{print $1=$1; print}` was just whitespace collapse).
+        ldd_out = run_ldd(program)
+
+        for line in ldd_out.splitlines():
+            if 'libc.so.6' in line:
+                parts = line.strip().split('=>')
+                if len(parts) > 1:
+                    libc_path = parts[1].strip().split()[0]
+                    print_success(f"libc path detected: {Colors.YELLOW}{libc_path}{Colors.END}")
+                    break
+
         if not libc_path:
             print_warning("libc path not found in ldd output")
-            
+
     except Exception as e:
         print_error(f"failed to detect libc: {e}")
     
@@ -464,18 +475,19 @@ def Information_Collection(program):
 def collect_binary_info(program):
     """Collect comprehensive binary information"""
     print_info("collecting binary information")
-    
+
     try:
-        print_debug(f"exec: checksec {program} (output → Information_Collection.txt)")
-        os.system(f"checksec {program} > Information_Collection.txt 2>&1")
-        
-        with open("Information_Collection.txt", 'r') as f:
-            content = f.readlines()
-        
+        # P1.5: replaced `os.system("checksec X > Information_Collection.txt
+        # 2>&1")` + open() + readlines() with in-memory run_checksec. The
+        # checksec output is now a str, parsed directly (no file I/O, no
+        # cwd pollution from Information_Collection.txt).
+        print_debug(f"exec: checksec {program} (output captured in-memory)")
+        checksec_out = run_checksec(program)
+
         result = {}
-        
+
         # Parse architecture
-        arch_match = re.search(r"Arch:\s+(\S+)", "".join(content))
+        arch_match = re.search(r"Arch:\s+(\S+)", checksec_out)
         if arch_match:
             arch = arch_match.group(1)
             result['arch'] = arch
@@ -483,11 +495,11 @@ def collect_binary_info(program):
                 result['bit'] = 64
             elif '32' in arch:
                 result['bit'] = 32
-        
+
         # Parse security features
         security_features = ['RELRO', 'Stack', 'NX', 'PIE', 'Stripped', 'RWX']
         for feature in security_features:
-            for line in content:
+            for line in checksec_out.splitlines():
                 if feature in line:
                     result[feature] = line.split(":")[1].strip()
                     break
@@ -575,24 +587,27 @@ def find_large_bss_symbols(program):
 def scan_plt_functions(program):
     """Scan and analyze PLT functions"""
     print_info("analyzing PLT table and available functions")
-    
+
     try:
-        os.system(f"objdump -d {program} > Objdump_Scan.txt 2>&1")
+        # P1.5: replaced `os.system("objdump -d X > Objdump_Scan.txt 2>&1")`
+        # + open() + readlines() with in-memory run_objdump_disasm (intel
+        # spec + no-raw-insn; P1.3 spec). Output format is identical
+        # to what objdump -d would produce for the line-level parse
+        # below (we just have intel syntax instead of AT&T).
+        objdump_out = run_objdump_disasm(program)
         target_functions = ["write", "puts", "printf", "main", "system", "backdoor", "callsystem"]
         function_addresses = {}
         found_functions = []
-        
-        with open("Objdump_Scan.txt", "r") as file:
-            lines = file.readlines()
-        
+        lines = objdump_out.splitlines()
+
         print_section_header("FUNCTION ANALYSIS")
         headers = ["Function", "Address", "Available"]
         print_table_header(headers)
-        
+
         for func in target_functions:
             found = False
             address = "N/A"
-            
+
             for line in lines:
                 if f"<{func}@plt>:" in line or f"<{func}>:" in line:
                     address = line.split()[0].strip(":")
@@ -622,59 +637,60 @@ def set_function_flags(function_addresses):
 def find_rop_gadgets_x64(program):
     """Find ROP gadgets for x64 architecture"""
     print_info("searching for ROP gadgets (x64)")
-    
+
     gadgets = {
         'pop_rdi': None,
-        'pop_rsi': None, 
+        'pop_rsi': None,
         'ret': None,
         'other_rdi_registers': None,
         'other_rsi_registers': None
     }
-    
+
     try:
-        # Search for pop rdi gadgets
-        os.system(f"ropper --file {program} --search 'pop rdi' > ropper.txt --nocolor 2>&1")
-        os.system(f"ropper --file {program} --search 'pop rsi' >> ropper.txt --nocolor 2>&1")
-        os.system(f"ropper --file {program} --search 'ret' >> ropper.txt --nocolor 2>&1")
-        
-        with open("ropper.txt", "r") as file:
-            lines = file.readlines()
-        
+        # P1.5: replaced 3 `os.system("ropper ... >> ropper.txt")` calls
+        # + open() + readlines() with 3 in-memory run_ropper calls.
+        # Concatenate the per-search outputs (legacy code did the same
+        # thing by appending to ropper.txt).
+        lines = []
+        for search in ['pop rdi', 'pop rsi', 'ret']:
+            ropper_out = run_ropper(program, search)
+            lines.extend(ropper_out.splitlines())
+
         print_section_header("ROP GADGETS (x64)")
         headers = ["Gadget Type", "Address", "Instruction"]
         print_table_header(headers)
-        
+
         for line in lines:
             if '[INFO]' in line:
                 continue
-                
+
             if "pop rdi;" in line and "pop rdi; pop" in line:
                 gadgets['pop_rdi'] = line.split(":")[0].strip()
                 gadgets['other_rdi_registers'] = 1
                 print_table_row(["pop rdi (multi)", gadgets['pop_rdi'], "pop rdi; pop ...; ret"], [Colors.END, Colors.YELLOW, Colors.END])
-                
+
             elif "pop rdi; ret;" in line:
                 gadgets['pop_rdi'] = line.split(":")[0].strip()
                 gadgets['other_rdi_registers'] = 0
                 print_table_row(["pop rdi", gadgets['pop_rdi'], "pop rdi; ret"], [Colors.END, Colors.YELLOW, Colors.END])
-                
+
             elif "pop rsi;" in line and "pop rsi; pop" in line:
                 gadgets['pop_rsi'] = line.split(":")[0].strip()
                 gadgets['other_rsi_registers'] = 1
                 print_table_row(["pop rsi (multi)", gadgets['pop_rsi'], "pop rsi; pop ...; ret"], [Colors.END, Colors.YELLOW, Colors.END])
-                
+
             elif "pop rsi; ret;" in line:
                 gadgets['pop_rsi'] = line.split(":")[0].strip()
                 gadgets['other_rsi_registers'] = 0
                 print_table_row(["pop rsi", gadgets['pop_rsi'], "pop rsi; ret"], [Colors.END, Colors.YELLOW, Colors.END])
-                
+
             elif "ret" in line and "ret " not in line:
                 gadgets['ret'] = line.split(":")[0].strip()
                 print_table_row(["ret", gadgets['ret'], "ret"], [Colors.END, Colors.YELLOW, Colors.END])
-        
+
         print_info("")
         return gadgets['pop_rdi'], gadgets['pop_rsi'], gadgets['ret'], gadgets['other_rdi_registers'], gadgets['other_rsi_registers']
-        
+
     except Exception as e:
         print_error(f"failed to find ROP gadgets: {e}")
         return None, None, None, None, None
@@ -682,32 +698,32 @@ def find_rop_gadgets_x64(program):
 def find_rop_gadgets_x32(program):
     """Find ROP gadgets for x32 architecture"""
     print_info("searching for ROP gadgets (x32)")
-    
+
     gadgets = {
         'pop_eax': None, 'pop_ebx': None, 'pop_ecx': None, 'pop_edx': None,
         'pop_ecx_ebx': None, 'ret': None, 'int_0x80': None
     }
-    
+
     registers_found = {'eax': 0, 'ebx': 0, 'ecx': 0, 'edx': 0}
-    
+
     try:
         print_section_header("ROP GADGETS (x32)")
         headers = ["Gadget Type", "Address", "Status"]
         print_table_header(headers)
-        
+
         # Search for each register gadget
         register_searches = ['eax', 'ebx', 'ecx', 'edx']
-        
+
         for reg in register_searches:
-            os.system(f"ropper --file {program} --search 'pop {reg};' > ropper.txt --nocolor 2>&1")
-            
-            with open("ropper.txt", "r") as file:
-                lines = file.readlines()
-                
+            # P1.5: replaced `os.system("ropper ... > ropper.txt")` + open()
+            # with in-memory run_ropper.
+            ropper_out = run_ropper(program, f"pop {reg};")
+            lines = ropper_out.splitlines()
+
             for line in lines:
                 if '[INFO]' in line:
                     continue
-                    
+
                 if f"pop {reg}; ret;" in line:
                     address = line.split(":")[0].strip()
                     gadgets[f'pop_{reg}'] = address
@@ -720,36 +736,34 @@ def find_rop_gadgets_x32(program):
                     registers_found[reg] = 1
                     print_table_row(["pop ecx; pop ebx", address, "FOUND"], [Colors.END, Colors.YELLOW, Colors.SUCCESS])
                     break
-            
+
             if registers_found[reg] == 0:
                 print_table_row([f"pop {reg}", "N/A", "NOT FOUND"], [Colors.END, Colors.END, Colors.ERROR])
-        
-        # Search for ret and int 0x80
-        os.system(f"ropper --file {program} --search 'ret;' > ropper.txt --nocolor 2>&1")
-        with open("ropper.txt", "r") as file:
-            for line in file.readlines():
-                if '[INFO]' in line:
-                    continue
-                if "ret" in line and "ret " not in line:
-                    gadgets['ret'] = line.split(":")[0].strip()
-                    print_table_row(["ret", gadgets['ret'], "FOUND"], [Colors.END, Colors.YELLOW, Colors.SUCCESS])
-                    break
-        
-        os.system(f"ropper --file {program} --search 'int 0x80;' > ropper.txt --nocolor 2>&1")
-        with open("ropper.txt", "r") as file:
-            for line in file.readlines():
-                if '[INFO]' in line:
-                    continue
-                if "int 0x80" in line:
-                    gadgets['int_0x80'] = line.split(":")[0].strip()
-                    print_table_row(["int 0x80", gadgets['int_0x80'], "FOUND"], [Colors.END, Colors.YELLOW, Colors.SUCCESS])
-                    break
-        
+
+        # Search for ret and int 0x80 (P1.5: in-memory run_ropper)
+        ret_out = run_ropper(program, "ret;")
+        for line in ret_out.splitlines():
+            if '[INFO]' in line:
+                continue
+            if "ret" in line and "ret " not in line:
+                gadgets['ret'] = line.split(":")[0].strip()
+                print_table_row(["ret", gadgets['ret'], "FOUND"], [Colors.END, Colors.YELLOW, Colors.SUCCESS])
+                break
+
+        int80_out = run_ropper(program, "int 0x80;")
+        for line in int80_out.splitlines():
+            if '[INFO]' in line:
+                continue
+            if "int 0x80" in line:
+                gadgets['int_0x80'] = line.split(":")[0].strip()
+                print_table_row(["int 0x80", gadgets['int_0x80'], "FOUND"], [Colors.END, Colors.YELLOW, Colors.SUCCESS])
+                break
+
         print_info("")
         return (gadgets['pop_eax'], gadgets['pop_ebx'], gadgets['pop_ecx'], gadgets['pop_edx'],
                 gadgets['pop_ecx_ebx'], gadgets['ret'], gadgets['int_0x80'],
                 registers_found['eax'], registers_found['ebx'], registers_found['ecx'], registers_found['edx'])
-        
+
     except Exception as e:
         print_error(f"failed to find ROP gadgets: {e}")
         return None, None, None, None, None, None, None, 0, 0, 0, 0
@@ -797,11 +811,14 @@ def test_stack_overflow(program, bit):
 def analyze_vulnerable_functions(program, bit):
     """Analyze assembly code to find vulnerable functions"""
     print_info("analyzing vulnerable functions")
-    
+
     try:
-        with open("Objdump_Scan.txt", 'r') as f:
-            content = f.read()
-        
+        # P1.5: replaced `with open("Objdump_Scan.txt") as f: content = f.read()`
+        # (relied on scan_plt_functions having written the file) with
+        # self-contained run_objdump_disasm(intel=False). Use AT&T syntax
+        # to match legacy regexes (e.g. `lea -0x10(%rbp), %rax`).
+        content = run_objdump_disasm(program, intel=False)
+
         func_pattern = r'^[0-9a-f]+ <(\w+)>:(.*?)(?=^\d+ <\w+>:|\Z)'
         functions = re.finditer(func_pattern, content, re.MULTILINE | re.DOTALL)
         
@@ -848,11 +865,18 @@ def analyze_vulnerable_functions(program, bit):
         print_error(f"failed to analyze vulnerable functions: {e}")
         return None
 
-def vuln_func_name():
-    """Find vulnerable function names from objdump scan"""
+def vuln_func_name(program):
+    """Find vulnerable function names from objdump scan.
+
+    program: target binary path (required; legacy code relied on a
+    global 'program' binding which P1.5 makes explicit).
+    """
     try:
-        with open("Objdump_Scan.txt", 'r') as f:
-            content = f.read()
+        # P1.5: replaced `with open("Objdump_Scan.txt") as f: content = f.read()`
+        # (relied on scan_plt_functions having written the file) with
+        # self-contained run_objdump_disasm(intel=False) to match
+        # legacy AT&T syntax regexes.
+        content = run_objdump_disasm(program, intel=False)
 
         functions = re.split(r'\n\n', content.strip())
 
@@ -882,11 +906,14 @@ def vuln_func_name():
 def asm_stack_overflow(program, bit):
     """Assembly-based stack overflow analysis with padding adjustment"""
     print_info("performing assembly-based overflow analysis")
-    
+
     try:
-        with open("Objdump_Scan.txt", 'r') as f:
-            content = f.read()
-        
+        # P1.5: replaced `with open("Objdump_Scan.txt") as f: content = f.read()`
+        # (relied on scan_plt_functions having written the file) with
+        # self-contained run_objdump_disasm(intel=False) to match
+        # legacy AT&T syntax regexes.
+        content = run_objdump_disasm(program, intel=False)
+
         func_pattern = r'^[0-9a-f]+ <(\w+)>:(.*?)(?=^\d+ <\w+>:|\Z)'
         functions = re.finditer(func_pattern, content, re.MULTILINE | re.DOTALL)
         
@@ -924,13 +951,14 @@ def asm_stack_overflow(program, bit):
 def check_binsh_string(program):
     """Check for /bin/sh string in binary"""
     print_info("checking for /bin/sh string")
-    
+
     try:
-        os.system(f'strings {program} | grep "/bin/sh" > check_binsh.txt')
-        
-        with open('check_binsh.txt', 'r') as file:
-            content = file.read()
-        
+        # P1.5: replaced `os.system("strings X | grep /bin/sh > file")` +
+        # open() with in-memory run_strings + Python 'in' check.
+        # (run_strings returns ALL strings, then we check substring;
+        # equivalent to the shell pipe for our binary sizes.)
+        content = run_strings(program)
+
         if '/bin/sh' in content:
             print_success("/bin/sh string found in binary")
             return True
@@ -944,11 +972,9 @@ def check_binsh_string(program):
 
 def check_binsh(program):
     """Check for /bin/sh string in binary (autopwn_base.py compatible)"""
-    os.system('strings ' + program +' | grep "/bin/sh" > check_binsh.txt')
-    with open('check_binsh.txt', 'r') as file:
-        content = file.read()
-    
-    return '/bin/sh' in content
+    # P1.5: replaced `os.system("strings X | grep /bin/sh > file")` + open()
+    # with in-memory run_strings. Same return value.
+    return '/bin/sh' in run_strings(program)
 
 def detect_format_string_vulnerability(program):
     """Detect format string vulnerabilities"""
@@ -3343,7 +3369,7 @@ Examples:
             if adjusted_padding:
                 padding = adjusted_padding
             # Display vulnerable function information
-            results = vuln_func_name()
+            results = vuln_func_name(program)
             if results:
                 print_section_header("VULNERABLE FUNCTIONS IDENTIFIED")
                 for func_name in results:
@@ -3351,7 +3377,21 @@ Examples:
                 print_section_header("ASSEMBLY CODE ANALYSIS")
                 for func_name in results:
                     print_info(f"disassembling function: {Colors.YELLOW}{func_name}{Colors.END}")
-                    os.system("objdump -d -M intel " + program + " --no-show-raw-insn | grep -A20 " + '"' + func_name + '"')
+                    # P1.5: replaced `os.system("objdump -d -M intel X ...
+                    # | grep -A20 func_name")` with in-memory
+                    # run_objdump_disasm(intel=True) + Python grep -A20
+                    # emulation. The shell command was intel-syntax
+                    # (with -M intel flag), so keep intel here for
+                    # match-the-original-output. Prints the matching
+                    # line + 20 lines after, matching the shell pipe's
+                    # default (first match only) behavior.
+                    objdump_out = run_objdump_disasm(program, intel=True)
+                    lines = objdump_out.splitlines()
+                    for i, line in enumerate(lines):
+                        if func_name in line:
+                            for chunk in [line] + lines[i+1:i+21]:
+                                print(chunk)
+                            break
         else:
             # Try static analysis
             static_padding = analyze_vulnerable_functions(program, bit_arch)
@@ -3456,7 +3496,7 @@ Examples:
         if padding != 0:
             padding = asm_stack_overflow(program, bit_arch)
             #print_success(f"stack overflow vulnerability detected with padding: {Colors.YELLOW}{padding}{Colors.END} bytes")
-            results = vuln_func_name()
+            results = vuln_func_name(program)
             
         else:
             print_warning("no stack overflow vulnerability detected through dynamic testing")

@@ -51,20 +51,24 @@ def run_ropper(program, search: str) -> str:
     return cp.stdout + cp.stderr
 
 
-def run_objdump_disasm(program) -> str:
-    """Run `objdump -d -M intel X --no-show-raw-insn` and return stdout.
+def run_objdump_disasm(program, intel: bool = True) -> str:
+    """Run `objdump -d` (optionally intel syntax) on `program` and return stdout.
 
-    objdump writes only to stdout (no banner on stderr). Intel syntax +
-    no-raw-insn matches the spec in rebuild.md §6.2 P1.3.
+    Args:
+      program: target binary path
+      intel: if True (default), use `-M intel --no-show-raw-insn`
+             (nicer to read, used by P5+ new code). If False, use
+             AT&T syntax (matches legacy `objdump -d` output, used
+             by P1.5 legacy functions whose regexes are AT&T-specific,
+             e.g. `lea -0x10(%rbp), %rax`).
 
-    L580 in _legacy uses the basic `objdump -d`; P1.5 may use this same
-    function for both since the extra flags are output-only and produce
-    nicer (lossless) disassembly.
+    objdump writes only to stdout (no stderr output).
     """
-    cp = subprocess.run(
-        ["objdump", "-d", "-M", "intel", str(program), "--no-show-raw-insn"],
-        capture_output=True, text=True, check=False,
-    )
+    if intel:
+        cmd = ["objdump", "-d", "-M", "intel", str(program), "--no-show-raw-insn"]
+    else:
+        cmd = ["objdump", "-d", str(program)]
+    cp = subprocess.run(cmd, capture_output=True, text=True, check=False)
     return cp.stdout
 
 

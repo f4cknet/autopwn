@@ -208,7 +208,7 @@
 
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
-| P6.1 | `primitives/base.py`：`ExploitPrimitive` 抽象类 + `ExploitResult` dataclass | ⏳ | — | 2h | — | — | |
+| P6.1 | `primitives/base.py`：`ExploitPrimitive` 抽象类 + `ExploitResult` dataclass | ✅ | @Minzhi_Zhou | 2h | 0.4h | feature/p6.1-primitives-base | ExploitPrimitive ABC（5 单测）+ ExploitResult dataclass（4 单测）+ FakePrim 烟雾 OK；ExploitResult 用 @dataclass(slots=True) 替代 v3.1 手写 __init__（P2.1 一致） |
 | P6.2 | `primitives/ret2system.py`：x32 + x64 payload builder（pure function） | ⏳ | — | 3h | — | — | |
 | P6.3 | `primitives/ret2libc_put.py`：x32 + x64 payload builder | ⏳ | — | 4h | — | — | |
 | P6.4 | `primitives/ret2libc_write.py`：x32 + x64 payload builder | ⏳ | — | 4h | — | — | |
@@ -2517,7 +2517,7 @@ def test_test_stack_overflow_finds_canary():
 
 ### 6.7 P6 — Primitives 层
 
-**🟢 状态**：⏳ Pending｜**🔴 优先级**：P0｜**⏱ 预估**：28h
+**🟢 状态**：🔄 In Progress (P6.1 ✅, P6.2-P6.9 ⏳) ｜**🔴 优先级**：P0｜**⏱ 预估**：28h (P6.1 已用 0.4h)
 
 **目标**：30+ 利用函数中"构造 payload"那 5–10 行变成 pure function。
 
@@ -2544,6 +2544,24 @@ class ExploitResult:
         self.success = success
         self.payload = payload
 ```
+
+**P6.1 实施记录** (commit on `feature/p6.1-primitives-base`，Owner @Minzhi_Zhou, 0.4h)：
+
+* **文件**：`autopwn/primitives/base.py` (146 行) + `autopwn/primitives/__init__.py` (re-export)
+* **公开 API**：
+  * `ExploitPrimitive` (ABC) — 含 `name: str` 类属性 + 抽象 `build_payload(ctx)` + `stage_count() -> int` (默认 1)
+  * `ExploitResult` (`@dataclass(slots=True)`) — `success: bool` + `payload: bytes = b""`
+* **关键设计决策**：
+  * **`ExploitResult` 升级为 `@dataclass(slots=True)`**——v3.1 spec 是手写 `__init__`，但 P2.1 范式要求 dataclass；API 完全等价（`__init__(success, payload)` 形式一致），额外获得 `__repr__` / `__eq__`
+  * **`stage_count` 是方法不是类属性**——subclass 可 override（ret2libc P6.3/P6.4 返 2）；也方便未来根据 ctx 动态决定
+  * **`build_payload` 显式标 abstractmethod**——TypeError 触发于实例化（不是调用时），P9 测试能早期捕获漏写 impl 的子类
+  * **零 _legacy port**——P6.1 是新增抽象层，v3.1 monolith 没有"primitive base"概念；后续 P6.2-P6.8 才需要搬 payload 段
+* **验证**：
+  * `pytest tests/unit/test_primitives_base.py` → 10/10 passed in 0.09s
+  * ABC 不可直接实例化（TypeError）
+  * ExploitResult repr 是 `ExploitResult(success=True, payload=b'hi')` 形式
+  * FakePrim 烟雾 OK：name=stage_count=1 + payload='X'*padding
+* **下一步**：P6.2 (`ret2system.py`，3h 估) — 第 1 个具体 primitive 子类
 
 **P6.2 详细步骤**（`primitives/ret2system.py`）：
 ```python

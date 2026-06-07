@@ -33,20 +33,18 @@ try:
 except:
     pass
 
-# Core file cleanup thread
-def cleanup_core_files():
-    """Background thread to continuously remove core files"""
-    while True:
-        try:
-            # Remove core files in current directory
-            os.system('rm -rf core* 2>/dev/null || del core* 2>nul || true')
-            time.sleep(1)  # Check every second
-        except:
-            pass
-
-# Start core cleanup thread
-cleanup_thread = threading.Thread(target=cleanup_core_files, daemon=True)
-cleanup_thread.start()
+# Core file cleanup
+# P1.6: removed the legacy `cleanup_core_files` background thread (was
+# running `os.system("rm -rf core*")` every 1 second). The 1-second
+# glob/unlink loop was interfering with the canary brute-force fuzzing
+# (P1.6 §2.6 verification showed 4/5 -> 3/5 SUCCESS regression when
+# thread was active, 4/5 PASS when thread was disabled).
+#
+# Replacement: do one-shot cleanup at module import (cleans any core*
+# files left from previous runs), and provide cleanup_core_dumps()
+# for callers (e.g., post-exploit hooks) that want to invoke it
+# explicitly. The function still lives in core/fs.py and is
+# importable as `from autopwn.core.fs import cleanup_core_dumps`.
 
 # Global configuration (P1.1: moved to autopwn.core.logging, re-exported for backward compat)
 from autopwn.core.logging import (  # noqa: F401, E402
@@ -58,10 +56,17 @@ from autopwn.core.logging import (  # noqa: F401, E402
     print_table_header, print_table_row,
 )
 
-# File system utilities (P1.2: moved to autopwn.core.fs, re-exported for backward compat)
+# File system utilities (P1.2 + P1.6: moved to autopwn.core.fs, re-exported for backward compat)
 from autopwn.core.fs import (  # noqa: F401, E402
     set_permission, add_current_directory_prefix, temp_workdir,
+    cleanup_core_dumps,
 )
+
+# P1.6: one-shot core dump cleanup at module import (clears any core*
+# files left from previous runs). The background thread is gone (see
+# comment block above). Done AFTER the import so cleanup_core_dumps
+# is in scope when called.
+cleanup_core_dumps()
 
 # Subprocess wrappers (P1.3 + P1.3a-d: moved to autopwn.core.runner, used inline in P1.5)
 from autopwn.core.runner import (  # noqa: F401, E402

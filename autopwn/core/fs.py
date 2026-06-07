@@ -1,12 +1,13 @@
 """core.fs — file system utilities (path, permission, temp workdir).
 
-Refactored from autopwn._legacy (P1.2).
+Refactored from autopwn._legacy (P1.2 + P1.6).
 
 Layer: core (no upward dependency).
 """
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -65,8 +66,43 @@ def temp_workdir():
             os.chdir(old)
 
 
+def cleanup_core_dumps(cwd: Path = None) -> int:
+    """Remove core dump files/directories matching `core*` in `cwd`.
+
+    P1.6: replaces the legacy
+        os.system('rm -rf core* 2>/dev/null || del core* 2>nul || true')
+    inside the cleanup_core_files background thread. Uses glob +
+    os.unlink (files) / shutil.rmtree (directories). Best-effort; errors
+    are silently dropped (matches legacy shell `2>/dev/null` behavior).
+
+    Cross-platform: works on Linux (core dumps), macOS (core.NNNN).
+    On Windows there's typically no core dump, but the `core*` glob
+    is harmless (it just finds nothing to delete).
+
+    Args:
+      cwd: directory to scan; defaults to Path.cwd() at call time.
+
+    Returns:
+      Count of items removed (files + directories).
+    """
+    if cwd is None:
+        cwd = Path.cwd()
+    removed = 0
+    for path in cwd.glob("core*"):
+        try:
+            if path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                path.unlink()
+            removed += 1
+        except OSError:
+            pass  # best-effort; matches legacy 2>/dev/null suppression
+    return removed
+
+
 __all__ = [
     "set_permission",
     "add_current_directory_prefix",
     "temp_workdir",
+    "cleanup_core_dumps",
 ]

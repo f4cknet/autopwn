@@ -116,7 +116,7 @@
 | **P1.3d** | **临时需求 #4 - 跨架构模拟**（**qemu-system-x86 / i386 / aarch64**） | ✅ | @Minzhi_Zhou | 2h | 0.5h | #P1.3d | 加 run_qemu_user(arch, ...) + run_qemu_system(arch, ...) 两个 Popen 接口；user-mode（pwntools 风格，含 aarch64/arm/i386 等） + system-mode（仅 x86_64/i386 在本机可用；aarch64 需 `apt install qemu-system-arm` 额外装）；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
 | P1.4 | 替换 `autopwn.py` 中所有 `print_banner()` / `print_*` 调用为 `from autopwn.core.logging import ...` | ✅ | @MinZhi_Zhou | 2h | 0h | #P1.1 | **由 P1.1 顺手完成**：P1.1 把 Colors/12 print_*/VERBOSE 搬到 `core/logging.py`，`_legacy.py` 改为 `from autopwn.core.logging import (...)` re-export，418 个调用点零修改——等价于 P1.4 的目标（让 monolith 从 core/ 导入 print_*）。无独立代码改动；详见 §6.2 P1.4 决策记录 |
 | P1.5 | 替换 `autopwn.py` 中所有 `os.system('ropper ... > ropper.txt')` 模式，调用 `runner.run_ropper` | ✅ | @MinZhi_Zhou | 3h | 1.0h | #P1.5 | 替换 13 处 os.system 调用（l32 ulimit / l42 cleanup 留给 P1.6）→ 6 个 runner（ldd/checksec/objdump/ropper/strings + 新 intel flag）；3 个 shell pipe（awk/grep）改 Python；write-to-file 改 in-memory；cwd 彻底干净；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
-| P1.6 | 删除 `cleanup_core_files` 线程的硬编码 `os.system('rm -rf core*')`，改用 `core/fs.py` 中的回收函数 | ⏳ | — | 1h | — | — | |
+| P1.6 | 删除 `cleanup_core_files` 线程的硬编码 `os.system('rm -rf core*')`，改用 `core/fs.py` 中的回收函数 | ✅ | @MinZhi_Zhou | 1h | 0.7h | #P1.6 | 加 `cleanup_core_dumps(cwd=None) -> int` 用 glob+os.unlink/shutil.rmtree 替代 shell；**移除后台线程**（1s 间隔干扰 canary 暴力枚举，§2.6 验证 4/5→3/5 回归，删后 4/5 PASS）；改 import-time 一次性清理；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
 
 ### 4.3 P2 — 模型层
 

@@ -589,7 +589,7 @@ def set_verbose(value: bool) -> None:
   - 关 6：文档同步 — `rebuild.md` §4.2 + §6.2 + §10 同步
   - 详见 `logs/comparison/summary.md`（P1.1 重新生成）
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 3498 vs v3.1 3625（fuzzing 时序差异，与 P0.8 看到的 3447 同类，非功能差异）
-- **commit 引用**：`abbf80d`（P1.1）— `c1b41ba` (P0.8) → `abbf80d` (P1.1)
+- **commit 引用**：`694b813`（P1.1）— `c1b41ba` (P0.8) → `694b813` (P1.1)
 
 **P1.3 详细步骤**（`core/runner.py` 示例）：
 ```python
@@ -650,7 +650,7 @@ def run_ldd(program: Path) -> str:
 - **首次 60s timeout 复测 → 85% PARTIAL**：fmtstr1 在 60s 截断时只能跑到 canary 暴力枚举（运气不好），3 个关键标记未达到。**这是 v3.1 baseline 同样存在的时序非确定性**（P0.8 备注："canary 60s timeout: brute force 需 ~7 分钟，60s 截断后输出 partial log"），与 P1.3 改动无关。90s timeout 是 absorbing 该 non-determinism 的合理代价
 - **timeout 跟进项**（待 P9/CI 阶段处理）：`scripts/run_verify.sh` 默认 60s 在新机器负载下不稳定；建议 bump 到 90s 写进 §2.6 标准流程
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 3441 vs v3.1 3625（fuzzing 时序差异，与 P1.1/P1.2/P0.8 同类）
-- **commit 引用**：`8b7e326`（P1.3）— `da3ac0a` (P1.2) → `8b7e326` (P1.3)
+- **commit 引用**：`ae59c78`（P1.3）— `da3ac0a` (P1.2) → `ae59c78` (P1.3)
 
 **P1.2 详细步骤**（`core/fs.py` 示例）：
 ```python
@@ -708,7 +708,7 @@ def temp_workdir():
   - 关 6：文档同步 — `rebuild.md` §4.2 + §6.2 同步
   - 详见 `logs/comparison/summary.md`
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 3442 vs v3.1 3625（fuzzing 时序差异，与 P1.1/P0.8 同类）
-- **commit 引用**：`c6626bf`（P1.2）— `694b813` (P1.1) → `c6626bf` (P1.2)
+- **commit 引用**：`da3ac0a`（P1.2）— `694b813` (P1.1) → `da3ac0a` (P1.2)
 
 **验收**
 - 跑完一个完整 exploit，`cwd` 不出现 `ropper.txt` / `libc_path.txt` / `Information_Collection.txt` / `Objdump_Scan.txt`（P1.5/P1.6 任务；本 PR 仅提供工具，未替换调用点）

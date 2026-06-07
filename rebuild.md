@@ -125,8 +125,8 @@
 | P2.1 | `context.py`：定义 `BinaryInfo` / `LibcInfo` / `RopGadgetsX64` / `RopGadgetsX32` / `CanaryInfo` / `ExploitContext` | ✅ | @Minzhi_Zhou | 4h | 0.4h | #P2.1 | 新增 `autopwn/context.py`（146 行）+ `autopwn/__init__.py` re-export 6 个 dataclass；**零行为变更**（不替换 `exploit_info` / 不改 `_legacy.py` / 不改 `cli.py` — 这些是 P2.3-P2.5 任务）；所有字段按 `refactor.md §3.2.1` + `rebuild.md §6.3 P2.1` 范式：`@dataclass(slots=True)` + `field(default_factory=...)` for 可变默认 + `LibcInfo.elf: object` 避免 pwntools 循环导入 + `ctx.log()` 路由到 `core.logging` print_*；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（无回归，**预期**：纯加文件不引入行为差异）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#3.2.1 |
 | P2.2 | `context.py`：实现 `ExploitContext.from_args(args)` 工厂 | ✅ | @Minzhi_Zhou | 2h | 0.3h | #P2.2 | 新增 `@classmethod from_args(args: argparse.Namespace) -> ExploitContext` + `ContextError(RuntimeError)` 异常类；映射 6 个现有 CLI flag（`-l/-ip/-p/-libc/-f/-v`）+ P8 forward-compat（`--report-dir`）；**BinaryInfo 占位**字段（`bit=0`/`relro="Unknown"`/其余 `False`）— 标注 P4.1 recon 阶段会 overwrite；**零行为变更**（不替换 `_legacy.py` 调用点 — P2.3 任务）；错误消息与 legacy `print_error` 文本**逐字一致**（Test 14 验证）；15 项烟雾测试全过 + P2.1 6 项回归全过；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（无回归，**预期**：纯加 method）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#3.2.1 |
 | P2.3 | `autopwn.py` 顶层构造 `ctx = ExploitContext.from_args(args)`，并写一个 ctx → `exploit_info` dict 的桥函数（**仅 P2 阶段保留，作用是让旧代码不立即报错**） | ✅ | @Minzhi_Zhou | 2h | 0.5h | #P2.3 | 新增 `autopwn/_compat.py`（68 行）：`_legacy_info` dict + `sync_ctx_to_legacy(ctx)` bridge；`_legacy.py` 改 3 处：① 顶层 alias `exploit_info = _compat._legacy_info`（同 dict 对象，所有 ~50 读 + 7 写 0 改动）② main() 插入 6 行 `from_args + sync_ctx_to_legacy` + `ContextError` try/except ③ 删 12 行 exploit_info 字典字面量；**3 处偏离 spec**：①不 `warnings.warn`（会污染日志 diff）②`ctx.binary.bit=0` placeholder guard（避免"x0" 泄漏）③ startup **不**设 `success=True`（保持 L241 `if not exploit_info['success']` 门控语义，P3.4 record_success 接手）；**实际行为 no-op**（L3305/L3306/L354-360 全部 overwrite bridge 写入值）；15 项烟雾测试 + 10 项 bridge 烟雾测试 + end-to-end CLI help/invalid-args 验证全过；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（**首次真正改 `_legacy.py` 行为路径，0 回归**）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#3.2.1 |
-| P2.4 | 旧 `exploit_info` 写操作改为调用桥函数 | ⏳ | — | 1h | — | — | 过渡 |
-| P2.5 | 旧 `update_exploit_info` 标注 deprecation warning | ⏳ | — | 0.5h | — | — | 过渡 |
+| P2.4 | 旧 `exploit_info` 写操作改为调用桥函数 | ✅ | @Minzhi_Zhou | 1h | 0.4h | #P2.4 | 删除 `update_exploit_info` helper + 9 个写点（2 个 L3305-3306 startup 写 + 7 个 L350-356 success 路径调用）→ 1 个 `sync_ctx_to_legacy(target_name=..., timestamp=...)` 调用 + 1 个 `record_success(...)` 调用；**0 个 `exploit_info[...] = ...` 写点剩余**（验证：grep 0 行）；**0 个 `update_exploit_info` 调用剩余**（验证：grep 0 行）；**34 个 read 保留**（按 spec 保留到 P8.5）；_compat.py 扩 2 个函数：`sync_ctx_to_legacy` 加 `target_name`/`timestamp` kwargs（默认 `None` → P2.3 行为不变） + `record_success(**kwargs)` 设 7 个 success 字段 + `success=True`；**P2.5 标记 ✅ done-by-P2.4**（helper 已删，deprecation warning 无意义）；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（**首次走完整 success 路径，0 回归** — record_success 设的 7 字段全部被 docx / code 读者正确消费）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
+| P2.5 | 旧 `update_exploit_info` 标注 deprecation warning | ✅ | @Minzhi_Zhou | 0.5h | 0h | #P2.4 | **由 P2.4 顺手完成**（无独立 PR）：P2.4 删除了 `update_exploit_info` helper（7 callsite + 函数定义全部消失），deprecation warning 在被删的代码上加已无意义；P2.5 等价于 P2.4 的子集。详见 §6.3 P2.5 决策记录 |
 
 ### 4.4 P3 — 报告层
 
@@ -1263,6 +1263,72 @@ def sync_ctx_to_legacy(ctx: ExploitContext) -> None:
 - **docx 验证**：rip_wp.docx / fmtstr1_wp.docx / level3_x64_wp.docx 在 §2.6 运行期间（< 1 min 旧）被重新生成，**说明 `exploit_info[...]` 读取路径在 30+ 个 docx 字段处全部仍工作**（P3.4 才会把它们改读 ctx）
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 3511 vs v3.1 3625（fuzzing 时序差异，与 P0.7–P2.2 同类）
 - **commit 引用**：`51563da`（P2.3）— `b7ffff1` (P2.2 doc) → `51563da` (P2.3)
+
+**P2.4 实施记录（2026-06-07）**：
+
+- **扩展** `autopwn/_compat.py`（+105 行 → 197 行）：
+  - `sync_ctx_to_legacy(ctx, *, target_name=None, timestamp=None)` 加 2 个可选 kwargs
+    - `target_name=None` → P2.3 默认行为（full path）
+    - `target_name='canary'` → P2.4 行为（basename，与 legacy L3317 一致）
+    - `timestamp=None` → P2.3 默认（不动字段）
+    - `timestamp='2026-06-07 07:33:55'` → P2.4 行为（与 legacy L3318 strftime 格式一致）
+  - **新增** `record_success(*, exploit_type, payload, padding, addresses, vulnerability_type, architecture)` — 7 个 kwargs，复刻 L350-356 `update_exploit_info()` 调用 + L356 `success=True`（P2.3 deviation #3 修复）
+    - payload 处理：完全复刻 legacy L351 逻辑 `payload.hex() if hasattr(payload, 'hex') else str(payload)`（逐字一致）
+- **`_legacy.py` 3 处修改**（净 -10 行：+13 -23）：
+  - ① **删除** `update_exploit_info` helper（L92-95 + L98 防御性 `global`，共 5 行）—— **0 callsite 剩余**（grep 验证 0 行）
+  - ② `main()` L3315-3318（4 行：`# Initialize exploit_info...` + `global exploit_info` + 2 个 dict 写）→ **删除**，扩展 `sync_ctx_to_legacy` 调用加 `target_name=basename(args.local), timestamp=now.strftime(...)`（kwargs 在 try 内）
+  - ③ `handle_exploitation_success` L350-356（7 个 `update_exploit_info(...)` 调用）→ **1 个 `record_success(...)` 调用**（7 个 kwargs 命名）
+- **结构验证**（核心 P2.4 验收）：
+  - `grep -nE "exploit_info\[[^]]+\] *=" autopwn/_legacy.py` → 0 行（1 个 comment 提及"called exploit_info[key] = value internally"不算）
+  - `grep -n "update_exploit_info" autopwn/_legacy.py` → 0 callsite（2 个 comments in P2.3 + P2.4 解释不算）
+  - `grep -cE "exploit_info\[[^]]+\]" autopwn/_legacy.py` → 34 行（read 全部保留，按 spec 保留到 P8.5）
+- **8 项烟雾测试**（手测，pytest 体系待 P9）：
+  - 1：sync_ctx_to_legacy **无 kwargs** → P2.3 默认（target_binary=full path, timestamp=空）
+  - 2：sync_ctx_to_legacy **有 kwargs** → P2.4 行为（target_binary=basename, timestamp=真实）
+  - 3：record_success **bytes payload** → hex-encoded（复刻 legacy L351）
+  - 4：record_success **str payload** → 保持原样（复刻 legacy hasattr() 分支）
+  - 5：**完整 composite flow**（startup + success 路径）→ 9 字段全部正确
+  - 6：**grep 验证**：`_legacy.py` 0 个 exploit_info 写点
+  - 7：end-to-end `python3 autopwn.py --help` rc=0 + `-l /nope` rc=1 + 错误消息一致
+  - 8：**关键成功路径验证**：`python3 autopwn.py -l Challenge/level3_x64` rc=0 + `level3_x64_wp.docx` 在 0.2s 内被重新生成 → **end-to-end 证明 `record_success()` 写入 `_legacy_info` 后，docx 读取的 30+ 字段全部仍正确填充**
+- **§2.6 验证结果**（**首次走完整 success 路径，CRITICAL**）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL + fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（**0 回归**）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.3 + §6.3 同步
+  - 详见 `logs/comparison/summary.md`
+- **docx 端到端验证**：4 个 docx（fmtstr1/level3_x64/pie/rip）在 §2.6 跑期间被重新生成 — 证明 `record_success` 设的 7 字段（exploit_type/payload/padding/addresses/vulnerability_type/architecture/success）全部被 docx 读者正确消费
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 3471 vs v3.1 3625（fuzzing 时序差异，与 P0.7–P2.3 同类）
+- **commit 引用**：`e73a6bb`（P2.4）— `0e5eac2` (P2.3 doc) → `e73a6bb` (P2.4)
+
+**P2.5 决策记录（2026-06-07）**：
+
+**状态变更**：⏳ → ✅（**由 P2.4 顺手完成，无独立 PR**）
+
+**为什么 P2.5 等价于 P2.4 的子集**：
+
+P2.5 在原始 `rebuild.md §4.3` 写成 "旧 `update_exploit_info` 标注 deprecation warning"。该任务的前提是 `update_exploit_info` 仍然存在并被调用。P2.4 在重构过程中**彻底删除**了 `update_exploit_info`：
+- L92-95 函数定义删除
+- L350-356 7 个 callsite 全部改用 `record_success(...)` 桥调用
+- 验证：`grep -n "update_exploit_info" autopwn/_legacy.py` → 0 callsite（2 个 comment 提及不算）
+
+**P2.5 目标** = "在 `update_exploit_info` 上加 deprecation warning" —— 该函数已不存在，加 warning 无意义。
+
+**为什么不标 ❌**（避免误读）：
+- ❌ 含义："不再需要，可删除任务行"
+- ✅ 含义："已实现，查阅 P2.4 即可"
+- 选 ✅ 保留 §4.3 任务历史，标明实际由 P2.4 完成
+
+**为什么不留 ⏳**：
+- ⏳ 会误导后续 reviewer 以为还需独立 PR
+- P2.4 已彻底删除 helper（而非仅加 warning），P2.5 的 "标注 deprecation" 目标已被 P2.4 强覆盖
+
+**Owner 决策**（2026-06-07 @MinZhi_Zhou）：✅ 标 P2.5 done-by-P2.4；后续如需恢复 `update_exploit_info`（如回滚 P2.4）可重新开启该任务
+
+**铁律 4 六关**：N/A（无独立代码改动；P2.4 的六关已 PASS 见 §6.3 P2.4）
+
 
 **P2.1 实施记录（2026-06-07）**：
 

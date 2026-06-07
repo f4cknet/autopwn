@@ -238,6 +238,114 @@ def run_one_gadget(libc_path) -> str:
     return (cp.stdout or cp.stderr).strip()
 
 
+# =====================================================================
+# P1.3c: dynamic / sandbox suite (临时需求 #4)
+# =====================================================================
+# All four write their "useful" output to stderr (syscall traces,
+# library call traces, seccomp events, pwndbg color output). Wrapper
+# returns stdout+stderr combined to match legacy `2>&1` semantics.
+#
+# These are exploratory / diagnostic tools; P5 detect will use them
+# for runtime analysis, P7 strategies may use gdb batch for crash
+# post-mortem.
+
+
+def run_strace(program, *args: str) -> str:
+    """Run `strace <args> <program>` and return combined stdout+stderr.
+
+    strace writes syscall traces to stderr. Useful common args:
+      - "-c"             summary table (counts + time)
+      - "-e trace=open"  filter specific syscalls
+      - "-f"             follow forks
+      - "-o <file>"      write to file (use subprocess.Popen for this)
+
+    The target's stdout is captured and prepended (strace interleaves
+    target output with trace lines). Callers wanting only strace
+    output should redirect the target's stdout first.
+
+    Uses errors='replace' because the target's stdout may contain
+    non-UTF-8 bytes (binary data from format strings / uninitialized
+    memory / BOF output) that would otherwise crash the decode.
+    """
+    cmd = ["strace", *args, str(program)]
+    cp = subprocess.run(
+        cmd, capture_output=True, text=True, errors="replace", check=False,
+    )
+    return cp.stdout + cp.stderr
+
+
+def run_ltrace(program, *args: str) -> str:
+    """Run `ltrace <args> <program>` and return combined stdout+stderr.
+
+    ltrace writes library call traces to stderr. Useful common args:
+      - "-e puts+printf"  filter specific library calls
+      - "-L"              count time + library calls
+      - "-x <hex_addr>"   dereference a specific address in trace
+
+    As with strace, the target's stdout is captured and interleaved.
+    Uses errors='replace' for non-UTF-8 target output.
+    """
+    cmd = ["ltrace", *args, str(program)]
+    cp = subprocess.run(
+        cmd, capture_output=True, text=True, errors="replace", check=False,
+    )
+    return cp.stdout + cp.stderr
+
+
+def run_seccomp(program, *args: str) -> str:
+    """Run `seccomp-tools <args> <program>` and return combined stdout+stderr.
+
+    seccomp-tools has multiple subcommands. Common ones:
+      - "dump"   run target and print seccomp events as they occur
+      - "disasm" disassemble the seccomp filter (if binary has one)
+      - "inspect" show filter summary
+
+    If the target has no seccomp filter, "dump" just runs the target
+    normally (returns its stdout/stderr). Default usage:
+      run_seccomp(program)            # equivalent to "seccomp-tools dump <prog>"
+      run_seccomp(program, "disasm")  # disasm subcommand
+
+    Uses errors='replace' for non-UTF-8 target output.
+    """
+    if not args:
+        args = ("dump",)
+    cmd = ["seccomp-tools", *args, str(program)]
+    cp = subprocess.run(
+        cmd, capture_output=True, text=True, errors="replace", check=False,
+    )
+    return cp.stdout + cp.stderr
+
+
+def run_gdb_batch(program, *commands: str) -> str:
+    """Run `gdb -batch -nx -ex <cmd1> -ex <cmd2>... <program>` and return stderr.
+
+    gdb + pwndbg writes all output to stderr (with ANSI color codes).
+    Use this for crash post-mortem analysis (read registers / stack
+    after a fault), or scripted binary inspection.
+
+    Always inserts:
+      - "-batch" (no interactive prompt)
+      - "-nx"    (skip ~/.gdbinit, reproducible)
+      - "-ex set pagination off" (avoid --More-- prompts)
+
+    Caller supplies commands; must include "quit" (or "q") as the
+    last command or gdb will hang on the post-mortem prompt.
+
+    Example: run_gdb_batch("./canary", "b main", "run", "info reg", "quit")
+
+    Uses errors='replace' for non-UTF-8 target output (gdb captures
+    target's stdout/stderr and may pass through arbitrary bytes).
+    """
+    cmd = ["gdb", "-batch", "-nx", "-ex", "set pagination off"]
+    for c in commands:
+        cmd.extend(["-ex", c])
+    cmd.append(str(program))
+    cp = subprocess.run(
+        cmd, capture_output=True, text=True, errors="replace", check=False,
+    )
+    return cp.stdout + cp.stderr
+
+
 __all__ = [
     "ToolError",
     "run_checksec", "run_ropper", "run_objdump_disasm", "run_ldd",
@@ -245,4 +353,6 @@ __all__ = [
     "run_file", "run_readelf", "run_strings", "run_nm",
     # P1.3b: ROP / pattern suite (临时需求 #4)
     "run_ropgadget", "run_cyclic_create", "run_cyclic_find", "run_one_gadget",
+    # P1.3c: dynamic / sandbox suite (临时需求 #4)
+    "run_strace", "run_ltrace", "run_seccomp", "run_gdb_batch",
 ]

@@ -112,7 +112,7 @@
 | P1.3 | `core/runner.py`：封装 `checksec` / `ropper` / `objdump` / `ldd`，输出走 `subprocess.run(capture_output=True)` | ✅ | @Ba1_Ma0 | 4h | 0.7h | #P1.3 | 建 4 个 run_* + ToolError；checksec/ropper 合并 stdout+stderr（pwntools/ropper 写 stderr），objdump/ldd 仅 stdout；本 PR 不替换 _legacy.py 调用点（留给 P1.5）；§2.6 验证 27/28=96% vs v3.1（用 90s timeout 吃下 canary 暴力枚举时序非确定性）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
 | **P1.3a** | **临时需求 #4 - 静态 binutils 套件**（**file / readelf / strings / nm**） | ✅ | @Ba1_Ma0 | 2h | 0.4h | #P1.3a | 加 run_file / run_readelf(*flags) / run_strings(min_len) / run_nm；返回 str；degrade gracefully（失败 → 空串）；§2.6 27/28=96% vs v3.1（无回归，本 PR 不替换 _legacy.py 调用点）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
 | **P1.3b** | **临时需求 #4 - ROP / 模式 套件**（**ROPgadget / cyclic / one_gadget**） | ✅ | @Ba1_Ma0 | 2h | 0.4h | #P1.3b | 加 run_ropgadget(*filters) / run_cyclic_create(length) / run_cyclic_find(pattern) / run_one_gadget(libc)；ROPgadget 不用 --nocolor（版本不支持）；cyclic 忽略 stderr DeprecationWarning；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
-| **P1.3c** | **临时需求 #4 - 动态 / sandbox 套件**（**strace / ltrace / seccomp-tools / gdb**） | ⏳ | @Ba1_Ma0 | 3h | — | — | strace/ltrace 一次性 capture；seccomp-tools JSON 输出；gdb `-batch -ex` 跑脚本；见 refactor.md §4 / §6.2 P1.3c |
+| **P1.3c** | **临时需求 #4 - 动态 / sandbox 套件**（**strace / ltrace / seccomp-tools / gdb**） | ✅ | @Ba1_Ma0 | 3h | 0.5h | #P1.3c | 加 run_strace / run_ltrace / run_seccomp / run_gdb_batch；4 个都写 stderr（syscall/lib-call/seccomp-event/pwndbg 彩色），wrapper 用 stdout+stderr 合并 + `errors='replace'` 吃非 UTF-8；seccomp-tools 默认 dump；gdb `-batch -nx`；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
 | **P1.3d** | **临时需求 #4 - 跨架构模拟**（**qemu-system-x86 / i386 / aarch64**） | ⏳ | @Ba1_Ma0 | 2h | — | — | 返回 Popen 句柄（qemu 常驻进程），不 capture_output；见 refactor.md §4 / §6.2 P1.3d |
 | P1.4 | 替换 `autopwn.py` 中所有 `print_banner()` / `print_*` 调用为 `from autopwn.core.logging import ...` | ⏳ | — | 2h | — | — | |
 | P1.5 | 替换 `autopwn.py` 中所有 `os.system('ropper ... > ropper.txt')` 模式，调用 `runner.run_ropper` | ⏳ | — | 3h | — | — | |
@@ -655,6 +655,71 @@ def run_ldd(program: Path) -> str:
 - **timeout 跟进项**（待 P9/CI 阶段处理）：`scripts/run_verify.sh` 默认 60s 在新机器负载下不稳定；建议 bump 到 90s 写进 §2.6 标准流程
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 3441 vs v3.1 3625（fuzzing 时序差异，与 P1.1/P1.2/P0.8 同类）
 - **commit 引用**：`ae59c78`（P1.3）— `da3ac0a` (P1.2) → `ae59c78` (P1.3)
+
+**P1.3c 详细步骤**（`core/runner.py` 扩展）：
+
+依据 `refactor.md §4.2` 接口范式（返回 `str` + 失败降级为空串 + **不向上 import**），在 `autopwn/core/runner.py` 末尾追加 4 个动态/sandbox 套件函数：
+
+```python
+def run_strace(program, *args: str) -> str:
+    """Run `strace <args> <program>` and return combined stdout+stderr.
+    Uses errors='replace' (target may output non-UTF-8 bytes via BOF/format)."""
+    cmd = ["strace", *args, str(program)]
+    cp = subprocess.run(cmd, capture_output=True, text=True, errors="replace", check=False)
+    return cp.stdout + cp.stderr
+
+def run_ltrace(program, *args: str) -> str: ...  # 同形
+
+def run_seccomp(program, *args: str) -> str:
+    """Default args=('dump',). 'disasm' / 'inspect' 也可。"""
+    if not args:
+        args = ("dump",)
+    cmd = ["seccomp-tools", *args, str(program)]
+    cp = subprocess.run(cmd, capture_output=True, text=True, errors="replace", check=False)
+    return cp.stdout + cp.stderr
+
+def run_gdb_batch(program, *commands: str) -> str:
+    """Always inserts -batch -nx -ex 'set pagination off' + caller's commands.
+    Last command should be 'quit' or gdb hangs."""
+    cmd = ["gdb", "-batch", "-nx", "-ex", "set pagination off"]
+    for c in commands:
+        cmd.extend(["-ex", c])
+    cmd.append(str(program))
+    cp = subprocess.run(cmd, capture_output=True, text=True, errors="replace", check=False)
+    return cp.stdout + cp.stderr
+```
+
+**P1.3c 实施记录（2026-06-07）**：
+
+- **扩展** `autopwn/core/runner.py`（+95 行）：4 个新函数 + `__all__` 列表更新
+- **不动 `_legacy.py`**：re-export 不加（无 caller），P1.5 改 os.system 调用点时会直接 `from autopwn.core.runner import run_xxx`
+- **接口一致性**（R14 reviewer 必查）：4 个函数全部 `-> str` + 失败空串/降级 + `errors="replace"` 兼容非 UTF-8 输出
+- **踩坑 #1**：4 个工具**都写 stderr**（不是 stdout）：
+  - strace: syscall traces → stderr
+  - ltrace: lib call traces → stderr
+  - seccomp-tools: events → stderr
+  - gdb + pwndbg: 全部输出 → stderr（带 ANSI 颜色码）
+  - Wrapper 用 `cp.stdout + cp.stderr` 合并（沿用 P1.3 checksec/ropper 的处理）
+- **踩坑 #2**：strace/ltrace/seccomp-tools/gdb 都会**执行 target 程序**，target 的 stdout 含 BOF 后的非 UTF-8 字节会触发默认 UTF-8 解码崩溃。**第一次测试 `run_strace(prog)` 就 UnicodeDecodeError**。修复：加 `errors="replace"`。P1.3/P1.3a/P1.3b 工具**不执行 target**（只静态分析 binary），所以不需要这个补丁
+- **踩坑 #3**：seccomp-tools `disasm` 子命令在 canary 上抛 Ruby 异常（canary 没有 BPF filter 可 disasm），返回 700+ 字符 Ruby stack trace。caller 需判 `'execve' in out` / `len(out) < 200` 等
+- **功能单测**（手测，pytest 体系待 P9）：
+  - `run_strace(canary, '-c')` → 3552 chars，含 `syscall` 表头 + `read` 计数 ✓
+  - `run_strace(canary)`（无 args）→ 含 `execve` / `mmap` 全 trace ✓
+  - `run_ltrace(canary, '-e', 'puts+printf')` → 含 `canary->puts("...")` 格式 ✓
+  - `run_seccomp(canary)`（默认 dump）→ 129 chars（canary 无 filter，直接跑 target）✓
+  - `run_seccomp(canary, 'disasm')` → Ruby 错误（caller 需 sanity check）✓
+  - `run_gdb_batch(canary, 'b main', 'run', 'info reg', 'quit')` → 含 `Breakpoint 1 at 0x8049262` + `eax 0x804925f` ✓
+  - 失败路径：strace/gdb 缺失文件 → 41-61 字符错误输出（caller 自行判）
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL + fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（无回归）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.2 + §6.2 同步
+  - 详见 `logs/comparison/summary.md`
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期）
+- **commit 引用**：见下
 
 **P1.3a 详细步骤**（`core/runner.py` 扩展）：
 

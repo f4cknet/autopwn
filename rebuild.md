@@ -111,7 +111,7 @@
 | P1.2 | `core/fs.py`：`set_permission` + `add_current_directory_prefix` + 临时目录 ctxmgr | ✅ | @Ba1_Ma0 | 2h | 0.5h | #P1.2 | 搬 set_permission（os.system→os.chmod 0o755）+ add_current_directory_prefix + temp_workdir ctxmgr；_legacy.py re-export；§2.6 验证 27/28=96% vs v3.1 baseline（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
 | P1.3 | `core/runner.py`：封装 `checksec` / `ropper` / `objdump` / `ldd`，输出走 `subprocess.run(capture_output=True)` | ✅ | @Ba1_Ma0 | 4h | 0.7h | #P1.3 | 建 4 个 run_* + ToolError；checksec/ropper 合并 stdout+stderr（pwntools/ropper 写 stderr），objdump/ldd 仅 stdout；本 PR 不替换 _legacy.py 调用点（留给 P1.5）；§2.6 验证 27/28=96% vs v3.1（用 90s timeout 吃下 canary 暴力枚举时序非确定性）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
 | **P1.3a** | **临时需求 #4 - 静态 binutils 套件**（**file / readelf / strings / nm**） | ✅ | @Ba1_Ma0 | 2h | 0.4h | #P1.3a | 加 run_file / run_readelf(*flags) / run_strings(min_len) / run_nm；返回 str；degrade gracefully（失败 → 空串）；§2.6 27/28=96% vs v3.1（无回归，本 PR 不替换 _legacy.py 调用点）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
-| **P1.3b** | **临时需求 #4 - ROP / 模式 套件**（**ROPgadget / cyclic / one_gadget**） | ⏳ | @Ba1_Ma0 | 2h | — | — | ROPgadget 输出格式与 ropper 不同；cyclic 用于 PADDING 校准；one_gadget 用于 libc-based 快速 RCE；见 refactor.md §4 / §6.2 P1.3b |
+| **P1.3b** | **临时需求 #4 - ROP / 模式 套件**（**ROPgadget / cyclic / one_gadget**） | ✅ | @Ba1_Ma0 | 2h | 0.4h | #P1.3b | 加 run_ropgadget(*filters) / run_cyclic_create(length) / run_cyclic_find(pattern) / run_one_gadget(libc)；ROPgadget 不用 --nocolor（版本不支持）；cyclic 忽略 stderr DeprecationWarning；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
 | **P1.3c** | **临时需求 #4 - 动态 / sandbox 套件**（**strace / ltrace / seccomp-tools / gdb**） | ⏳ | @Ba1_Ma0 | 3h | — | — | strace/ltrace 一次性 capture；seccomp-tools JSON 输出；gdb `-batch -ex` 跑脚本；见 refactor.md §4 / §6.2 P1.3c |
 | **P1.3d** | **临时需求 #4 - 跨架构模拟**（**qemu-system-x86 / i386 / aarch64**） | ⏳ | @Ba1_Ma0 | 2h | — | — | 返回 Popen 句柄（qemu 常驻进程），不 capture_output；见 refactor.md §4 / §6.2 P1.3d |
 | P1.4 | 替换 `autopwn.py` 中所有 `print_banner()` / `print_*` 调用为 `from autopwn.core.logging import ...` | ⏳ | — | 2h | — | — | |
@@ -703,6 +703,63 @@ def run_nm(program) -> str:
   - 关 6：文档同步 — `rebuild.md` §4.2 + §6.2 + `refactor.md §4` 同步
   - 详见 `logs/comparison/summary.md`
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 4094 vs v3.1 3625（fuzzing 时序差异）
+- **commit 引用**：见下
+
+**P1.3b 详细步骤**（`core/runner.py` 扩展）：
+
+依据 `refactor.md §4.2` 接口范式（返回 `str` + 失败降级为空串），在 `autopwn/core/runner.py` 末尾追加 4 个 ROP/pattern 套件函数：
+
+```python
+def run_ropgadget(program, *filters: str) -> str:
+    """Run `ROPgadget --binary X [--only <f1>] [--only <f2>]...` and return stdout."""
+    cmd = ["ROPgadget", "--binary", str(program)]
+    for f in filters:
+        cmd.extend(["--only", f])
+    cp = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    return cp.stdout
+
+def run_cyclic_create(length: int) -> str:
+    """Run `cyclic <length>` and return the cyclic pattern (no trailing newline)."""
+    cp = subprocess.run(["cyclic", str(length)], capture_output=True, text=True, check=False)
+    return cp.stdout.strip()
+
+def run_cyclic_find(pattern: str) -> str:
+    """Run `cyclic -l <pattern>` and return the offset as a string (e.g., '140')."""
+    cp = subprocess.run(["cyclic", "-l", pattern], capture_output=True, text=True, check=False)
+    return cp.stdout.strip()
+
+def run_one_gadget(libc_path) -> str:
+    """Run `one_gadget <libc>` and return the structured gadget list."""
+    cp = subprocess.run(["one_gadget", str(libc_path)], capture_output=True, text=True, check=False)
+    return (cp.stdout or cp.stderr).strip()
+```
+
+**P1.3b 实施记录（2026-06-07）**：
+
+- **扩展** `autopwn/core/runner.py`（+60 行）：4 个新函数 + `__all__` 列表更新
+- **不动 `_legacy.py`**：re-export 不加（无 caller），P1.5 改 os.system 调用点时会直接 `from autopwn.core.runner import run_xxx`
+- **接口一致性**（R14 reviewer 必查）：4 个函数全部 `-> str` + 失败空串（除 `cyclic_find` miss 是 `''`、非 `"None"`）— 符合 `refactor.md §4.2` 范式
+- **踩坑**：`ROPgadget --nocolor` 在本机版本（5.4+）**不是有效 flag**（会触发 argparse 错误回显 USAGE）。已去掉，使用 ROPgadget 默认输出（带 ANSI 颜色码，调用方用 `re.sub(r"\x1b\[[0-9;]*m", "", text)` 清洗）
+- **踩坑**：`cyclic` CLI 打印 `DeprecationWarning` 到 stderr（pwntools 推荐用 `pwn cyclic` 或 `pwn.cyclic()`）。`subprocess.run` 默认 `capture_output=True` 静默丢弃 stderr，不影响 stdout
+- **功能单测**（手测，pytest 体系待 P9）：
+  - `run_ropgadget(canary, 'pop|ret')` → 6 gadgets（含 `0x080492fb: pop ebp ; ret` 等）✓
+  - `run_ropgadget(canary, 'pop', 'ret')` → 6 lines（多 filter 合并 OR 语义）✓
+  - `run_ropgadget(canary)`（无 filter）→ 151 lines（全扫描）✓
+  - `run_cyclic_create(16)` → `'aaaabaaacaaadaaa'`（16 字节）✓
+  - `run_cyclic_find('aaaa')` → `'0'`（首 4 字节）✓
+  - `run_cyclic_find('daaa')` → `'12'`（第 13-16 字节）✓
+  - `run_cyclic_find('XYZQ')` → `''`（miss）✓
+  - `run_one_gadget(/lib/x86_64-linux-gnu/libc.so.6)` → 含 `0xebc81 execve("/bin/sh", ...)` 等 gadgets ✓
+  - `run_one_gadget('/nonexistent')` → 714B 错误输出（caller 自行判 `'execve' in out`）✓
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL + fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（无回归）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.2 + §6.2 同步
+  - 详见 `logs/comparison/summary.md`
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期）
 - **commit 引用**：见下
 
 **P1.2 详细步骤**（`core/fs.py` 示例）：

@@ -1734,7 +1734,7 @@ def generate_docx(info, out_dir):
   - 详见 `logs/comparison/summary.md`
 - **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
 - **P3.4 衔接**：`generate_docx` 已可被 caller 安全 dispatch（无论 docx 是否可用，函数都返回 Path or None，错误降级为 markdown）
-- **commit 引用**：（待回填）
+- **commit 引用**：`e44d274`（P3.6）— `6236537` (P3.3 docs) → `e44d274` (P3.6)
 
 ---
 

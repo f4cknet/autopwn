@@ -719,7 +719,7 @@ def run_gdb_batch(program, *commands: str) -> str:
   - 关 6：文档同步 — `rebuild.md` §4.2 + §6.2 同步
   - 详见 `logs/comparison/summary.md`
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期）
-- **commit 引用**：见下
+- **commit 引用**：`7cab410`（P1.3c）— `4af923e` (P1.3b) → `7cab410` (P1.3c)
 
 **P1.3a 详细步骤**（`core/runner.py` 扩展）：
 

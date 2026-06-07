@@ -77,18 +77,14 @@ from autopwn.core.runner import (  # noqa: F401, E402
     run_strace, run_ltrace, run_seccomp, run_gdb_batch,
 )
 
-# Global variables for exploit information
-exploit_info = {
-    'target_binary': '',
-    'exploit_type': '',
-    'payload': '',
-    'padding': 0,
-    'addresses': {},
-    'vulnerability_type': '',
-    'architecture': '',
-    'success': False,
-    'timestamp': ''
-}
+# P2.3: ExploitContext (typed) + bridge to legacy exploit_info (loose dict).
+# _legacy.py still owns ~50 reads + ~7 writes of exploit_info; the bridge
+# keeps both APIs in sync so P2.4 can convert call sites one at a time.
+# See autopwn/_compat.py module docstring for the deviations from the
+# rebuild.md §6.3 spec (no warn / bit=0 guard / no success=True at startup).
+from autopwn.context import ExploitContext, ContextError  # noqa: F401, E402
+from autopwn._compat import _legacy_info as exploit_info  # noqa: F401, E402
+from autopwn._compat import sync_ctx_to_legacy  # noqa: F401, E402
 
 # Color schemes + print_* + banner + VERBOSE moved to autopwn.core.logging (P1.1).
 # Re-export above keeps the 418 existing call sites in _legacy.py working unchanged.
@@ -3290,11 +3286,27 @@ Examples:
     if not os.path.exists(args.local):
         print_error(f"target binary not found: {args.local}")
         sys.exit(1)
-    
+
     if (args.ip and not args.port) or (args.port and not args.ip):
         print_error("both IP and port must be specified for remote exploitation")
         sys.exit(1)
-    
+
+    # P2.3: construct the typed ExploitContext and sync it into the legacy
+    # exploit_info dict (alias to _compat._legacy_info).  This duplicates
+    # the validation above, but doing it here means a future P2.4 cleanup
+    # can drop the legacy checks without changing the UX.  The bridge is
+    # effectively a no-op in P2.3 (L3305/L3306/L354-360 overwrite its
+    # values), but it establishes the API that P2.4 will lean on.
+    try:
+        ctx = ExploitContext.from_args(args)
+        sync_ctx_to_legacy(ctx)
+    except ContextError as e:
+        # Preserve legacy UX: red error + exit 1.  Error text is identical
+        # to what ExploitContext.from_args() raises, which itself matches
+        # the legacy print_error text byte-for-byte (see P2.2 Test 14).
+        print_error(str(e))
+        sys.exit(1)
+
     # Initialize target information
     program = add_current_directory_prefix(args.local)
     libc_path = None

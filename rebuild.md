@@ -188,7 +188,7 @@
 | P4.1 | `recon/checksec.py`：搬运 `Information_Collection` + `collect_binary_info` + `display_binary_info`；返回 `BinaryInfo` | ✅ | @Minzhi_Zhou | 4h | 0.6h | #P4.1 | 新加 `autopwn/recon/checksec.py`（177 行）+ `recon/__init__.py` re-export；3 个函数：`collect(program) -> BinaryInfo`（pure，§6.5 P4.1 spec 改 1 处：DEV-1 `stripped` 改 regex 否则 "Stripped" in out 误判 label vs value）+ `display(info)` 表格打印 + `_legacy_information_collection(program)`（v3.1 死代码 `Information_Collection` 的字面 port，0 caller，underscore 前缀）；**未替换 `_legacy.py` 调用点**（P8 orchestrator 责任）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；35 字段 + 5 视觉 + 5 边缘测试 + 5 legacy port 测试全过；详见 §6.5 P4.1 实施记录 |
 | P4.2 | `recon/libc.py`：合并 `detect_libc` + `ldd_libc` 为 `detect(ctx) → LibcInfo` | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P4.2 | 新加 `autopwn/recon/libc.py`（209 行）+ `recon/__init__.py` re-export `detect`；1 个 public 函数 `detect(ctx, program) -> LibcInfo`（pure，3 阶段：user override (`ctx.libc.path`) → ldd auto-detect → empty LibcInfo）+ 1 个 helper `_parse_libc_path(ldd_out)` + 2 个 legacy port (`_legacy_detect_libc` / `_legacy_ldd_libc`，0 caller / 1 caller，含原 print 行为供字节级保真)；`LibcInfo.elf` 维持 `None`（懒加载 — P7 strategy 才 `ELF(libc_path)`，避免 pwntools 在 recon 期 import）；**未替换 `_legacy.py` 调用点**（P8 orchestrator 责任）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × detect() + 1 user-override + 1 empty-LibcInfo + 6 _parse_libc_path edge case + 3 legacy port = 16 测试全过；详见 §6.5 P4.2 实施记录 |
 | P4.3 | `recon/plt.py`：`scan_plt_functions` 返回 dict，写入 `ctx.has_*` 标志 | ✅ | @Minzhi_Zhou | 3h | 0.5h | #P4.3 | 新加 `autopwn/recon/plt.py`（200 行）+ `recon/__init__.py` re-export `scan`；1 public + 1 helper + 2 legacy port：`scan(ctx, program) -> dict[str, int]`（6 函数，**P4 层首个 mutate ctx** 的模块 — 写 6 个 `ctx.has_*` bool；与 P4.1/P4.2 不同是因为 PLT 标志 6 个独立 bool 无自然 container）+ `_parse_plt_addresses(objdump_out)` helper + 2 个 legacy port（`_legacy_scan_plt_functions` 7 函数含 main 保 v3.1 行为 + `_legacy_set_function_flags`）；**deviation**: 新 `scan` 6 函数（drop `main`），v3.1 legacy port 7 函数（含 main，与 §4.5 spec 「`has_*` 标志」对应 — `main` 不 gate 任何 strategy 故 ctx 无 `has_main` 字段）；**未替换 `_legacy.py` 调用点**（P4.7 删 globals 时一并处理）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × scan + 1 幂等 + 1 re-overwrite + 4 _parse 边缘 + 4 legacy port + 1 cwd 污染 + 1 re-export = 16 测试全过；详见 §6.5 P4.3 实施记录 |
-| P4.4 | `recon/rop.py`：搬 `find_rop_gadgets_x64/x32`，返回 `RopGadgetsX64/X32` | ⏳ | — | 4h | — | — | |
+| P4.4 | `recon/rop.py`：搬 `find_rop_gadgets_x64/x32`，返回 `RopGadgetsX64/X32` | ✅ | @Minzhi_Zhou | 4h | 0.7h | #P4.4 | 新加 `autopwn/recon/rop.py`（280 行）+ `recon/__init__.py` re-export `find_x64` / `find_x32`；2 public + 2 helpers + 2 legacy port：`find_x64(ctx, program) -> RopGadgetsX64`（return-only，**不 mutate ctx**，P8 赋值；3 次 `run_ropper` 合并解析 5 字段：`pop_rdi`/`pop_rsi`/`ret`/`extra_rdi`/`extra_rsi`）+ `find_x32(ctx, program) -> RopGadgetsX32`（6 次 `run_ropper` + R8 缓解 4 bool 合并 `has_eax_ebx_ecx_edx`）+ 2 helper (`_parse_ropper_lines` / `_extract_x64_gadgets` / `_extract_x32_gadgets`)+ 2 legacy port（保 5-tuple / 11-tuple 形状与 v3.1 表格打印）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × find_x64/find_x32 + return-only 契约 + 2 _parse 边缘 + 2 _extract 合成输入 + 2 legacy port shape + re-export = 11 测试全过；详见 §6.5 P4.4 实施记录 |
 | P4.5 | `recon/bss.py`：搬 `find_large_bss_symbols` + `find_ftmstr_bss_symbols` | ⏳ | — | 2h | — | — | |
 | P4.6 | `recon/asm.py`：搬 `vuln_func_name` + `asm_stack_overflow` | ⏳ | — | 2h | — | — | |
 | P4.7 | **关键**：删除 `autopwn.py` 中所有 `globals().get('system', 0)` 等 22 处；改读 `ctx.has_system` | ⏳ | — | 3h | — | — | 风险点 |
@@ -2135,6 +2135,65 @@ grep -n "globals().get(" autopwn.py
   - P8 orchestrator 整合 6 个 P4.x 模块 + 5 个 P5.x detect 模块进 `run_recon_phase(ctx)` / `run_detect_phase(ctx)`
 
 **Refs**: refactor.md §3.2.1（ExploitContext 6 个 has_* 字段）/ refactor.md §5（79 函数 → 新位置映射表）
+
+---
+
+**P4.4 实施记录（2026-06-07）**：
+
+- **新文件** `autopwn/recon/rop.py`（280 行）：2 public + 3 helpers + 2 legacy ports
+  - `find_x64(ctx, program) -> RopGadgetsX64` — **return-only**（与 P4.3 不同，**不 mutate ctx**；P8 整合时 `ctx.gadgets_x64 = find_x64(ctx, ctx.binary.path)`）；3 次 `run_ropper`（pop rdi / pop rsi / ret）合并解析 5 字段
+  - `find_x32(ctx, program) -> RopGadgetsX32` — 同上，**return-only**；6 次 `run_ropper`（4 个 pop reg + ret + int 0x80）+ R8 缓解（4 bool 合并 `has_eax_ebx_ecx_edx`）
+  - `_parse_ropper_lines(ropper_out) -> list` — 私有 helper，过滤 `[INFO]` banner
+  - `_extract_x64_gadgets(combined) -> dict` — 解析 x64 if/elif cascade（pop rdi multi / single / pop rsi multi / single / ret）
+  - `_extract_x32_gadgets(ropper_outputs) -> dict` — 解析 x32 6 类别 + R8 缓解
+  - `_legacy_find_rop_gadgets_x64(program) -> 5-tuple` — v3.1 字面 port（L407-466），**保 5-tuple 形状 + ROP GADGETS x64 表格** —— 1 caller (`_legacy.py` L3149)
+  - `_legacy_find_rop_gadgets_x32(program) -> 11-tuple` — v3.1 字面 port（L468-535），**保 11-tuple 形状 + ROP GADGETS x32 表格** —— 1 caller (`_legacy.py` L3152-3153)
+
+- **修改** `autopwn/recon/__init__.py`（47 → 64 行）：re-export `find_x64` / `find_x32` + 更新 `__all__` + 顶部 docstring 增 P4.4 status
+
+- **设计决策**：
+  - **`find_x64` / `find_x32` return-only 而非 mutate ctx**：与 P4.1 (BinaryInfo) / P4.2 (LibcInfo) 范式一致（return dataclass，P8 整合时赋值）。P4.3 PLT 是 exception（6 bool 无 container）。ROP 的 `RopGadgetsX64` / `RopGadgetsX32` 已有专用 dataclass，**更自然 return**
+  - **`R8 缓解落地**：x32 4 个独立 bool (eax/ebx/ecx/edx) 合并为 `has_eax_ebx_ecx_edx`，语义保 `all(found.values())`。`context.py` P2.1 已预留该字段；v3.1 caller 仅 `if eax and ebx and ecx and edx:` 形式使用，collapse 不破语义
+  - **`find_x64` 调 3 次 `run_ropper` 而非 1 次（合并搜索）`**：v3.1 同样 3 次（L425-427）—— 单次 ropper 搜索可能在不同 search term 下漏掉多 pop 变体（v3.1 if/elif 顺序依赖 pop rdi 单独搜索结果在 pop rsi 之前的 line ordering；保 3 次调用保 cascade 顺序）
+  - **`_parse_ropper_lines` 提取为 module-level helper**：legacy port + public 函数都调同一 parser，避免代码重复
+
+- **零行为变更**：`_legacy.py` 一字未动（3469 行未变）；main() 仍走 `_legacy.find_rop_gadgets_x64` + `_legacy.find_rop_gadgets_x32`；新模块是**并行、可单元测试**实现
+
+- **11 项功能单测**（手测，pytest 体系待 P9）全过：
+  1. 5 binary × `find_x64()` + `find_x32()` — 验证返回 RopGadgetsX64 / RopGadgetsX32 各字段类型 + 实际值（canary 是 32-bit，level3_x64 / pie / rip 是 64-bit，all 有 ret gadget；level3_x64/pie/rip 找到 pop rdi / pop rsi；canary / fmtstr1 是 32-bit，找到 pop ebx + ret 但缺 pop eax/ecx/edx，所以 `has_eax_ebx_ecx_edx=False`）
+  2. **return-only 契约**：`find_x64/find_x32` 不 mutate `ctx.gadgets_x64/x32`（验证前后都是 None）
+  3. `_parse_ropper_lines` 4 edge case：empty / INFO-only / mixed / data only
+  4. `_extract_x64_gadgets` 合成输入：简单 case + multi-pop case（extra_rdi=1）
+  5. `_extract_x32_gadgets` 合成输入：4 寄存器各自找到/未找到
+  6. `_legacy_find_rop_gadgets_x64` 返回 5-tuple 形状
+  7. `_legacy_find_rop_gadgets_x32` 返回 11-tuple 形状
+  8. `from autopwn.recon import find_x64/find_x32` re-export 路径有效
+  9. `_legacy_*` 不在 `__all__`（underscore-prefix 私有性）
+  10. RopGadgetsX64 / RopGadgetsX32 slots 强制（`g.invalid = 'x'` → `AttributeError`）
+  11. cwd 零污染（无 `ropper.txt` 落盘 — P1.3 已用 in-memory `run_ropper`）
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（90s 截断预期） + fmtstr1/level3_x64/pie/rip 全部 PASS（**4/5 SUCCESS，与 v3.1 baseline 持平**）
+  - 关 4：关键日志对比 vs v3.1 baseline — **27/28 = 96% 一致**（**无回归**）
+  - 关 5：Reviewer — Owner 自审（§2.2 单人项目）
+  - 关 6：文档同步 — `rebuild.md` §4.5 + §6.5 同步
+  - 详见 `logs/comparison/summary.md`（P4.4 重新生成）
+  - **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
+
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，与 P0.7–P4.3 同类，**非功能差异**）
+
+- **与 P4.7 globals() 清理的关系**：P4.4 **不**触碰 `globals()`；P4.4 是 `additive` 新模块；P4.7 删 22 处 `globals().get(...)` 时，**x64 caller**（`globals().get('pop_rdi', 0)`）改成 `ctx.gadgets_x64.pop_rdi`，**x32 caller**（`globals().get('eax', 0)`）改成 `ctx.gadgets_x32.has_eax_ebx_ecx_edx`（R8 collapse 后的 bool）
+
+- **后续步骤**：
+  - P4.5（bss）找大 BSS 段（fmtstr shellcode 存储） → 写 `ctx.fmtstr_buf`
+  - P4.6（asm）静态分析 vuln func + 栈帧 padding 调整
+  - P4.7 删 22 处 `globals().get(...)` 改读 `ctx.has_*` / `ctx.gadgets_*`（R1 风险点 — 此时 4 个新模块都已就位）
+  - P4.8 删 `set_function_flags` 副作用
+  - P8 orchestrator 整合 6 个 P4.x 模块 + 5 个 P5.x detect 模块进 `run_recon_phase(ctx)` / `run_detect_phase(ctx)`
+
+**Refs**: refactor.md §3.2.1（RopGadgetsX64/X32 + R8 缓解）/ refactor.md §5（79 函数 → 新位置映射表）
 
 ---
 

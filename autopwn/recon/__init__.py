@@ -17,6 +17,9 @@ writes outside ctx mutation; unit-testable in isolation under P9.1):
     populates the 6 ``ctx.has_*`` booleans + returns the flag dict
     (replaces v3.1's two-step ``scan_plt_functions`` → ``set_function_flags``
     + ``globals()`` injection)
+  * **P4.4** (``rop``)     — ``find_x64(ctx, program) -> RopGadgetsX64``
+    and ``find_x32(ctx, program) -> RopGadgetsX32`` (returns the
+    dataclass; P8 assigns to ``ctx.gadgets_x64`` / ``ctx.gadgets_x32``)
 """
 from __future__ import annotations
 
@@ -30,10 +33,16 @@ from autopwn.recon.libc import (
 from autopwn.recon.plt import (
     scan as scan,
 )
+from autopwn.recon.rop import (
+    find_x64 as find_x64,
+    find_x32 as find_x32,
+)
 
 __all__: list[str] = [
     "collect",
     "display",
     "detect",
     "scan",
+    "find_x64",
+    "find_x32",
 ]

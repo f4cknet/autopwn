@@ -13,4 +13,19 @@ __github__ = "https://github.com/f4cknet/autopwn"
 # Re-export CLI as a top-level attribute for convenience.
 from autopwn import cli  # noqa: E402, F401
 
-__all__ = ["__version__", "__author__", "__org__", "__github__", "cli"]
+# P2.1: re-export the model-layer dataclasses.  Recon/detect/strategy
+# modules in P4-P7 will import them as `from autopwn import BinaryInfo, ExploitContext, ...`.
+from autopwn.context import (  # noqa: E402, F401
+    BinaryInfo,
+    CanaryInfo,
+    ExploitContext,
+    LibcInfo,
+    RopGadgetsX64,
+    RopGadgetsX32,
+)
+
+__all__ = [
+    "__version__", "__author__", "__org__", "__github__", "cli",
+    "BinaryInfo", "CanaryInfo", "ExploitContext",
+    "LibcInfo", "RopGadgetsX64", "RopGadgetsX32",
+]

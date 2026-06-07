@@ -48,12 +48,15 @@ def cleanup_core_files():
 cleanup_thread = threading.Thread(target=cleanup_core_files, daemon=True)
 cleanup_thread.start()
 
-# Global configuration
-VERSION = "4.0.dev0"
-AUTHOR = "qzdx_soc"
-GITHUB = "https://github.com/f4cknet/autopwn"
-ORG_CN  = "衢州电信安全运营中心"
-VERBOSE = False  # set by main() from -v / --verbose
+# Global configuration (P1.1: moved to autopwn.core.logging, re-exported for backward compat)
+from autopwn.core.logging import (  # noqa: F401, E402
+    VERSION, AUTHOR, GITHUB, ORG_CN, VERBOSE,
+    Colors,
+    print_banner, print_debug, print_info, print_success,
+    print_warning, print_error, print_critical, print_payload,
+    print_section_header, print_progress,
+    print_table_header, print_table_row,
+)
 
 # Global variables for exploit information
 exploit_info = {
@@ -68,118 +71,8 @@ exploit_info = {
     'timestamp': ''
 }
 
-# Color schemes (similar to sqlmap)
-class Colors:
-    DEBUG = '\033[90m'  # gray, for debug messages (P0.7)
-    DIM = '\033[2m'    # dim, for debug timestamp (P0.7)
-    HEADER = '\033[95m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-    END = '\033[0m'
-    
-    # Sqlmap-style colors
-    INFO = '\033[1;34m'     # Blue bold
-    SUCCESS = '\033[1;32m'  # Green bold
-    WARNING = '\033[1;33m'  # Yellow bold
-    ERROR = '\033[1;31m'    # Red bold
-    CRITICAL = '\033[1;35m' # Magenta bold
-    PAYLOAD = '\033[1;36m'  # Cyan bold
-
-def print_banner():
-    """AutoPwn v4.0 启动 banner（v4 起从 5 行 ASCII 艺术改为简洁 box 风格）"""
-    banner = f"""
-{Colors.BOLD}{Colors.CYAN}
-    ┌────────────────────────────────────────────────────────────────┐
-    │                                                                │
-    │   {Colors.YELLOW}AutoPwn{Colors.CYAN}  ·  Automated Binary Exploitation Framework           │
-    │                                                                │
-    │   v{VERSION:<10}  by {AUTHOR}{Colors.CYAN}  ({ORG_CN})             │
-    │   {Colors.UNDERLINE}{GITHUB}{Colors.END}{Colors.CYAN}                          │
-    │                                                                │
-    └────────────────────────────────────────────────────────────────┘
-{Colors.END}
-"""
-    print(banner)
-
-def print_debug(message, prefix="[DEBUG]"):
-    """Print debug message (only when VERBOSE=True or AUTOPWN_DEBUG=1)."""
-    import os as _os
-    if not (VERBOSE or _os.environ.get("AUTOPWN_DEBUG") == "1"):
-        return
-    timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-    print(f"{Colors.DEBUG}{prefix}{Colors.END} {Colors.DIM}[{timestamp}]{Colors.END} {message}", file=sys.stderr)
-
-def print_info(message, prefix="[*]"):
-    """Print info message with sqlmap-style formatting"""
-    timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-    print(f"{Colors.INFO}{prefix}{Colors.END} {Colors.BOLD}[{timestamp}]{Colors.END} {message}")
-
-def print_success(message, prefix="[+]"):
-    """Print success message"""
-    timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-    print(f"{Colors.SUCCESS}{prefix}{Colors.END} {Colors.BOLD}[{timestamp}]{Colors.END} {message}")
-
-def print_warning(message, prefix="[!]"):
-    """Print warning message"""
-    timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-    print(f"{Colors.WARNING}{prefix}{Colors.END} {Colors.BOLD}[{timestamp}]{Colors.END} {message}")
-
-def print_error(message, prefix="[-]"):
-    """Print error message"""
-    timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-    print(f"{Colors.ERROR}{prefix}{Colors.END} {Colors.BOLD}[{timestamp}]{Colors.END} {message}")
-
-def print_critical(message, prefix="[CRITICAL]"):
-    """Print critical message"""
-    timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-    print(f"{Colors.CRITICAL}{prefix}{Colors.END} {Colors.BOLD}[{timestamp}]{Colors.END} {message}")
-
-def print_payload(message, prefix="[PAYLOAD]"):
-    """Print payload information"""
-    timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-    print(f"{Colors.PAYLOAD}{prefix}{Colors.END} {Colors.BOLD}[{timestamp}]{Colors.END} {message}")
-
-def print_section_header(title):
-    """Print section header with decorative lines."""
-    print_debug(f"phase: {title}")
-    line = "─" * 60
-    print(f"\n{Colors.BOLD}{Colors.BLUE}┌{line}┐{Colors.END}")
-    print(f"{Colors.BOLD}{Colors.BLUE}│{Colors.END} {Colors.BOLD}{title.center(58)}{Colors.END} {Colors.BOLD}{Colors.BLUE}│{Colors.END}")
-    print(f"{Colors.BOLD}{Colors.BLUE}└{line}┘{Colors.END}")
-
-def print_progress(current, total, task_name):
-    """Print progress bar similar to sqlmap"""
-    percentage = int((current / total) * 100)
-    bar_length = 30
-    filled_length = int(bar_length * current // total)
-    bar = '█' * filled_length + '░' * (bar_length - filled_length)
-    print(f"\r{Colors.INFO}[*]{Colors.END} {task_name}: {Colors.CYAN}[{bar}]{Colors.END} {percentage}%", end='', flush=True)
-    if current == total:
-        print_info("")  # New line when complete
-
-def print_table_header(headers):
-    """Print table header"""
-    header_line = " | ".join([f"{h:^15}" for h in headers])
-    separator = "-" * len(header_line)
-    print(f"{Colors.BOLD}{header_line}{Colors.END}")
-    print(separator)
-
-def print_table_row(values, colors=None):
-    """Print table row with optional colors"""
-    if colors is None:
-        colors = [Colors.END] * len(values)
-    
-    formatted_values = []
-    for i, (value, color) in enumerate(zip(values, colors)):
-        formatted_values.append(f"{color}{str(value):^15}{Colors.END}")
-    
-    row_line = " | ".join(formatted_values)
-    print(row_line)
+# Color schemes + print_* + banner + VERBOSE moved to autopwn.core.logging (P1.1).
+# Re-export above keeps the 418 existing call sites in _legacy.py working unchanged.
 
 def update_exploit_info(key, value):
     """Update global exploit information"""
@@ -3366,10 +3259,11 @@ Examples:
     
     args = parser.parse_args()
     
-    # Set VERBOSE global (for print_debug)
-    global VERBOSE
-    VERBOSE = args.verbose
-    if VERBOSE:
+    # Set VERBOSE global (for print_debug). P1.1: print_debug reads core.logging.VERBOSE,
+    # so we must use the setter to propagate (not rebind the re-exported local).
+    from autopwn.core.logging import set_verbose
+    set_verbose(args.verbose)
+    if args.verbose:
         print_debug(f"verbose mode enabled (PID={os.getpid()})")
     
     # Validate arguments

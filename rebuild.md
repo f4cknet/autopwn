@@ -107,7 +107,7 @@
 
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
-| P1.1 | `core/logging.py`：搬运 `Colors` + `print_*` | ⏳ | — | 3h | — | — | |
+| P1.1 | `core/logging.py`：搬运 `Colors` + `print_*` | ✅ | @Ba1_Ma0 | 3h | 0.6h | #P1.1 | 搬 Colors/12 print_*/VERBOSE → autopwn/core/logging.py；_legacy.py re-export；set_verbose() setter 修 main() global 重绑定 bug；.gitignore core*→/core*；补 P0.1 漏 core/__init__.py；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（无回归）；铁律 4：✅ 合并 ✅ pytest N/A (P9) ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
 | P1.2 | `core/fs.py`：`set_permission` + `add_current_directory_prefix` + 临时目录 ctxmgr | ⏳ | — | 2h | — | — | |
 | P1.3 | `core/runner.py`：封装 `checksec` / `ropper` / `objdump` / `ldd`，输出走 `subprocess.run(capture_output=True)` | ⏳ | — | 4h | — | — | |
 | P1.4 | 替换 `autopwn.py` 中所有 `print_banner()` / `print_*` 调用为 `from autopwn.core.logging import ...` | ⏳ | — | 2h | — | — | |
@@ -517,6 +517,79 @@ timeout 5 python3 autopwn.py -l Challenge/canary      # [OK] 启动到 BINARY AN
 **前置依赖**：P0 完成
 
 **子任务**：见 §4.2 表，每个子任务有详细步骤。
+
+**P1.1 详细步骤**（`core/logging.py`）：
+```python
+# autopwn/core/logging.py
+from __future__ import annotations
+import datetime
+import os
+import sys
+
+from autopwn import __author__ as AUTHOR
+from autopwn import __github__ as GITHUB
+from autopwn import __org__ as ORG_CN
+from autopwn import __version__ as VERSION
+
+VERBOSE = False
+
+class Colors:
+    DEBUG = '\033[90m'    # gray (P0.7)
+    DIM = '\033[2m'       # dim (P0.7)
+    HEADER = '\033[95m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    END = '\033[0m'
+    INFO = '\033[1;34m'
+    SUCCESS = '\033[1;32m'
+    WARNING = '\033[1;33m'
+    ERROR = '\033[1;31m'
+    CRITICAL = '\033[1;35m'
+    PAYLOAD = '\033[1;36m'
+
+def print_banner(): ...
+def print_debug(message, prefix="[DEBUG]"): ...   # VERBOSE-gated
+def print_info(message, prefix="[*]"): ...
+def print_success(message, prefix="[+]"): ...
+def print_warning(message, prefix="[!]"): ...
+def print_error(message, prefix="[-]"): ...
+def print_critical(message, prefix="[CRITICAL]"): ...
+def print_payload(message, prefix="[PAYLOAD]"): ...
+def print_section_header(title): ...
+def print_progress(current, total, task_name): ...
+def print_table_header(headers): ...
+def print_table_row(values, colors=None): ...
+
+def set_verbose(value: bool) -> None:
+    """Set the global VERBOSE flag. CLI must use this instead of `global VERBOSE` rebind."""
+    global VERBOSE
+    VERBOSE = value
+```
+
+**P1.1 实施记录（2026-06-07）**：
+
+- **新文件** `autopwn/core/logging.py`（163 行）：搬 `Colors` + 12 个 `print_*` + `VERBOSE` + `set_verbose()` setter + 项目元数据 import
+- **`_legacy.py` re-export**（L52-60）：`from autopwn.core.logging import (VERSION, AUTHOR, GITHUB, ORG_CN, VERBOSE, Colors, print_*)`，删除原 109 行定义（L52-55 + L71-182）
+- **附带**：`autopwn/core/__init__.py` 此前 P0.1-P0.5 漏提交，借本 PR 补齐（与其他 7 个子包 `__init__.py` 一致）
+- **净减少** `_legacy.py` 107 行（3748 → 3641）
+- **关键 bug 修复**：`main()` 原 `global VERBOSE; VERBOSE = args.verbose` 只能 rebind `_legacy.VERBOSE`（re-exported），但 `print_debug` 在 `core.logging` 自己的命名空间读 `VERBOSE` —— 闭包隔离。改用 `set_verbose(args.verbose)` 修掉
+- **`.gitignore` 修复**：`core*` → `/core*`（避免误中 `autopwn/core/` 包，仍能 ignore 根目录 core dumps）
+- **L2 违规 + 恢复**：首次标记 ✅ 时未跑 §2.6 5-binary 串行验证，仅 8s 烟雾测试 + 没有 2-log 对比。Owner 抓到后回退 🔄，按 §2.6 补验收
+- **§2.6 验证结果**（铁律 4 六关全过）：
+  - 关 1：合并到 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` 尚未创建，P9.1 任务）
+  - 关 3：5-binary 串行 — canary PARTIAL（60s 截断预期）+ fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS 计数 `4/5 = 4/5`（无回归）
+  - 关 5：Reviewer — Owner 自审（单人项目，§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.2 + §6.2 + §10 同步
+  - 详见 `logs/comparison/summary.md`（P1.1 重新生成）
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 3498 vs v3.1 3625（fuzzing 时序差异，与 P0.8 看到的 3447 同类，非功能差异）
+- **commit 引用**：`abbf80d`（P1.1）— `c1b41ba` (P0.8) → `abbf80d` (P1.1)
 
 **P1.3 详细步骤**（`core/runner.py` 示例）：
 ```python

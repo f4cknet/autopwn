@@ -47,8 +47,8 @@ ropper.txt
 Objdump_Scan.txt
 libc_path.txt
 Information_Collection.txt
-core*
-core.[0-9]*
+/core*
+/core.[0-9]*
 
 # ----- autopwn 生成的报告（可由 --report-dir 重新生成，不入仓） -----
 *.docx

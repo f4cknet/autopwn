@@ -114,7 +114,7 @@
 | **P1.3b** | **临时需求 #4 - ROP / 模式 套件**（**ROPgadget / cyclic / one_gadget**） | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P1.3b | 加 run_ropgadget(*filters) / run_cyclic_create(length) / run_cyclic_find(pattern) / run_one_gadget(libc)；ROPgadget 不用 --nocolor（版本不支持）；cyclic 忽略 stderr DeprecationWarning；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
 | **P1.3c** | **临时需求 #4 - 动态 / sandbox 套件**（**strace / ltrace / seccomp-tools / gdb**） | ✅ | @Minzhi_Zhou | 3h | 0.5h | #P1.3c | 加 run_strace / run_ltrace / run_seccomp / run_gdb_batch；4 个都写 stderr（syscall/lib-call/seccomp-event/pwndbg 彩色），wrapper 用 stdout+stderr 合并 + `errors='replace'` 吃非 UTF-8；seccomp-tools 默认 dump；gdb `-batch -nx`；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
 | **P1.3d** | **临时需求 #4 - 跨架构模拟**（**qemu-system-x86 / i386 / aarch64**） | ✅ | @Minzhi_Zhou | 2h | 0.5h | #P1.3d | 加 run_qemu_user(arch, ...) + run_qemu_system(arch, ...) 两个 Popen 接口；user-mode（pwntools 风格，含 aarch64/arm/i386 等） + system-mode（仅 x86_64/i386 在本机可用；aarch64 需 `apt install qemu-system-arm` 额外装）；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
-| P1.4 | 替换 `autopwn.py` 中所有 `print_banner()` / `print_*` 调用为 `from autopwn.core.logging import ...` | ⏳ | — | 2h | — | — | |
+| P1.4 | 替换 `autopwn.py` 中所有 `print_banner()` / `print_*` 调用为 `from autopwn.core.logging import ...` | ✅ | @MinZhi_Zhou | 2h | 0h | #P1.1 | **由 P1.1 顺手完成**：P1.1 把 Colors/12 print_*/VERBOSE 搬到 `core/logging.py`，`_legacy.py` 改为 `from autopwn.core.logging import (...)` re-export，418 个调用点零修改——等价于 P1.4 的目标（让 monolith 从 core/ 导入 print_*）。无独立代码改动；详见 §6.2 P1.4 决策记录 |
 | P1.5 | 替换 `autopwn.py` 中所有 `os.system('ropper ... > ropper.txt')` 模式，调用 `runner.run_ropper` | ⏳ | — | 3h | — | — | |
 | P1.6 | 删除 `cleanup_core_files` 线程的硬编码 `os.system('rm -rf core*')`，改用 `core/fs.py` 中的回收函数 | ⏳ | — | 1h | — | — | |
 
@@ -765,6 +765,35 @@ def run_qemu_system(arch: str, program, *args: str) -> subprocess.Popen:
   - 详见 `logs/comparison/summary.md`
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期）
 - **commit 引用**：`601173f`（P1.3d）— `7cab410` (P1.3c) → `601173f` (P1.3d)
+
+**P1.4 决策记录（2026-06-07）**：
+
+**状态变更**：⏳ → ✅（**由 P1.1 顺手完成，无独立 PR**）
+
+**为什么 P1.4 等价于 P1.1 实现的子集**：
+
+P1.4 在原始 `rebuild.md` §4.2 写成 "替换 `autopwn.py` 中所有 `print_banner()` / `print_*` 调用为 `from autopwn.core.logging import ...`"。该任务在 P0.1-P0.5 拆分后已**自动等价**为"让 `_legacy.py`（取代 `autopwn.py` 成为 monolith）从 `core/logging.py` 导入 print_*"。
+
+P1.1 实施时做了：
+- `core/logging.py` 新建（163 行）：Colors + 12 print_* + VERBOSE + set_verbose() setter
+- `_legacy.py` 删除原 109 行定义（L52-55 常量 + L71-182 print_*）
+- `_legacy.py` 替换为 `from autopwn.core.logging import (VERSION, AUTHOR, GITHUB, ORG_CN, VERBOSE, Colors, print_*)` re-export
+- 418 个 `print_*` 调用点 / `Colors.X` 引用点**零修改**即可工作（Python `import *` 语义让 re-export 完全透明）
+
+**P1.4 目标** = "让 monolith 从 core/ 导入 print_*"——已被 P1.1 实现完整覆盖。
+
+**为什么不标 ❌**（避免误读）：
+- ❌ 含义："不再需要，可删除任务行"
+- ✅ 含义："已实现，查阅 P1.1 即可"
+- 选 ✅ 保留 §4.2 任务历史，标明实际由 P1.1 完成
+
+**为什么不留 ⏳**：
+- ⏳ 会误导后续 reviewer 以为还需独立 PR
+- 已无独立代码改动可做
+
+**Owner 决策**（2026-06-07 @MinZhi_Zhou）：✅ 标 P1.4 done，引用 P1.1 实现；后续如需 stylistic cleanup（re-export 改为文件内多处显式 import）可单独开新任务
+
+**铁律 4 六关**：N/A（无独立代码改动；P1.1 的六关已 PASS 见 §6.2 P1.1）
 
 **P1.3a 详细步骤**（`core/runner.py` 扩展）：
 

@@ -1539,7 +1539,7 @@ class ExploitInfo:
    - "should we generate a report" 的用户开关由 P3.5 `ctx.enable_report: bool` 接手（on context，**不**在 info 上）
    - 若未来需"partial / failed" 报告，正确设计是新建 `FailedExploitInfo` dataclass，**不**应在 ExploitInfo 上 overload `success=False` 状态
 
-**commit 引用**：`2da876d`（P3.1）— `414aebd` (P2.4 docs) → `2da876d` (P3.1)
+**commit 引用**：`6460707`（P3.1 code+record）— `414aebd` (P2.4 docs) → `6460707` (P3.1)
 
 ---
 

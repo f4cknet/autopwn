@@ -1,6 +1,6 @@
 # v3.1 vs v4.0 严格对比报告
 
-> **生成时间**: 2026-06-07 07:37:44 UTC
+> **生成时间**: 2026-06-07 08:15:55 UTC
 > **方法论**: 串行 runner（scripts/run_verify.sh）+ 60s/binary timeout
 > **目的**: 验证 P0.0 全局改名（pwnpasi -> autopwn）+ P0.7 验证基础设施 引入的 v4.0 与 v3.1 行为一致性
 > **Owner**: @Minzhi_Zhou
@@ -17,8 +17,8 @@
 
 | binary | v3.1 结果 | v4.0 结果 | log 大小 (v3.1/v4.0) | 一致标记 / 总数 |
 |--------|----------|----------|----------------------|-----------------|
-| canary | PARTIAL | PARTIAL | 98484B / 154299B | 2/3 |
-| fmtstr1 | PASS | PASS | 56776B / 56776B | 6/6 |
+| canary | PARTIAL | PARTIAL | 98484B / 129434B | 2/3 |
+| fmtstr1 | PASS | PASS | 56776B / 56698B | 6/6 |
 | level3_x64 | PASS | PASS | 16608B / 15932B | 6/6 |
 | pie | PASS | PASS | 15661B / 15095B | 7/7 |
 | rip | PASS | PASS | 15926B / 15280B | 6/6 |
@@ -37,18 +37,18 @@
 ### 3.1 canary
 
 - **v3.1**: PARTIAL（98484B, 1144 行）
-- **v4.0**: PARTIAL（154299B, 1739 行）
+- **v4.0**: PARTIAL（129434B, 1465 行）
 
 | 标记 | v3.1 | v4.0 | 一致 |
 |------|------|------|------|
-| Padding (dynamic) | `3625` | `3471` | ⚠️ |
+| Padding (dynamic) | `3625` | `3367` | ⚠️ |
 | fmtstr strategy | `YES` | `YES` | ✅ |
 | libc path detected | `/lib32/libc.so.6` | `/lib32/libc.so.6` | ✅ |
 
 ### 3.2 fmtstr1
 
 - **v3.1**: PASS（56776B, 503 行）
-- **v4.0**: PASS（56776B, 504 行）
+- **v4.0**: PASS（56698B, 504 行）
 
 | 标记 | v3.1 | v4.0 | 一致 |
 |------|------|------|------|

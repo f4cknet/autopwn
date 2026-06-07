@@ -174,7 +174,7 @@
 
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
-| P3.1 | `report/model.py`：定义 `ExploitInfo` dataclass（替代 `exploit_info` dict） | ⏳ | — | 2h | — | — | |
+| **P3.1** | `report/model.py`：定义 `ExploitInfo` dataclass（替代 `exploit_info` dict） | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P3.1 | 加 `autopwn/report/model.py`（94 行）+ 扩展 `report/__init__.py`（15 行）re-export `ExploitInfo`；9 字段（6 required + 3 optional），`@dataclass(slots=True)`，`extra: Dict[str, Any]` 走 `default_factory` 防 mutable default 泄漏；**1 处 spec 微调**：`addresses`/`extra` 由 `dict` 收为 `Dict[str, int]` / `Dict[str, Any]`（mypy-friendly，与 `context.py` P2.1 风格一致）；**1 处有意偏离**：`success` 字段**不**加（详见 `model.py` 注释 + §6.4 实施记录：ExploitInfo 仅在 success 路径构造，"is success" 问题由 P3.5 `ctx.enable_report` 接手）；**零行为变更**（`_legacy.py` 3691 行未变，34 个 `exploit_info[]` 读点保留，7 个写点保留走 P2.4 `_compat.record_success` 桥）；12 项功能单测全过（import path/构造/字段访问/slots/mutable default guard/equality/repr/字段集精确/全字段构造/`__all__`）；§2.6 验证 4/5 SUCCESS + 27/28=96% 一致 vs v3.1 baseline（无回归，**预期**：pure addition 零 runtime 影响）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4.4 |
 | P3.2 | `report/docx.py`：搬运 `generate_docx_report`；改为读 `ExploitInfo` | ⏳ | — | 2h | — | — | |
 | P3.3 | `report/code.py`：搬运 `generate_exploitation_code`；改为读 `ExploitInfo` | ⏳ | — | 3h | — | — | |
 | P3.4 | `handle_exploitation_success` 改为 `record_success(ctx, info, primitive)`，生成 docx/code 改为订阅 | ⏳ | — | 2h | — | — | |
@@ -1467,6 +1467,79 @@ def record_success(ctx: ExploitContext, info: ExploitInfo) -> None:
 - `--no-report` 时不生成 docx 也不生成 code
 - `python-docx` 缺失时自动降级为 `.md`
 - docx 仍能在 MS Word / LibreOffice 中打开
+
+---
+
+**P3.1 详细步骤**（`report/model.py`）：
+
+依据 `refactor.md §4.4 P3.1` + `rebuild.md §6.4` spec，新建 typed dataclass **声明-only** PR（与 P2.1 范式一致：纯加类型，零行为变更）：
+
+```python
+# autopwn/report/model.py
+from __future__ import annotations
+from dataclasses import dataclass, field
+from typing import Any, Dict
+
+@dataclass(slots=True)
+class ExploitInfo:
+    exploit_type: str
+    payload: bytes
+    padding: int
+    addresses: Dict[str, int]
+    vulnerability_type: str
+    architecture: str
+    target_binary: str = ""
+    timestamp: str = ""
+    extra: Dict[str, Any] = field(default_factory=dict)
+```
+
+**P3.1 实施记录（2026-06-07）**：
+
+- **新文件** `autopwn/report/model.py`（94 行）：`ExploitInfo` dataclass
+  - 6 required：`exploit_type` / `payload` / `padding` / `addresses` / `vulnerability_type` / `architecture`
+  - 3 optional：`target_binary` / `timestamp` / `extra`（forward-compat 容器）
+  - `@dataclass(slots=True)`：与 `context.py` P2.1 范式一致（性能 + frozen-by-default + 拒绝新增字段）
+  - `extra` 走 `field(default_factory=dict)`，防御 mutable default 泄漏
+- **修改** `autopwn/report/__init__.py`（6 行 → 15 行）：re-export `ExploitInfo` + 更新 `__all__`
+- **零行为变更**：`_legacy.py` 3691 行未变（`wc -l` 验证）；34 个 `exploit_info[]` 读点 + 7 个写点（P2.4 桥）全部保留；`_compat.py` 194 行未变
+- **CLI 烟雾**：`python autopwn.py --help` rc=0 + AutoPwn banner ✓
+- **P2.x 回归**：
+  - `from autopwn import BinaryInfo, ExploitContext, ContextError, ...` 仍工作 ✓
+  - `ExploitContext.from_args(args)` 仍工作（验证 binary / mode / target_binary basename 设置）✓
+  - `_compat.sync_ctx_to_legacy(ctx, target_name='canary')` 仍工作 ✓
+- **12 项功能单测**（手测，pytest 体系待 P9）全过：
+  1. `from autopwn.report import ExploitInfo` 等价于 `from autopwn.report.model import ExploitInfo`（re-export 同对象）
+  2. `__all__ = ['ExploitInfo']`
+  3. 6 required 构造
+  4. 字段访问（payload / architecture / ...）
+  5. 3 optional 默认值（`''` / `''` / `{}`）
+  6. mutable default 防御（两个 instance 的 `extra` 独立）
+  7. slots 强制（`info.new_field = 'x'` → AttributeError）
+  8. 字段集精确（9 字段，**无** `success`）
+  9. 全 9 字段构造（含 `extra={'libc_base': 0x..., 'fmtstr_offset': 7}`）
+  10. `__eq__` 工作（值相同 → 相等）
+  11. `__repr__` 含字段名 + 值
+  12. `addresses` dict 接受任何 int（含负数、0xFFFF）
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（预期 brute force 需 ~7min）+ fmtstr1/level3_x64/pie/rip 全部 PASS（4/5 SUCCESS，与 v3.1 baseline 持平）
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致（**无回归**，预期：pure addition）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.4 + §6.4 同步
+  - 详见 `logs/comparison/summary.md`
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 3367 vs v3.1 3625（fuzzing 时序差异，与 P0.7–P2.4 同类，**非功能差异**）
+- **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
+
+**2 处 spec 偏差**（与 P2.1/P2.3 同范式——收紧类型 / 偏离 spec 示例 / 在 docstring 注释）：
+
+1. **`addresses: Dict[str, int]` / `extra: Dict[str, Any]`**（spec 示例用裸 `dict`）：mypy-friendly，与 `context.py` `Dict`/`Tuple`/`Optional` 风格一致。运行时行为零差异。
+2. **`success` 字段故意不加**（spec 示例也未加，但本 PR 注释明确意图）：
+   - ExploitInfo 仅在 P3.4 success 路径构造，failed exploit 不产生 ExploitInfo
+   - "should we generate a report" 的用户开关由 P3.5 `ctx.enable_report: bool` 接手（on context，**不**在 info 上）
+   - 若未来需"partial / failed" 报告，正确设计是新建 `FailedExploitInfo` dataclass，**不**应在 ExploitInfo 上 overload `success=False` 状态
+
+**commit 引用**：`2da876d`（P3.1）— `414aebd` (P2.4 docs) → `2da876d` (P3.1)
 
 ---
 

@@ -175,7 +175,7 @@
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
 | **P3.1** | `report/model.py`：定义 `ExploitInfo` dataclass（替代 `exploit_info` dict） | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P3.1 | 加 `autopwn/report/model.py`（94 行）+ 扩展 `report/__init__.py`（15 行）re-export `ExploitInfo`；9 字段（6 required + 3 optional），`@dataclass(slots=True)`，`extra: Dict[str, Any]` 走 `default_factory` 防 mutable default 泄漏；**1 处 spec 微调**：`addresses`/`extra` 由 `dict` 收为 `Dict[str, int]` / `Dict[str, Any]`（mypy-friendly，与 `context.py` P2.1 风格一致）；**1 处有意偏离**：`success` 字段**不**加（详见 `model.py` 注释 + §6.4 实施记录：ExploitInfo 仅在 success 路径构造，"is success" 问题由 P3.5 `ctx.enable_report` 接手）；**零行为变更**（`_legacy.py` 3691 行未变，34 个 `exploit_info[]` 读点保留，7 个写点保留走 P2.4 `_compat.record_success` 桥）；12 项功能单测全过（import path/构造/字段访问/slots/mutable default guard/equality/repr/字段集精确/全字段构造/`__all__`）；§2.6 验证 4/5 SUCCESS + 27/28=96% 一致 vs v3.1 baseline（无回归，**预期**：pure addition 零 runtime 影响）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4.4 |
-| P3.2 | `report/docx.py`：搬运 `generate_docx_report`；改为读 `ExploitInfo` | ⏳ | — | 2h | — | — | |
+| **P3.2** | `report/docx.py`：搬运 `generate_docx_report`；改为读 `ExploitInfo` | ✅ | @Minzhi_Zhou | 2h | 0.5h | #P3.2 | 新建 `autopwn/report/docx.py`（189 行）`generate_docx(info, out_dir) -> Optional[Path]`；`_legacy.py` 删 `generate_docx_report`（-114 行）+ 删 3 个 `from docx import ...` + 加 `from pathlib import Path` + `handle_exploitation_success` 改构造 ExploitInfo + 调新函数（14 caller 签名不变）；**字段映射**：14 个 `exploit_info['x']` 读点全部改 `info.x`（`success` 字段删——ExploitInfo 仅在 success 路径构造）；`generate_exploitation_code` 仍 in `_legacy.py`（P3.3 搬走），新 docx 模块临时 `from autopwn._legacy import generate_exploitation_code`（1 处待 P3.3 清理）；`_legacy.py` 净 -101 行（3691→3590）；**零行为变更**：`out_dir=Path('.')` 默认，docx 仍生成到 cwd；路径打印 "Exploitation report generated: rip_wp.docx" 与 v3.1 baseline byte-for-byte 一致；10 项功能单测全过（re-export/签名/干跑 4 binary 名字/5 种 address 格式化/异常降级返回 None/cwd 零污染/handle_exploitation_success 签名不变/...）；§2.6 验证 4/5 SUCCESS + 27/28=96% 一致 vs v3.1 baseline（**无回归**）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4.4 |
 | P3.3 | `report/code.py`：搬运 `generate_exploitation_code`；改为读 `ExploitInfo` | ⏳ | — | 3h | — | — | |
 | P3.4 | `handle_exploitation_success` 改为 `record_success(ctx, info, primitive)`，生成 docx/code 改为订阅 | ⏳ | — | 2h | — | — | |
 | P3.5 | CLI 加 `--no-report` / `--report-dir` 参数 | ⏳ | — | 1h | — | — | |
@@ -1540,6 +1540,80 @@ class ExploitInfo:
    - 若未来需"partial / failed" 报告，正确设计是新建 `FailedExploitInfo` dataclass，**不**应在 ExploitInfo 上 overload `success=False` 状态
 
 **commit 引用**：`6460707`（P3.1 code+record）— `414aebd` (P2.4 docs) → `6460707` (P3.1)
+
+---
+
+**P3.2 详细步骤**（`report/docx.py`）：
+
+依据 `refactor.md §4.4 P3.2` + `rebuild.md §6.4` spec，把 `_legacy.py:generate_docx_report()` 整体搬到 `autopwn/report/docx.py`，改为 typed 签名 `generate_docx(info: ExploitInfo, out_dir: Path) -> Optional[Path]`：
+
+```python
+# autopwn/report/docx.py
+from autopwn.core.logging import Colors, print_error, print_success, VERSION
+from autopwn.report.model import ExploitInfo
+# P3.2: 仍在 _legacy.py，P3.3 搬走后此 import 切到 report.code
+from autopwn._legacy import generate_exploitation_code
+
+def generate_docx(info: ExploitInfo, out_dir: Path) -> Optional[Path]:
+    try:
+        target_name = Path(info.target_binary).name
+        if target_name.startswith("./"):
+            target_name = target_name[2:]
+        target_name = Path(target_name).stem
+        report_path = out_dir / f"{target_name}_wp.docx"
+        # ... 完整 body: 14 读点全部 info.x 替换 ...
+        doc.save(str(report_path))
+        print_success(f"Exploitation report generated: {Colors.YELLOW}{report_path}{Colors.END}")
+        return report_path
+    except Exception as e:
+        print_error(f"Failed to generate report: {e}")
+        return None
+```
+
+**P3.2 实施记录（2026-06-07）**：
+
+- **新文件** `autopwn/report/docx.py`（189 行）：`generate_docx(info, out_dir) -> Optional[Path]`
+  - 14 个 `exploit_info['x']` 读点全部改 `info.x`（字段映射表见 docstring）
+  - `if not exploit_info['success']: return` 守卫**删除**（ExploitInfo 仅在 success 路径构造，门控在 P3.4 `record_success`）
+  - 路径：从 `cwd / {target}_wp.docx` 改 `out_dir / {target}_wp.docx`（P3.2 默认 `out_dir=Path('.')` 保持现状；P3.5 CLI flag 让用户改）
+  - `python-docx` import 改函数内 lazy import（P3.6 升级为 module-level `try/except ImportError` + markdown fallback）
+  - `Inches` dead import 清理
+  - `except: `（bare）改 `except Exception:`（Pylint R1722）
+- **修改** `autopwn/report/__init__.py`（15 → 20 行）：re-export `generate_docx` + `__all__` 增
+- **修改** `autopwn/_legacy.py`（3691 → 3590 = -101 行）：
+  - 删 `generate_docx_report`（L231-344 整段）
+  - 删 3 个 `from docx import Document / Inches / WD_ALIGN_PARAGRAPH`
+  - 加 `from pathlib import Path`（handle_exploitation_success 要用）
+  - `handle_exploitation_success` 末尾加 14 行：构造 ExploitInfo + 调 `generate_docx(_info, Path('.'))`（**14 caller 签名零修改**——向后兼容）
+- **净变化**：`_legacy.py` -101 行；`report/` 包 +204 行（docx.py 189 + __init__.py +15）
+- **10 项功能单测**（手测，pytest 体系待 P9）全过：
+  1. `report.generate_docx` ≡ `report.docx.generate_docx`（re-export 同对象）
+  2. `_legacy.generate_docx_report` 已删
+  3. 新签名 `(info, out_dir) -> Optional[Path]`
+  4. 干跑 ExploitInfo（`target_binary="./rip"`）→ 生成 `rip_wp.docx` 37472B 在 out_dir
+  5. address 格式化 5 种情况（int / str_int / str_hex / 异常 fallback / 异常 fallback 2）全部正确
+  6. 异常路径（read-only out_dir）→ `return None` + 打印 error（与 legacy 行为一致）
+  7. `handle_exploitation_success` 签名不变（6 kwargs）
+  8. `handle_exploitation_success` body 含 `ExploitInfo(` + `from autopwn.report import` + `generate_docx(_info, Path('.'))`
+  9. cwd 零污染（out_dir = tempdir 时 cwd 文件列表 delta = ∅）
+  10. payload length bytes 分支 OK
+- **CLI 烟雾**：`python autopwn.py --help` rc=0 + AutoPwn banner
+- **P2.x 回归**：`from_args` / `sync_ctx_to_legacy` / `record_success` 仍工作
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（brute force 截断）+ fmtstr1/level3_x64/pie/rip 全部 PASS（4/5 SUCCESS，与 baseline 持平）
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致（**无回归**）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.4 + §6.4 同步
+  - 详见 `logs/comparison/summary.md`
+- **docx 路径打印输出与 v3.1 byte-for-byte 一致**：
+  - v3.1: `Exploitation report generated: fmtstr1_wp.docx`（cwd-relative）
+  - v4.0: `Exploitation report generated: fmtstr1_wp.docx`（`Path('.') / fmtstr1_wp.docx` 打印相同字符串）
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期）
+- **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
+- **1 处待 P3.3 清理**：`from autopwn._legacy import generate_exploitation_code`（P3.3 移到 `report.code` 后此 import 切换）
+- **commit 引用**：（待 commit 后回填）
 
 ---
 

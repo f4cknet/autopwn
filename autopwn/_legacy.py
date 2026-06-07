@@ -11,11 +11,11 @@ import subprocess
 import time
 import datetime
 import threading
+from pathlib import Path
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import SymbolTableSection
-from docx import Document
-from docx.shared import Inches
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+# P3.2: docx imports moved to autopwn.report.docx (the only remaining
+# caller).  Inches was imported but never used; cleaned up.
 
 # Disable core dump files (Unix/Linux only)
 try:
@@ -228,120 +228,6 @@ io.interactive()
     
     return base_code
 
-def generate_docx_report():
-    """Generate DOCX exploitation report"""
-    global exploit_info
-    
-    if not exploit_info['success']:
-        return
-    
-    try:
-        # Extract target binary name without path and extension
-        target_name = os.path.basename(exploit_info['target_binary'])
-        if target_name.startswith('./'):
-            target_name = target_name[2:]
-        target_name = os.path.splitext(target_name)[0]
-        
-        # Generate report filename
-        report_filename = f"{target_name}_wp.docx"
-        
-        # Create document
-        doc = Document()
-        
-        # Add title
-        title = doc.add_heading('PWN Exploitation Report', 0)
-        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-        # Add basic information
-        doc.add_heading('Basic Information', level=1)
-        basic_info = doc.add_paragraph()
-        basic_info.add_run('Target Binary: ').bold = True
-        basic_info.add_run(f"{exploit_info['target_binary']}\n")
-        basic_info.add_run('Exploitation Time: ').bold = True
-        basic_info.add_run(f"{exploit_info['timestamp']}\n")
-        basic_info.add_run('Architecture: ').bold = True
-        basic_info.add_run(f"{exploit_info['architecture']}\n")
-        basic_info.add_run('Vulnerability Type: ').bold = True
-        basic_info.add_run(f"{exploit_info['vulnerability_type']}\n")
-        basic_info.add_run('Exploitation Method: ').bold = True
-        basic_info.add_run(f"{exploit_info['exploit_type']}\n")
-        
-        # Add padding information
-        doc.add_heading('Buffer Overflow Information', level=1)
-        padding_info = doc.add_paragraph()
-        padding_info.add_run('Buffer Overflow Padding: ').bold = True
-        padding_info.add_run(f"{exploit_info['padding']} bytes\n")
-        
-        # Add addresses information
-        if exploit_info['addresses']:
-            doc.add_heading('Key Address Information', level=1)
-            addr_table = doc.add_table(rows=1, cols=2)
-            addr_table.style = 'Table Grid'
-            hdr_cells = addr_table.rows[0].cells
-            hdr_cells[0].text = 'Address Type'
-            hdr_cells[1].text = 'Address Value'
-            
-            for addr_type, addr_value in exploit_info['addresses'].items():
-                row_cells = addr_table.add_row().cells
-                row_cells[0].text = addr_type
-                # Convert address to hexadecimal format
-                if isinstance(addr_value, int):
-                    row_cells[1].text = f"0x{addr_value:x}"
-                elif isinstance(addr_value, str) and addr_value.isdigit():
-                    row_cells[1].text = f"0x{int(addr_value):x}"
-                elif isinstance(addr_value, str) and addr_value.startswith('0x'):
-                    row_cells[1].text = addr_value
-                else:
-                    # Try to convert string representation of number to hex
-                    try:
-                        if 'x' in str(addr_value):
-                            row_cells[1].text = str(addr_value)
-                        else:
-                            row_cells[1].text = f"0x{int(str(addr_value)):x}"
-                    except:
-                        row_cells[1].text = str(addr_value)
-        
-        # Add exploitation code information
-        if exploit_info['payload']:
-            doc.add_heading('Exploitation Code', level=1)
-            payload_para = doc.add_paragraph()
-            payload_para.add_run('Complete Python Exploitation Code:\n').bold = True
-            
-            # Generate complete exploitation code based on exploit type
-            exploitation_code = generate_exploitation_code()
-            
-            # Add the exploitation code as code block
-            payload_para.add_run(f"{exploitation_code}\n")
-            
-            # Add payload length
-            payload_para.add_run('Payload Length: ').bold = True
-            if isinstance(exploit_info['payload'], bytes):
-                payload_para.add_run(f"{len(exploit_info['payload'])} bytes\n")
-            else:
-                payload_para.add_run(f"{len(str(exploit_info['payload']))} characters\n")
-        
-        # Add exploitation summary
-        doc.add_heading('Exploitation Summary', level=1)
-        summary_para = doc.add_paragraph()
-        summary_para.add_run('Exploitation Status: ').bold = True
-        summary_para.add_run('Successful\n')
-        summary_para.add_run('Exploitation Method: ').bold = True
-        summary_para.add_run(f"Successfully gained shell access through {exploit_info['vulnerability_type']} vulnerability using {exploit_info['exploit_type']} technique.\n")
-        
-        # Add footer
-        doc.add_paragraph('\n' + '─' * 50)
-        footer_para = doc.add_paragraph()
-        footer_para.add_run('Report Generation Tool: ').bold = True
-        footer_para.add_run(f"AutoPwn v{VERSION}\n")
-        footer_para.add_run('Generation Time: ').bold = True
-        footer_para.add_run(f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        
-        # Save document
-        doc.save(report_filename)
-        print_success(f"Exploitation report generated: {Colors.YELLOW}{report_filename}{Colors.END}")
-        
-    except Exception as e:
-        print_error(f"Failed to generate report: {e}")
 
 def handle_exploitation_success(exploit_type, payload, padding, addresses, vulnerability_type, architecture):
     """Handle successful exploitation by updating info and generating report"""
@@ -360,8 +246,21 @@ def handle_exploitation_success(exploit_type, payload, padding, addresses, vulne
 
     print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
 
-    # Generate DOCX report
-    generate_docx_report()
+    # P3.2: build ExploitInfo from the dict populated by record_success
+    # above, then call the new typed generator.  P3.4 will collapse this
+    # to construct ExploitInfo directly from kwargs (no dict bridge).
+    from autopwn.report import ExploitInfo, generate_docx
+    _info = ExploitInfo(
+        exploit_type=exploit_info['exploit_type'],
+        payload=exploit_info['payload'],
+        padding=exploit_info['padding'],
+        addresses=exploit_info['addresses'],
+        vulnerability_type=exploit_info['vulnerability_type'],
+        architecture=exploit_info['architecture'],
+        target_binary=exploit_info['target_binary'],
+        timestamp=exploit_info['timestamp'],
+    )
+    generate_docx(_info, Path('.'))
 
 def detect_libc(program):
     """Detect libc path automatically."""

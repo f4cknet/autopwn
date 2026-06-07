@@ -1812,7 +1812,7 @@ def handle_exploitation_success(exploit_type, payload, padding, addresses, vulne
   - 详见 `logs/comparison/summary.md`
 - **"EXPLOITATION SUCCESSFUL!" banner byte-for-byte 不变**（print_critical 调用保留）
 - **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
-- **commit 引用**：（待回填）
+- **commit 引用**：`e162b9f`（P3.4）— `806f056` (P3.6 docs) → `e162b9f` (P3.4)
 
 ---
 

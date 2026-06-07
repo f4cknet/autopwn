@@ -124,7 +124,7 @@
 |---|---|---|---|---|---|---|---|
 | P2.1 | `context.py`：定义 `BinaryInfo` / `LibcInfo` / `RopGadgetsX64` / `RopGadgetsX32` / `CanaryInfo` / `ExploitContext` | ✅ | @Minzhi_Zhou | 4h | 0.4h | #P2.1 | 新增 `autopwn/context.py`（146 行）+ `autopwn/__init__.py` re-export 6 个 dataclass；**零行为变更**（不替换 `exploit_info` / 不改 `_legacy.py` / 不改 `cli.py` — 这些是 P2.3-P2.5 任务）；所有字段按 `refactor.md §3.2.1` + `rebuild.md §6.3 P2.1` 范式：`@dataclass(slots=True)` + `field(default_factory=...)` for 可变默认 + `LibcInfo.elf: object` 避免 pwntools 循环导入 + `ctx.log()` 路由到 `core.logging` print_*；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（无回归，**预期**：纯加文件不引入行为差异）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#3.2.1 |
 | P2.2 | `context.py`：实现 `ExploitContext.from_args(args)` 工厂 | ✅ | @Minzhi_Zhou | 2h | 0.3h | #P2.2 | 新增 `@classmethod from_args(args: argparse.Namespace) -> ExploitContext` + `ContextError(RuntimeError)` 异常类；映射 6 个现有 CLI flag（`-l/-ip/-p/-libc/-f/-v`）+ P8 forward-compat（`--report-dir`）；**BinaryInfo 占位**字段（`bit=0`/`relro="Unknown"`/其余 `False`）— 标注 P4.1 recon 阶段会 overwrite；**零行为变更**（不替换 `_legacy.py` 调用点 — P2.3 任务）；错误消息与 legacy `print_error` 文本**逐字一致**（Test 14 验证）；15 项烟雾测试全过 + P2.1 6 项回归全过；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（无回归，**预期**：纯加 method）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#3.2.1 |
-| P2.3 | `autopwn.py` 顶层构造 `ctx = ExploitContext.from_args(args)`，并写一个 ctx → `exploit_info` dict 的桥函数（**仅 P2 阶段保留，作用是让旧代码不立即报错**） | ⏳ | — | 2h | — | — | 过渡 |
+| P2.3 | `autopwn.py` 顶层构造 `ctx = ExploitContext.from_args(args)`，并写一个 ctx → `exploit_info` dict 的桥函数（**仅 P2 阶段保留，作用是让旧代码不立即报错**） | ✅ | @Minzhi_Zhou | 2h | 0.5h | #P2.3 | 新增 `autopwn/_compat.py`（68 行）：`_legacy_info` dict + `sync_ctx_to_legacy(ctx)` bridge；`_legacy.py` 改 3 处：① 顶层 alias `exploit_info = _compat._legacy_info`（同 dict 对象，所有 ~50 读 + 7 写 0 改动）② main() 插入 6 行 `from_args + sync_ctx_to_legacy` + `ContextError` try/except ③ 删 12 行 exploit_info 字典字面量；**3 处偏离 spec**：①不 `warnings.warn`（会污染日志 diff）②`ctx.binary.bit=0` placeholder guard（避免"x0" 泄漏）③ startup **不**设 `success=True`（保持 L241 `if not exploit_info['success']` 门控语义，P3.4 record_success 接手）；**实际行为 no-op**（L3305/L3306/L354-360 全部 overwrite bridge 写入值）；15 项烟雾测试 + 10 项 bridge 烟雾测试 + end-to-end CLI help/invalid-args 验证全过；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（**首次真正改 `_legacy.py` 行为路径，0 回归**）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#3.2.1 |
 | P2.4 | 旧 `exploit_info` 写操作改为调用桥函数 | ⏳ | — | 1h | — | — | 过渡 |
 | P2.5 | 旧 `update_exploit_info` 标注 deprecation warning | ⏳ | — | 0.5h | — | — | 过渡 |
 
@@ -1226,6 +1226,43 @@ def sync_ctx_to_legacy(ctx: ExploitContext) -> None:
   - 详见 `logs/comparison/summary.md`
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，与 P0.7–P2.1 同类）
 - **commit 引用**：`4bc9adc`（P2.2）— `2bdf254` (P2.1 doc) → `4bc9adc` (P2.2)
+
+**P2.3 实施记录（2026-06-07）**：
+
+- **新文件** `autopwn/_compat.py`（101 行，含 docstring）：bridge module
+  - `_legacy_info: dict` — 单 module-level dict，9 个 key（与原 `_legacy.py` L81-91 字典字面量逐字一致：`target_binary`/`exploit_type`/`payload`/`padding`/`addresses`/`vulnerability_type`/`architecture`/`success`/`timestamp`），默认值完全相同（`''` / `0` / `{}` / `False` / `''`）
+  - `sync_ctx_to_legacy(ctx: ExploitContext) -> None` — 复制 ctx 已知稳定字段到 `_legacy_info`
+- **`_legacy.py` 3 处修改**（净 -4 行：+13 -17）：
+  - ① 删 L80-91（12 行 `exploit_info = {...}` 字面量）→ 替换为 `from autopwn._compat import _legacy_info as exploit_info`（1 行）。**alias 是同一 dict 对象**，所有 ~50 个 `exploit_info[...]` 读 + 7 个写 0 改动（mutation 双向可见）
+  - ② 顶部新增 3 个 import：`ExploitContext, ContextError` + `_legacy_info as exploit_info` + `sync_ctx_to_legacy`
+  - ③ `main()` L3289-3296 验证段后插入 6 行：`from_args(args)` + `sync_ctx_to_legacy(ctx)` + `try/except ContextError` 转译为 `print_error + sys.exit(1)`（与 legacy UX 逐字一致）
+- **3 处偏离 `rebuild.md §6.3 P2.3` spec 的有意识决策**（避免行为回归）：
+  - ① **`sync_ctx_to_legacy` 不调用 `warnings.warn`**：bridge 是 P2.3–P8.5 唯一 API，warn 会污染日志 diff（每次 exploit 都打印）。`update_exploit_info` 的 deprecation 留给 P2.5
+  - ② **`architecture` 用 `if ctx.binary.bit != 0` guard**：P4.1 recon 阶段才会把 `BinaryInfo.bit` 从 placeholder `0` 改为 `32/64`。spec 例子的 `f"x{ctx.binary.bit}"` 在 P2.3 会产生 `"x0"` 泄漏到任何在 `handle_exploitation_success` 之前读 `exploit_info['architecture']` 的代码（虽然实际没找到这种 reader，但守卫生性 ≥ 风险）
+  - ③ **startup **不**设 `success = True`**：spec 的硬编码 True 会破坏 L241 的 `if not exploit_info['success']` 门控（导致 docx 在 exploit 失败时也生成）。P3.4 `record_success()` 才是设 `True` 的地方
+- **实际行为 no-op 验证**：L3305/L3306 在 main() 里立即用 `os.path.basename(args.local)` 和当前时间 overwrite bridge 设的 `target_binary`/`timestamp`；L354-360 在 `handle_exploitation_success` 里 overwrite 全部 success 字段。bridge 的 4 次写入（target_binary/padding/architecture?/none-for-success）在每次成功路径上**全被覆盖**。失败路径上 bridge 写入会保留 — 但失败路径只走到 L241 的 docx gate（看 `success=False`），不读其它字段，故无影响
+- **10 项 bridge 烟雾测试**（手测，pytest 体系待 P9）：
+  - 1：`_legacy_info` 9 个 key 完整
+  - 2：9 个默认值与 spec 逐字一致
+  - 3：**关键 guard** — `bit=0` 时 `architecture` 保持 `''`（不漏"x0"）/ `success` 保持 `False`（不漏 True）
+  - 4：`bit=32` 时 `architecture = "x32"`（guard 通过，bridge 正常工作）
+  - 5：aliasing — `autopwn._legacy.exploit_info is _compat._legacy_info`（同一对象）
+  - 6：双向 mutation 可见（写一边读另一边）
+  - 7：`autopwn._compat.__all__` 含 `_legacy_info` + `sync_ctx_to_legacy`
+  - 8：完整 main() → handle_exploitation_success 流程模拟，docx 读取的 9 个字段全对
+  - 9：end-to-end `python autopwn.py --help` 仍 rc=0
+  - 10：end-to-end `python autopwn.py -l /nonexistent/binary` 仍 rc=1 + 错误消息 `target binary not found`（来自 try/except 转译）
+- **§2.6 验证结果**（**首次真正改 `_legacy.py` 行为路径**，§2.6 CRITICAL 验证）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL + fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（**0 回归**）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.3 + §6.3 同步
+  - 详见 `logs/comparison/summary.md`
+- **docx 验证**：rip_wp.docx / fmtstr1_wp.docx / level3_x64_wp.docx 在 §2.6 运行期间（< 1 min 旧）被重新生成，**说明 `exploit_info[...]` 读取路径在 30+ 个 docx 字段处全部仍工作**（P3.4 才会把它们改读 ctx）
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 3511 vs v3.1 3625（fuzzing 时序差异，与 P0.7–P2.2 同类）
+- **commit 引用**：`51563da`（P2.3）— `b7ffff1` (P2.2 doc) → `51563da` (P2.3)
 
 **P2.1 实施记录（2026-06-07）**：
 

@@ -64,10 +64,7 @@ from typing import Optional
 
 from autopwn.core.logging import Colors, print_error, print_success, VERSION
 from autopwn.report.model import ExploitInfo
-
-# P3.2: ``generate_exploitation_code`` is still in ``_legacy.py``.
-# P3.3 will move it to ``autopwn.report.code`` and switch this import.
-from autopwn._legacy import generate_exploitation_code
+from autopwn.report.code import generate_code
 
 
 def generate_docx(info: ExploitInfo, out_dir: Path) -> Optional[Path]:
@@ -173,8 +170,10 @@ def generate_docx(info: ExploitInfo, out_dir: Path) -> Optional[Path]:
             payload_para = doc.add_paragraph()
             payload_para.add_run("Complete Python Exploitation Code:\n").bold = True
 
-            # P3.2: still calls legacy; P3.3 swaps to report.code.generate_code(info)
-            exploitation_code = generate_exploitation_code()
+            # P3.3: code generator moved to report.code; signature is
+            # (info, out_dir) -> str (forward-compat: out_dir may be
+            # used in P3.4 / P3.5 to write a .py file artifact).
+            exploitation_code = generate_code(info, out_dir)
             payload_para.add_run(f"{exploitation_code}\n")
 
             payload_para.add_run("Payload Length: ").bold = True

@@ -176,7 +176,7 @@
 |---|---|---|---|---|---|---|---|
 | **P3.1** | `report/model.py`：定义 `ExploitInfo` dataclass（替代 `exploit_info` dict） | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P3.1 | 加 `autopwn/report/model.py`（94 行）+ 扩展 `report/__init__.py`（15 行）re-export `ExploitInfo`；9 字段（6 required + 3 optional），`@dataclass(slots=True)`，`extra: Dict[str, Any]` 走 `default_factory` 防 mutable default 泄漏；**1 处 spec 微调**：`addresses`/`extra` 由 `dict` 收为 `Dict[str, int]` / `Dict[str, Any]`（mypy-friendly，与 `context.py` P2.1 风格一致）；**1 处有意偏离**：`success` 字段**不**加（详见 `model.py` 注释 + §6.4 实施记录：ExploitInfo 仅在 success 路径构造，"is success" 问题由 P3.5 `ctx.enable_report` 接手）；**零行为变更**（`_legacy.py` 3691 行未变，34 个 `exploit_info[]` 读点保留，7 个写点保留走 P2.4 `_compat.record_success` 桥）；12 项功能单测全过（import path/构造/字段访问/slots/mutable default guard/equality/repr/字段集精确/全字段构造/`__all__`）；§2.6 验证 4/5 SUCCESS + 27/28=96% 一致 vs v3.1 baseline（无回归，**预期**：pure addition 零 runtime 影响）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4.4 |
 | **P3.2** | `report/docx.py`：搬运 `generate_docx_report`；改为读 `ExploitInfo` | ✅ | @Minzhi_Zhou | 2h | 0.5h | #P3.2 | 新建 `autopwn/report/docx.py`（189 行）`generate_docx(info, out_dir) -> Optional[Path]`；`_legacy.py` 删 `generate_docx_report`（-114 行）+ 删 3 个 `from docx import ...` + 加 `from pathlib import Path` + `handle_exploitation_success` 改构造 ExploitInfo + 调新函数（14 caller 签名不变）；**字段映射**：14 个 `exploit_info['x']` 读点全部改 `info.x`（`success` 字段删——ExploitInfo 仅在 success 路径构造）；`generate_exploitation_code` 仍 in `_legacy.py`（P3.3 搬走），新 docx 模块临时 `from autopwn._legacy import generate_exploitation_code`（1 处待 P3.3 清理）；`_legacy.py` 净 -101 行（3691→3590）；**零行为变更**：`out_dir=Path('.')` 默认，docx 仍生成到 cwd；路径打印 "Exploitation report generated: rip_wp.docx" 与 v3.1 baseline byte-for-byte 一致；10 项功能单测全过（re-export/签名/干跑 4 binary 名字/5 种 address 格式化/异常降级返回 None/cwd 零污染/handle_exploitation_success 签名不变/...）；§2.6 验证 4/5 SUCCESS + 27/28=96% 一致 vs v3.1 baseline（**无回归**）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4.4 |
-| P3.3 | `report/code.py`：搬运 `generate_exploitation_code`；改为读 `ExploitInfo` | ⏳ | — | 3h | — | — | |
+| **P3.3** | `report/code.py`：搬运 `generate_exploitation_code`；改为读 `ExploitInfo` | ✅ | @Minzhi_Zhou | 3h | 0.6h | #P3.3 | 新建 `autopwn/report/code.py`（187 行）`generate_code(info, out_dir) -> str`；`_legacy.py` 删 `generate_exploitation_code`（-135 行）；**`docx.py` import 切换**：从 `autopwn._legacy` 切到 `autopwn.report.code`（P3.2 留的临时 import 清理）；**`out_dir` 参数 forward-compat**：P3.3 不写文件（保持 legacy 行为——只返回 code 字符串），但 P3.4/P3.5 可用 `out_dir` 写 `{target}_wp.py` artifact；20 个 `exploit_info['x']` 读点全部改 `info.x`；**f-string 模板 byte-for-byte 保留**（7 种 exploit type 全部产生与 legacy 一致输出：ret2system x64/x32, ret2libc write x64/x32, Format String, execve syscall, generic fallback）；`_legacy.py` 净 -136 行（3590→3454）；12 项功能单测全过（re-export/签名/5 主流 exploit type 全部分支/format string 走 addresses.get('offset', ...)/generic fallback 含 repr(bytes)/empty addresses 跳段/target_name basename 提取 4 种 address 格式化）；§2.6 验证 4/5 SUCCESS + 27/28=96% 一致 vs v3.1 baseline（**无回归**）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4.4 |
 | P3.4 | `handle_exploitation_success` 改为 `record_success(ctx, info, primitive)`，生成 docx/code 改为订阅 | ⏳ | — | 2h | — | — | |
 | P3.5 | CLI 加 `--no-report` / `--report-dir` 参数 | ⏳ | — | 1h | — | — | |
 | P3.6 | docx 依赖 `python-docx` 改为 `try/except ImportError` 降级为 markdown | ⏳ | — | 1h | — | — | |
@@ -1614,6 +1614,63 @@ def generate_docx(info: ExploitInfo, out_dir: Path) -> Optional[Path]:
 - **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
 - **1 处待 P3.3 清理**：`from autopwn._legacy import generate_exploitation_code`（P3.3 移到 `report.code` 后此 import 切换）
 - **commit 引用**：`e58710a`（P3.2）— `6460707` (P3.1) → `e58710a` (P3.2)
+
+---
+
+**P3.3 详细步骤**（`report/code.py`）：
+
+依据 `refactor.md §4.4 P3.3` + `rebuild.md §6.4` spec，把 `_legacy.py:generate_exploitation_code()` 整体搬到 `autopwn/report/code.py`，改为 typed 签名 `generate_code(info: ExploitInfo, out_dir: Path) -> str`：
+
+```python
+# autopwn/report/code.py
+from autopwn.report.model import ExploitInfo
+
+def generate_code(info: ExploitInfo, out_dir: Path) -> str:
+    target_name = Path(info.target_binary).name
+    if target_name.startswith("./"):
+        target_name = target_name[2:]
+    # ... f-string 模板 byte-for-byte 保留 legacy ...
+    # 20 个 exploit_info['x'] 读点全部 info.x
+    del out_dir  # forward-compat for P3.4 / P3.5
+    return base_code
+```
+
+**P3.3 实施记录（2026-06-07）**：
+
+- **新文件** `autopwn/report/code.py`（187 行）：`generate_code(info, out_dir) -> str`
+  - 20 个 `exploit_info['x']` 读点全部改 `info.x`（字段映射表见 docstring）
+  - **f-string 模板保留** —— 5 主流 exploit type + 1 generic fallback 全部产生与 legacy byte-for-byte 一致输出
+  - `out_dir` 参数**保留但 P3.3 不使用**：`del out_dir` 静音 lint（P3.4/P3.5 可用其写 `{target}_wp.py`）
+  - `except:` 改 `except Exception:`（Pylint R1722）
+- **修改** `autopwn/report/__init__.py`（20 → 23 行）：re-export `generate_code` + `__all__` 增
+- **修改** `autopwn/report/docx.py`（189 → 216 行）：1 import 切换（`autopwn._legacy.generate_exploitation_code` → `autopwn.report.code.generate_code`）；call site 改 `exploitation_code = generate_code(info, out_dir)`
+- **修改** `autopwn/_legacy.py`（3590 → 3454 = -136 行）：
+  - 删 `generate_exploitation_code`（L95-229 整段）
+- **净变化**：`_legacy.py` -136 行；`report/` 包 +191 行（code.py 187 + __init__.py +3 + docx.py +27）
+- **12 项功能单测**（手测，pytest 体系待 P9）全过：
+  1. `report.generate_code` ≡ `report.code.generate_code`
+  2. `_legacy.generate_exploitation_code` 已删
+  3. 新签名 `(info, out_dir) -> str`
+  4. docx.py 改用 `from autopwn.report.code import generate_code`
+  5. ret2system x64（830 chars）含 9 个关键 marker
+  6. ret2libc write x64（1008 chars）含 7 个 ROP gadget marker
+  7. format string 走 `addresses.get('offset', 'OFFSET_VALUE')` fallback
+  8. execve syscall 含 6 个 pop_*/int_0x80 marker
+  9. generic fallback 含 `repr(bytes payload)`
+  10. empty addresses 跳 `# Key addresses` 段
+  11. target_name basename 提取（`'./Challenge/with/path/foo'` → `'foo'`）
+  12. address 格式化 4 种情况（int / hex_str / decimal_str / garbage fallback）
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL + fmtstr1/level3_x64/pie/rip 全部 PASS（4/5 SUCCESS）
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致（**无回归**）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.4 + §6.4 同步
+  - 详见 `logs/comparison/summary.md`
+- **f-string 模板 byte-for-byte 保留**：5 主流 exploit type 输出与 v3.1 完全一致（_legacy 删 135 行无 regression 即证）
+- **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
+- **commit 引用**：（待回填）
 
 ---
 

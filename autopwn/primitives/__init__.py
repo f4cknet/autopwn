@@ -14,8 +14,11 @@ ELF parsing for symbol lookup is allowed and expected):
   * **P6.2** (``ret2system``) — :class:`Ret2SystemX32` and
     :class:`Ret2SystemX64` (single-stage ret2libc system).
   * **P6.3** (``ret2libc_put``) — :class:`Ret2LibcPutX32` and
-    :class:`Ret2LibcPutX64` (2-stage ret2libc; leak via
-    ``puts(puts@GOT)`` then return to ``system('/bin/sh')``).
+    :class:`Ret2LibcPutX64` (2-stage; leak via ``puts(puts@GOT)``).
+  * **P6.4** (``ret2libc_write``) — :class:`Ret2LibcWriteX32` and
+    :class:`Ret2LibcWriteX64` (2-stage; leak via
+    ``write(1, write@GOT, n)`` — useful when ``puts`` is
+    absent, e.g. level3_x64).
 """
 from __future__ import annotations
 
@@ -31,6 +34,10 @@ from autopwn.primitives.ret2libc_put import (
     Ret2LibcPutX32 as Ret2LibcPutX32,
     Ret2LibcPutX64 as Ret2LibcPutX64,
 )
+from autopwn.primitives.ret2libc_write import (
+    Ret2LibcWriteX32 as Ret2LibcWriteX32,
+    Ret2LibcWriteX64 as Ret2LibcWriteX64,
+)
 
 __all__: list[str] = [
     "ExploitPrimitive",
@@ -39,4 +46,6 @@ __all__: list[str] = [
     "Ret2SystemX64",
     "Ret2LibcPutX32",
     "Ret2LibcPutX64",
+    "Ret2LibcWriteX32",
+    "Ret2LibcWriteX64",
 ]

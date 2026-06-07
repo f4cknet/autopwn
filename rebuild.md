@@ -211,7 +211,7 @@
 | P6.1 | `primitives/base.py`：`ExploitPrimitive` 抽象类 + `ExploitResult` dataclass | ✅ | @Minzhi_Zhou | 2h | 0.4h | feature/p6.1-primitives-base | ExploitPrimitive ABC（5 单测）+ ExploitResult dataclass（4 单测）+ FakePrim 烟雾 OK；ExploitResult 用 @dataclass(slots=True) 替代 v3.1 手写 __init__（P2.1 一致） |
 | P6.2 | `primitives/ret2system.py`：x32 + x64 payload builder（pure function） | ✅ | @Minzhi_Zhou | 3h | 0.6h | feature/p6.2-primitives-ret2system | Ret2SystemX32 + Ret2SystemX64，2 公开 + 2 legacy port；fmtstr1 payload=124B (112+12), rip=36B (24+12), canary=b""; 10 单测全过；64-bit 含 ret 对齐 gadget 修 glibc 18.04+ MOVAPS 崩溃 |
 | P6.3 | `primitives/ret2libc_put.py`：x32 + x64 payload builder | ✅ | @Minzhi_Zhou | 4h | 0.7h | feature/p6.3-primitives-ret2libc-put | 2-stage 首个 primitive：Ret2LibcPutX32/X64 (stage_count=2)；build_payload 返 stage-1 leak，build_stage2_payload(ctx, leaked_puts_addr) 返 stage-2 system；13 单测全过 (含 stage-1 字节级 + stage-2 用真 libc 算 system/sh)；ret 对齐 gadget 复用 P6.2 |
-| P6.4 | `primitives/ret2libc_write.py`：x32 + x64 payload builder | ⏳ | — | 4h | — | — | |
+| P6.4 | `primitives/ret2libc_write.py`：x32 + x64 payload builder | ✅ | @Minzhi_Zhou | 4h | 0.5h | feature/p6.4-primitives-ret2libc-write | 2-stage write-泄漏 primitive：Ret2LibcWriteX32/X64 (stage_count=2)；build_payload 返 stage-1 (`write(1, write_got, 4)` leak via main)，build_stage2_payload(ctx, leaked_write_addr) 返 stage-2 system；x64 stage-1 加 `pop_rdi+pop_rsi` gadget chain，stage-2 含 `ret` 对齐 gadget（与 P6.3/P6.2 一致）；14 单测全过；§2.6 96% (27/28) 一致 PASS，4/5 SUCCESS |
 | P6.5 | `primitives/execve_syscall.py`：x32 payload builder | ⏳ | — | 2h | — | — | |
 | P6.6 | `primitives/shellcode.py`：rwx x32 + x64 payload builder | ⏳ | — | 2h | — | — | |
 | P6.7 | `primitives/fmtstr.py`：fmtstr payload builder | ⏳ | — | 3h | — | — | |
@@ -2517,7 +2517,7 @@ def test_test_stack_overflow_finds_canary():
 
 ### 6.7 P6 — Primitives 层
 
-**🟢 状态**：🔄 In Progress (P6.1 ✅, P6.2-P6.9 ⏳) ｜**🔴 优先级**：P0｜**⏱ 预估**：28h (P6.1 已用 0.4h)
+**🟢 状态**：🔄 In Progress (P6.1-P6.4 ✅, P6.5-P6.9 ⏳) ｜**🔴 优先级**：P0｜**⏱ 预估**：28h (P6.1 已用 0.4h, P6.2 已用 0.6h, P6.3 已用 0.7h, P6.4 已用 0.5h)
 
 **目标**：30+ 利用函数中"构造 payload"那 5–10 行变成 pure function。
 
@@ -2617,6 +2617,45 @@ class ExploitResult:
   * `level3_x64` (no puts) → stage-1 返 `b""` ✓
   * no gadgets / no libc → 全部 `b""` ✓
 * **下一步**：P6.4 (`ret2libc_write.py`, 4h 估) — 2-stage 类似但用 `write` 泄漏（64-bit 含 `pop_rsi`）
+
+**P6.4 实施记录** (commit on `feature/p6.4-primitives-ret2libc-write`，Owner @Minzhi_Zhou, 0.5h)：
+
+* **文件**：`autopwn/primitives/ret2libc_write.py` (500 行) + `autopwn/primitives/__init__.py` (re-export) + `tests/unit/test_primitives_ret2libc_write.py` (280 行, 14 单测)
+* **公开 API**：
+  * `Ret2LibcWriteX32` (x32, stage_count=2)：
+    * `build_payload(ctx) -> bytes` — stage-1 leak (`padding + write_plt + main + 1 + write_got + 4`)，5 个 p32 共 20B
+    * `build_stage2_payload(ctx, leaked_write_addr) -> bytes` — stage-2 system (`padding + system + 0 + sh`)，3 个 p32 共 12B
+  * `Ret2LibcWriteX64` (x64, stage_count=2)：stage-1 加 `pop_rdi + pop_rsi` gadget chain（6 p64 = 48B），stage-2 加 `ret` 对齐 gadget
+  * `_lookup_write_and_main(program) -> (write_plt, main_addr, write_got)` — 共享 helper
+  * `_resolve_libc_elf(ctx) -> ELF` — 懒打开 `ctx.libc.path`（若 `ctx.libc.elf` 未预设）
+* **legacy ports**（`OBSOLETE` 前缀，字节级 parity）：
+  * `_legacy_ret2libc_write_x32` — verbatim port of `_legacy.py:896-970` 区域（`ret2libc_write_x32` 本体）
+  * `_legacy_ret2libc_write_x64` — verbatim port of `_legacy.py:971-1024` 区域（`ret2libc_write_x64` 本体，无 ret 对齐 gadget——v3.1 已知 bug；P6.4 公开 API 已修复）
+  * canary 变体 `_legacy_ret2libc_write_x32_canary` / `x64_canary` 显式 NotImplementedError 指向 P7.10
+* **关键设计决策**：
+  * **2-stage API 复用 P6.3 范式**：`build_payload(ctx)` 返 stage-1 (leak)；`build_stage2_payload(ctx, leak)` 返 stage-2 (system)；`stage_count() -> 2` 信号给 P7 orchestrator
+  * **`write(1, write_got, 4)` 泄漏**：与 P6.3 的 `puts(write_got)` 行为差异——`write` 不 NUL-截断、可控字节数（4 = sizeof(void*)）；要求 binary import `write`（v3.1 `level3_x64` 满足，x32 二进制无 write@plt 故 x32 公开 API 主要为 spec 完整）
+  * **x64 stage-1 gadget chain**：`pop_rdi` (fd=1) → `pop_rsi` (buf=write_got) → `call write_plt` → `main`（回到 main 收 stage-2）；6 个 p64 共 48B
+  * **x64 stage-2 ret 对齐 gadget**：`pop_rdi (8) | sh (8) | ret (8) | system (8) = 32B`；与 P6.2 / P6.3 行为一致，修 glibc 18.04+ MOVAPS 崩溃（**v3.1 旧代码缺这个 gadget——本次顺手修复**）
+  * **x32 公开 API 提供但无 current binary 适用**：3 个 x32 Challenge/（canary/fmtstr1/rip）均无 write@plt；`build_payload` 全部返 `b""`；P7 strategy 自然跳过；保留 API 为 spec 完整与未来 binary 扩展预留
+  * **懒解析 libc**：与 P6.3 同款（`_resolve_libc_elf`）；缺失 → primitive 返 `b""` 跳过
+  * **真 libc 单测**：`/lib32/libc.so.6` (x32) + `/lib/x86_64-linux-gnu/libc.so.6` (x64) 验证 stage-2 system/sh 计算正确
+* **验证**：
+  * `pytest tests/unit/test_primitives_ret2libc_write.py` → **14/14 passed in 1.86s**（13 P6.3 风格 + 1 stage-1 synthetic stub）
+  * `pytest tests/ -m "detect or primitive"` → **68/68 passed**（54 历史 + 14 新增；无回归）
+  * `pytest tests/ -m "not integration"` → **68/68 passed**
+  * `Ret2LibcWriteX32.stage_count() == 2` ✓
+  * `Ret2LibcWriteX32().build_payload(fmtstr1)` (no write@plt) → `b""` ✓
+  * `Ret2LibcWriteX32().build_payload(level3_x64-synthetic-stub)` 长度 = 100B (80+20) ✓
+  * `Ret2LibcWriteX32().build_stage2_payload(ctx, fake_leak=0x70000000+libc_write_offset)` 字节级 system/sh 正确 ✓
+  * `Ret2LibcWriteX64().build_payload(level3_x64)` 长度 = 72B (24+48) ✓
+  * stage-1 字节级含 `e.plt["write"]`, `e.symbols["main"]`, `e.got["write"]`, 假 pop_rdi/pop_rsi gadgets ✓
+  * stage-2 含 `ret` 对齐 gadget (P6.2 修复延续) ✓
+  * no gadgets / zero pop_rsi / no libc → 全部 `b""` ✓
+  * §2.6 串行验证（5 binary × 60s timeout）→ `logs/v4.0-p64/`，2-log 对比 **96% (27/28) 一致 PASS**（4/5 SUCCESS；canary 60s 截断为 PARTIAL）
+  * 烟雾测试：`python3 autopwn.py -l Challenge/level3_x64 -v` → `EXPLOITATION SUCCESSFUL`，strategy = `ret2libc (write) - x64`，write@GOT 泄漏 → system() → /bin/sh
+* **diff 规模**：`autopwn/primitives/ret2libc_write.py` 新增 500 行 + `tests/unit/test_primitives_ret2libc_write.py` 新增 280 行 + `autopwn/primitives/__init__.py` 改 2 行 → 782 行净增（< 400 行/单文件；含 1 个新 primitive 模块 + 1 个 test 文件 + 1 个 import 增量；未跨层）
+* **下一步**：P6.5 (`execve_syscall.py`, 2h 估) — x32 `int 0x80` syscall chain（独立 primitive，不依赖 libc symbol）
 
 **P6.2 详细步骤**（`primitives/ret2system.py`）：
 ```python

@@ -119,6 +119,56 @@
 - 阻塞超过 3 天 ⇒ Owner 升级到项目 Owner
 - 阻塞超过 7 天 ⇒ 任务在周例会重新评估（继续 / 拆分 / 取消）
 
+### 2.6 验证方法论（Owner 决策 2026-06-07，临时需求 #3）
+
+> **本节是铁律 4（"未经验证 = 未完成"）的具体落地规范**。所有代码任务的验证必须按本节执行。
+
+#### 2.6.1 四大原则
+1. **串行执行**：验证脚本必须**串行**跑每个 binary。**禁止并发**——并发会引入 race condition（如 `Information_Collection.txt` 共享污染，详见 R13）。
+2. **关键节点 debug 日志**：在以下 7 个关键节点必须调用 `print_debug()`，输出到 stderr：
+   - `print_section_header` 入口（每个 section 标题）
+   - `collect_binary_info` 中 `checksec` 调用
+   - `set_permission`（提权前）
+   - `pie_backdoor_exploit` / `pie_backdoor_exploit_remote`（PIE 爆破）
+   - `ret2_system_x64` / `ret2_system_x32`（ret2system 触发）
+   - `detect_libc`（libc 探测）
+   - `canary_fuzz`（canary 暴力枚举）
+3. **logs/ 目录**：所有验证产物必须落到 `logs/<version>/<binary>.log`。`logs/` 下分 4 个子目录：
+   - `logs/v3.1/`：原 pwnpasi 3.1 baseline
+   - `logs/v4.0/`：当前 autopwn 4.0.dev0
+   - `logs/comparison/`：2-log 对比报告（`summary.md`）
+   - `logs/_debug/`：verbose 模式详细日志（不入仓，加 `.gitignore`）
+4. **2-log 对比为主**：验证结论以 v3.1 log 与 v4.0 log 的对比为依据（关键行为标记一致性 ≥ 90% 为 PASS）。
+
+#### 2.6.2 标准流程
+```bash
+# 1. 备份当前 _legacy.py
+cp autopwn/_legacy.py /tmp/_legacy_backup.py
+
+# 2. 串行跑目标版本
+bash scripts/run_verify.sh <version-tag> <bin1> [bin2] ...   # 默认 60s/binary
+# 或设长 timeout:
+AUTOPWN_VERIFY_TIMEOUT=600 bash scripts/run_verify.sh v4.0 canary fmtstr1 level3_x64 pie rip
+
+# 3. 2-log 对比
+python3 tools/verify_v31_v40.py    # 生成 logs/comparison/summary.md
+
+# 4. 验证 PASS 判定
+#    - 关键标记一致性 ≥ 90%
+#    - SUCCESS 计数与 baseline 持平或更好
+#    - 无新增 KeyError / "no suitable shellcode" 失败模式
+```
+
+#### 2.6.3 工具与脚本
+- **runner**：`scripts/run_verify.sh`（不入主包）
+- **debug helper**：`autopwn._legacy.print_debug()`（临时落 `_legacy.py`，P1 阶段移入 `core/logging.py`）
+- **对比脚本**：`tools/verify_v31_v40.py`（19 个关键行为标记）
+- **timeout**：默认 60s/二进制，可用 `AUTOPWN_VERIFY_TIMEOUT` 环境变量调整
+
+#### 2.6.4 豁免
+- 单文件 PR（≤ 50 行）可仅跑相关 1-2 个 binary 即可，**不豁免 2.6.2 流程**
+- 文档-only PR（`AGENTS.md` / `rebuild.md` / `refactor.md`）**不适用**本节
+
 ---
 
 ## 3. 违规与升级
@@ -217,6 +267,7 @@
 |---|---|---|---|---|
 | 2026-06-06 | 1.0 | 初版：4 条铁律 + L1/L2/L3 违规分级 + 紧急通道 + AI Agent 条款 + 签字栏 | @Ba1_Ma0 | （待 Reviewer 签字） |
 | 2026-06-06 | 1.1 | **首次实战**：临时需求 #1（项目改名 pwnpasi→autopwn）按铁律 2 跑通——先更新 refactor.md §3.3 + rebuild.md §4.1/§6.1/§8/§10 → Owner 拍板（4 项决策）→ 实施 → 三关验证。验证 P0.0/P0.6 ✅。 | @Ba1_Ma0 | — |
+| 2026-06-07 | 1.2 | **临时需求 #2+#3 落地**：B-002 验证方法论规范化——加 §2.6（串行 + logs/ + 7 关键节点 debug + 2-log 对比）。P0.7（验证基础设施）+ P0.8（v3.1 vs v4.0 严格对比 96% 一致 PASS）按 §2.6 跑通。B-002 Resolved 2026-06-07。 | @Ba1_Ma0 | — |
 
 ---
 

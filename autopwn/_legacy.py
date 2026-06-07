@@ -53,6 +53,7 @@ VERSION = "4.0.dev0"
 AUTHOR = "qzdx_soc"
 GITHUB = "https://github.com/f4cknet/autopwn"
 ORG_CN  = "衢州电信安全运营中心"
+VERBOSE = False  # set by main() from -v / --verbose
 
 # Global variables for exploit information
 exploit_info = {
@@ -69,6 +70,8 @@ exploit_info = {
 
 # Color schemes (similar to sqlmap)
 class Colors:
+    DEBUG = '\033[90m'  # gray, for debug messages (P0.7)
+    DIM = '\033[2m'    # dim, for debug timestamp (P0.7)
     HEADER = '\033[95m'
     BLUE = '\033[94m'
     CYAN = '\033[96m'
@@ -103,6 +106,14 @@ def print_banner():
 """
     print(banner)
 
+def print_debug(message, prefix="[DEBUG]"):
+    """Print debug message (only when VERBOSE=True or AUTOPWN_DEBUG=1)."""
+    import os as _os
+    if not (VERBOSE or _os.environ.get("AUTOPWN_DEBUG") == "1"):
+        return
+    timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+    print(f"{Colors.DEBUG}{prefix}{Colors.END} {Colors.DIM}[{timestamp}]{Colors.END} {message}", file=sys.stderr)
+
 def print_info(message, prefix="[*]"):
     """Print info message with sqlmap-style formatting"""
     timestamp = datetime.datetime.now().strftime("%H:%M:%S")
@@ -134,7 +145,8 @@ def print_payload(message, prefix="[PAYLOAD]"):
     print(f"{Colors.PAYLOAD}{prefix}{Colors.END} {Colors.BOLD}[{timestamp}]{Colors.END} {message}")
 
 def print_section_header(title):
-    """Print section header with decorative lines"""
+    """Print section header with decorative lines."""
+    print_debug(f"phase: {title}")
     line = "─" * 60
     print(f"\n{Colors.BOLD}{Colors.BLUE}┌{line}┐{Colors.END}")
     print(f"{Colors.BOLD}{Colors.BLUE}│{Colors.END} {Colors.BOLD}{title.center(58)}{Colors.END} {Colors.BOLD}{Colors.BLUE}│{Colors.END}")
@@ -441,7 +453,8 @@ def handle_exploitation_success(exploit_type, payload, padding, addresses, vulne
     generate_docx_report()
 
 def set_permission(program):
-    """Set executable permissions for the program"""
+    """Set executable permissions for the program."""
+    print_debug(f"chmod +x {program}")
     try:
         os.system(f"chmod +755 {program}")
         return True
@@ -456,7 +469,8 @@ def add_current_directory_prefix(program):
     return program
 
 def detect_libc(program):
-    """Detect libc path automatically"""
+    """Detect libc path automatically."""
+    print_debug(f"libc: detecting via ldd for {program}")
     print_info("detecting libc path automatically")
     libc_path = None
     
@@ -570,6 +584,7 @@ def collect_binary_info(program):
     print_info("collecting binary information")
     
     try:
+        print_debug(f"exec: checksec {program} (output → Information_Collection.txt)")
         os.system(f"checksec {program} > Information_Collection.txt 2>&1")
         
         with open("Information_Collection.txt", 'r') as f:
@@ -1599,6 +1614,7 @@ def leakage_canary_value(program):
                 pass
 
 def canary_fuzz(program, bit):
+    print_debug(f"canary: brute-force start, bit={bit}")
     """Fuzz for canary bypass"""
     print_section_header("CANARY BYPASS FUZZING")
     print_info("fuzzing for canary bypass")
@@ -1746,6 +1762,7 @@ def canary_fuzz(program, bit):
         return padding, None, None
 
 def pie_backdoor_exploit(program, padding, backdoor, libc_path, libc, callsystem):
+    print_debug(f"strategy: PIE Backdoor, padding={padding}, backdoor={backdoor:#x}")
     """PIE backdoor exploitation (local)"""
     print_section_header("EXPLOITATION: PIE Backdoor - Local")
     print_payload("preparing PIE backdoor brute force")
@@ -1780,6 +1797,7 @@ def pie_backdoor_exploit(program, padding, backdoor, libc_path, libc, callsystem
             break
 
 def pie_backdoor_exploit_remote(program, padding, backdoor, libc_path, libc, url, port, callsystem):
+    print_debug(f"strategy: PIE Backdoor (remote), padding={padding}")
     """PIE backdoor exploitation (remote)"""
     print_section_header("EXPLOITATION: PIE Backdoor - Remote")
     print_payload("preparing PIE backdoor brute force")
@@ -1892,6 +1910,7 @@ def ret2libc_write_x32(program, libc, padding, libc_path):
     io.interactive()
 
 def ret2_system_x32(program, libc, padding, libc_path):
+    print_debug(f"strategy: ret2system x32, padding={padding}")
     """ret2system exploitation (x32)"""
     print_section_header("EXPLOITATION: ret2system - x32")
     print_payload("preparing ret2system exploit")
@@ -1918,6 +1937,7 @@ def ret2_system_x32(program, libc, padding, libc_path):
     io.interactive()
 
 def ret2_system_x64(program, libc, padding, pop_rdi_addr, other_rdi_registers, ret_addr, libc_path):
+    print_debug(f"strategy: ret2system x64, padding={padding}")
     """ret2system exploitation (x64)"""
     print_section_header("EXPLOITATION: ret2system - x64")
     print_payload("preparing ret2system exploit")
@@ -3345,6 +3365,12 @@ Examples:
                        help='Enable verbose output')
     
     args = parser.parse_args()
+    
+    # Set VERBOSE global (for print_debug)
+    global VERBOSE
+    VERBOSE = args.verbose
+    if VERBOSE:
+        print_debug(f"verbose mode enabled (PID={os.getpid()})")
     
     # Validate arguments
     if not os.path.exists(args.local):

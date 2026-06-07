@@ -82,3 +82,13 @@ node_modules/
 # ----- agent 内部配置（不属于项目代码） -----
 .agents/
 skills-lock.json
+
+# 验证日志（保留 v3.1/v4.0/comparison/.gitkeep，忽略运行时内容）
+logs/_debug/*.log
+logs/*.bak
+logs/**/*.tmp
+# ----- 运行时 .txt 产物（_legacy.py 在 pwd 写文件，P1+ 会重构到 tempdir） -----
+/canary.txt
+/check_binsh.txt
+/Information_Collection.txt
+/Information_Collection.txt*

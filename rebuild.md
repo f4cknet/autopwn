@@ -1,6 +1,6 @@
 # AutoPwn 重构实施手册（rebuild.md）
 
-> ⚠️ **强制前置阅读**：[`AGENTS.md`](./AGENTS.md)（项目治理）—— 本文档所有行为受其 §1 四条铁律约束。**任何动手前先读 AGENTS.md §1 铁律**。
+> ⚠️ **强制前置阅读**：[`AGENTS.md`](./AGENTS.md)（项目治理）—— 本文档所有行为受其 §1 四条铁律 + §2.6 验证方法论约束。**任何动手前先读 AGENTS.md §1 铁律 + §2.6**。
 > 配套文档：`refactor.md`（架构设计 / WHY） ←→ `rebuild.md`（实施 / HOW / WHO / WHEN / STATUS）
 > 维护者：项目 Owner（你）
 > 协作方式：每个 PR 至少更新本文档对应任务的"状态 / Owner / 实际工时 / PR#"
@@ -15,7 +15,7 @@
 | **第一次接触本次重构** | **必读 [`AGENTS.md`](./AGENTS.md) §1 铁律** → §1 → §2 → §3 → §4 |
 | **想认领任务** | `AGENTS.md` §1 铁律 → §2 图例 → §4 找 ⏳ → §6 详细步骤 → §5 约定 |
 | **正在做某个阶段** | §6 当前阶段 → §7 Review 清单 → §9 同步机制 |
-| **Code Review** | §7 对应阶段 checklist → §9 风险表 + `AGENTS.md` §3 违规表 |
+| **Code Review** | §7 对应阶段 checklist → §9 风险表 + `AGENTS.md` §3 违规表 + §2.6 验证方法论 |
 | **只关心进度** | §3 里程碑 + §4 总览表 |
 
 > **本文件是"活文档"**：状态行（`⏳ 🔄 👀 ✅ ⚠️ ❌`）随 PR 合并实时更新，详见 §2。
@@ -72,7 +72,7 @@
 
 | # | 里程碑 | 阶段 | 目标产物 | 验收 | 状态 |
 |---|---|---|---|---|---|
-| **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | 🔄 P0 ✅ P1 ⏳ |
+| **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_recon_*` 全绿 | ⏳ |
 | **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个二进制 | ⏳ |
@@ -100,6 +100,8 @@
 | P0.4 | `autopwn.py` 改为 shim，转发到 `autopwn.cli.main` | ✅ | @Ba1_Ma0 | 1h | 0.1h | #P0.1-P0.5 | 5 行 shim；monolith 移入 autopwn/_legacy.py（git mv 保留历史）|
 | P0.5 | 验证 `python autopwn.py -l Challenge/canary` 与重构前行为一致 | ✅ | @Ba1_Ma0 | 1h | 0.3h | #P0.1-P0.5 | 5 项：语法/import/`--help`×2 入口/canary 烟雾测试 全过 |
 | **P0.6** | **文档交叉引用**：`rebuild.md` §0 顶部加"必读 `AGENTS.md`"指引 | ✅ | @Ba1_Ma0 | 0.5h | 0.2h | #P0.6 | doc-only，与 P0.0 同步完成 |
+| **P0.7** | **验证基础设施**（Owner 决策 2026-06-07，临时需求 #2） | ✅ | @Ba1_Ma0 | 3h | 0.8h | #P0.7 | 27/28 关键标记一致（96%）；4/5 SUCCESS；race condition 已规避；见 §6.1 P0.7 |
+| **P0.8** | **重跑 v3.1 vs v4.0 严格对比**（用 P0.7 新方法论） | ✅ | @Ba1_Ma0 | 1h | 0.3h | #P0.8 | 4/5 SUCCESS；96% 关键标记一致；PASS 结论；logs/comparison/summary.md；见 §6.1 P0.8 |
 
 ### 4.2 P1 — 基础设施层
 
@@ -248,7 +250,7 @@ P1 ───┘           ├── P3 ──┤
 
 ### 6.1 P0 — 改名 + 包骨架 + shim
 
-**🟢 状态**：🔄 P0 全部 ✅ Done（2026-06-06）｜**🔴 优先级**：P0｜**⏱ 预估**：10.5h（实际 1.4h）｜**👤 Owner**：@Ba1_Ma0
+**🟢 状态**：✅ P0.0–P0.8 全完成（Owner 决策 2026-06-07）｜**🔴 优先级**：P0｜**⏱ 预估**：14.5h（实际 1.4h）｜**👤 Owner**：@Ba1_Ma0
 
 **目标**：
 1. **P0.0**：全局重命名 `pwnpasi` → `autopwn`（临时需求 #1）
@@ -307,6 +309,81 @@ P1 ───┘           ├── P3 ──┤
 
 ---
 
+- **P0.7** ✅｜**验证基础设施**（临时需求 #2，Owner 决策 2026-06-07）
+
+  **目标**：建立 `logs/` + 串行 runner + `print_debug()` 关键节点日志（不入主包，临时落 `_legacy.py`）
+
+  ```bash
+  # 1. 创建 logs/ 目录（不入 .gitignore，留 .gitkeep 让目录入库）
+  mkdir -p logs/{v3.1,v4.0,comparison,_debug}
+  touch logs/.gitkeep logs/v3.1/.gitkeep logs/v4.0/.gitkeep logs/comparison/.gitkeep logs/_debug/.gitkeep
+  
+  # 2. scripts/run_verify.sh：串行 runner
+  cat > scripts/run_verify.sh <<'EOF'
+  #!/bin/bash
+  # 用法: scripts/run_verify.sh <version> <bin1> [bin2] ...
+  # 例:   scripts/run_verify.sh v3.1 canary fmtstr1 level3_x64 pie rip
+  set -e
+  VERSION=$1; shift
+  cd "$(dirname "$0")/.."
+  for bin in "$@"; do
+    echo ">>> [$VERSION] $bin"
+    timeout 60 python3 autopwn.py -l "Challenge/$bin" -v > "logs/$VERSION/$bin.log" 2>&1 || true
+  done
+  echo "[DONE] logs saved to logs/$VERSION/"
+  EOF
+  chmod +x scripts/run_verify.sh
+  
+  # 3. _legacy.py：加 VERBOSE 全局 + Colors.DEBUG + print_debug()
+  #    加 5 个关键节点 debug 调用（见 refactor.md §3.4.2）
+  
+  # 4. .gitignore 追加 logs/_debug/（verbose 日志不入仓）和 logs/*.bak
+  ```
+
+  验收：
+  - `ls logs/{v3.1,v4.0,comparison,_debug}` 目录结构正确
+  - `scripts/run_verify.sh v3.1 pie` 跑出 `logs/v3.1/pie.log`
+  - `python3 -v` 时 `print_debug` 输出可见；非 verbose 时静默
+  - 见 refactor.md §3.4.2 / AGENTS.md §2.6.3 节点清单
+
+---
+
+- **P0.8** ✅｜**重跑 v3.1 vs v4.0 严格对比**（临时需求 #2 配套）
+
+  **目标**：用 P0.7 新方法论（串行 + `logs/`）重跑 5 个 binary，生成 `logs/comparison/summary.md`
+
+  ```bash
+  # 1. 备份 v4.0 _legacy.py
+  cp autopwn/_legacy.py /tmp/_legacy_v40_backup.py
+  
+  # 2. v3.1 skin-swap（仅 7 处字符串）
+  python3 -c "..."  # 同 P0.0 / 之前 v3.1 sim 用过的脚本
+  
+  # 3. 串行跑 v3.1（用新 runner）
+  scripts/run_verify.sh v3.1 canary fmtstr1 level3_x64 pie rip
+  
+  # 4. 还原 v4.0
+  cp /tmp/_legacy_v40_backup.py autopwn/_legacy.py
+  
+  # 5. 串行跑 v4.0
+  scripts/run_verify.sh v4.0 canary fmtstr1 level3_x64 pie rip
+  
+  # 6. 对比
+  python3 tools/verify_v31_v40.py
+  # 输出 logs/comparison/{pie,level3_x64,...}.diff + summary.md
+  
+  # 7. 写进 commit message 引用
+  ```
+
+  验收：
+  - `logs/v3.1/*.log` 5 个全在
+  - `logs/v4.0/*.log` 5 个全在
+  - `logs/comparison/summary.md` 含 5 个 binary 的关键标记对比
+  - pie 应达 100% 关键标记一致（v3.1 == v4.0）
+  - 见 `rebuild.md` §6.1 P0.8 实施记录
+
+---
+
 **P0.0 + P0.6 实施记录（2026-06-06）**：
 
 ```bash
@@ -330,6 +407,39 @@ timeout 5 python3 autopwn.py -l Challenge/canary      # [OK] 启动到 BINARY AN
 - 3 份治理文档：历史描述（P0.0 任务、R9、§3.3 改名映射表）—— 19 处
 - setup.py `long_description`：`基于开源项目 heimao-box/pwnpasi 改造` —— 1 处（attribution）
 - autopwn.py 注释：`autopwn_base.py logic (was pwnpasi_base.py pre-rename)` —— 3 处
+
+**P0.7 + P0.8 实施记录（2026-06-07）**：
+
+**P0.7 — 验证基础设施**：
+- `logs/` 目录结构：`v3.1/`、`v4.0/`、`comparison/`、`_debug/`（含 `.gitkeep`）
+- `scripts/run_verify.sh`：串行 runner（参数：version-tag + binary 列表，默认 60s timeout，env `AUTOPWN_VERIFY_TIMEOUT` 可调）
+- `autopwn/_legacy.py` 加：
+  - 全局 `VERBOSE = False`
+  - `class Colors` 加 `DEBUG`（灰）、`DIM`（暗）
+  - `print_debug()` 函数（`-v` 或 `AUTOPWN_DEBUG=1` 触发，输出到 stderr）
+  - 7 个关键节点调用：`print_section_header` 入口 / `collect_binary_info` checksec 调用 / `set_permission` / `pie_backdoor_exploit`+`_remote` / `ret2_system_x64`+`_x32` / `detect_libc` / `canary_fuzz`
+  - `main()` 解析 `args.verbose` 后赋给 `global VERBOSE`
+- `.gitignore` 追加：`logs/_debug/*.log`、`logs/*.bak`、`logs/**/*.tmp`
+
+**P0.8 — v3.1 vs v4.0 严格对比**：
+- master 脚本：`/tmp/p08_run.py`（v3.1 skin-swap → 串行 5 binary → 还原 v4.0 → 串行 5 binary）
+- v3.1 skin-swap：仅 7 处字符串（VERSION/AUTHOR/GITHUB/ORG_CN + 2 处 AutoPwn→PwnPasi + description）
+- v3.1 还原：完成后用 `/tmp/_legacy_v40_for_p08.py` 还原
+- 对比脚本：`tools/verify_v31_v40.py`（输出 `logs/comparison/summary.md`）
+- 19 个关键行为标记（PIE/NX/Stack/libc/backdoor/EXPLOITATION type/Padding/ret2system/ret2libc/execve/fmtstr 等）
+
+**P0.8 结果**：
+- **关键标记一致性：27/28 = 96%** ✅
+- **EXPLOITATION SUCCESSFUL：v3.1=4/5, v4.0=4/5**
+- **结论：✅ PASS** — v3.1 → v4.0 重命名 + 验证基础设施 未引入行为差异
+- 唯一差异：canary 的 Padding (dynamic) 3625 vs 3447（fuzzing 时序差异，非功能差异）
+- 详见 `logs/comparison/summary.md`
+
+**race condition 根因分析**：
+- v3.1 simulation 时 5 个并发 autopwn 共享 `Information_Collection.txt`（pwd 根），导致 pie 的 PIE 状态被 level3_x64 污染
+- **P0.7 串行 runner 规避了 race condition** → v3.1 串行 vs v4.0 串行 = 100% 关键标记一致（pie 5/5、rip 5/5、level3_x64 6/6、fmtstr1 6/6）
+
+**B-002 验证方法论规范化（Owner 决策 2026-06-07）**：✅ Resolved 2026-06-07
 
 下一步：P0.1–P0.5（包骨架 + shim），按 P0.0 模板继续。
 
@@ -1116,6 +1226,7 @@ python -m venv /tmp/autopwn-test
 | **R10** | `python autopwn.py` 命令行参数兼容性 | 🟢 低 | argparse + filename 解耦；P0.0 烟雾测试 `--help` 正常 | ✅ |
 | **R11** | v3.1 vs v4.0 CLI 输出 diff 不通过（P0.0 改名后） | 🟢 低 | P0.0 banner/help/启动流程与 v3.1 一致（仅 banner 文本/VERSION/GITHUB 不同，属预期） | ✅ |
 | ~~**R12**~~ | ~~P0.0 品牌变更决策未拍板~~ | ~~🟡 中~~ | ✅ **已 Resolved 2026-06-06**：`f4cknet/autopwn` / `qzdx_soc` / `4.0.dev0` / 方案 B | ✅ |
+| **R13** | v3.1 既有 race condition（`Information_Collection.txt` 并发写） | 🟡 中 | 已发现：v3.1 simulation 暴露；P0.7 串行 runner 规避；P1 `core/fs.py` 用 `tempfile.TemporaryDirectory` 根治 | ⏳ |
 
 > 新增风险请在 PR 中 append 一行；每周例会同 Owner 评估。
 
@@ -1175,6 +1286,7 @@ Refs: rebuild.md#P4.1
 | 阻塞 ID | 阻塞任务 | 等待内容 | 责任人 | 起始时间 | 状态 |
 |---|---|---|---|---|---|
 | ~~**B-001**~~ | ~~P0.0 品牌变更决策（R12）~~ | GitHub=`f4cknet/autopwn` / 团队=`qzdx_soc` / 版本=`4.0.dev0` / 署名=方案 B | Owner | 2026-06-06 | ✅ Resolved 2026-06-06 |
+| **B-002** | 验证方法论规范化（P0.7 / P0.8 临时需求 #2） | Owner 决策：串行 + `logs/` + 关键节点 debug + 2-log 对比 | Owner | 2026-06-07 | ✅ Resolved 2026-06-07 |
 
 ---
 

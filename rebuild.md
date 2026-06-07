@@ -122,7 +122,7 @@
 
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
-| P2.1 | `context.py`：定义 `BinaryInfo` / `LibcInfo` / `RopGadgetsX64` / `RopGadgetsX32` / `CanaryInfo` / `ExploitContext` | ⏳ | — | 4h | — | — | |
+| P2.1 | `context.py`：定义 `BinaryInfo` / `LibcInfo` / `RopGadgetsX64` / `RopGadgetsX32` / `CanaryInfo` / `ExploitContext` | ✅ | @Minzhi_Zhou | 4h | 0.4h | #P2.1 | 新增 `autopwn/context.py`（146 行）+ `autopwn/__init__.py` re-export 6 个 dataclass；**零行为变更**（不替换 `exploit_info` / 不改 `_legacy.py` / 不改 `cli.py` — 这些是 P2.3-P2.5 任务）；所有字段按 `refactor.md §3.2.1` + `rebuild.md §6.3 P2.1` 范式：`@dataclass(slots=True)` + `field(default_factory=...)` for 可变默认 + `LibcInfo.elf: object` 避免 pwntools 循环导入 + `ctx.log()` 路由到 `core.logging` print_*；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（无回归，**预期**：纯加文件不引入行为差异）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#3.2.1 |
 | P2.2 | `context.py`：实现 `ExploitContext.from_args(args)` 工厂 | ⏳ | — | 2h | — | — | |
 | P2.3 | `autopwn.py` 顶层构造 `ctx = ExploitContext.from_args(args)`，并写一个 ctx → `exploit_info` dict 的桥函数（**仅 P2 阶段保留，作用是让旧代码不立即报错**） | ⏳ | — | 2h | — | — | 过渡 |
 | P2.4 | 旧 `exploit_info` 写操作改为调用桥函数 | ⏳ | — | 1h | — | — | 过渡 |
@@ -1180,6 +1180,44 @@ def sync_ctx_to_legacy(ctx: ExploitContext) -> None:
     _legacy_info['architecture'] = f"x{ctx.binary.bit}"
     _legacy_info['success'] = True  # 由 record_success 触发
 ```
+
+**P2.1 实施记录（2026-06-07）**：
+
+- **新文件** `autopwn/context.py`（146 行）：6 个 `@dataclass(slots=True)`
+  - `BinaryInfo(path, bit, stack_canary, pie, nx, relro, rwx_segments, stripped)` — 8 个必填字段
+  - `LibcInfo(path=None, elf=None, base=0)` — `elf: object` 避免 pwntools 循环导入
+  - `RopGadgetsX64(pop_rdi, pop_rsi, ret, extra_rdi=0, extra_rsi=0)` — `extra_*` 表 glibc "pop ; pop" 双 pop 变体
+  - `RopGadgetsX32(pop_eax, pop_ebx, pop_ecx, pop_edx, pop_ecx_ebx, ret, int_0x80, has_eax_ebx_ecx_edx=False)` — 4 bool 合并为 `has_eax_ebx_ecx_edx`（R8 缓解）
+  - `CanaryInfo(value, diff)` — `diff` 是 canary 到 saved ret 的填充字节数
+  - `ExploitContext(binary, mode, remote=None, libc, gadgets_x64, gadgets_x32, padding=0, canary=None, has_*=False×6, binsh_in_binary=False, fmtstr_offset=None, fmtstr_buf=None, verbose=False, report_dir)` — 22 字段
+- **`ExploitContext.log(message, level="info")` 方法**：路由到 `core.logging.print_*` 6 个函数（debug/info/success/warning/error/critical）。**local import** core.logging — 避免 context.py 反向依赖 core（context.py 是模型层，应在 core/ 之上）。**注**：P2 阶段 `_legacy.py` 仍走 `print_*` 直接调用；`ctx.log()` 是给 P4+ strategy 代码用的"统一入口"，P2.1 先把方法落地，不在 `_legacy.py` 替换调用点
+- **`autopwn/__init__.py` 扩展**：加 `from autopwn.context import (BinaryInfo, CanaryInfo, ExploitContext, LibcInfo, RopGadgetsX64, RopGadgetsX32)` re-export + `__all__` 列表更新
+- **零行为变更**：`_legacy.py` / `cli.py` / `autopwn.py` shim 全部不动；P2.3-P2.5 阶段才会引入 `exploit_info` → `ctx` 桥函数
+- **踩坑**：第一次写 `BinaryInfo.elf: "pwntools.ELF"` 类型注解 + module-top `from pwn import ELF` → **循环导入风险**（`pwn` 工具链在某些 path 下会 import autopwn 自身）。修：`elf: object` + 注释"pwntools.ELF — see module docstring"
+- **§6.3 reviewer 关注点逐项验证**：
+  - ✅ 6 个 dataclass 全部 `@dataclass(slots=True)`
+  - ✅ 可变默认用 `field(default_factory=...)`：`libc: LibcInfo = field(default_factory=LibcInfo)` / `report_dir: Path = field(default_factory=Path.cwd)`
+  - ✅ 不可变默认直接 `= 0` / `= False` / `= None` — 不需要 factory
+  - ✅ `__all__` 列出 6 个公开 class
+- **10 项烟雾测试**（手测，pytest 体系待 P9）：
+  - ✅ 6 个 dataclass 各自构造（默认值 + 全字段）
+  - ✅ `ExploitContext(binary=b, mode='local')` + 全字段构造
+  - ✅ `ctx.log("info", level="info")` / `level="debug"` / `level="warning"` 全部路由正确
+  - ✅ `ctx.binary.foo = 'bar'` → `AttributeError`（slots 生效）
+  - ✅ `__version__` 仍可从 `autopwn` 直接 import
+  - ✅ `from autopwn import BinaryInfo, ExploitContext` + `from autopwn.context import CanaryInfo, ...` 两条路径都行
+  - ✅ `from autopwn._legacy import main, exploit_info` 仍工作（无回归）
+  - ✅ `from autopwn import cli` 仍 re-export
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL + fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（**无回归**）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.3 + §6.3 同步
+  - 详见 `logs/comparison/summary.md`
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 3432 vs v3.1 3625（fuzzing 时序差异，与 P0.7–P1.6 同类）
+- **commit 引用**：`95e1b61`（P2.1）— `78fe1d4` (P1.6 doc) → `95e1b61` (P2.1)
 
 **验收**
 - 旧 `autopwn.py` 仍能跑通 Challenge/canary

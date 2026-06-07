@@ -82,7 +82,78 @@ def run_ldd(program) -> str:
     return cp.stdout
 
 
+# =====================================================================
+# P1.3a: static binutils suite (临时需求 #4)
+# =====================================================================
+# All four are "degrade gracefully" tools per refactor.md §4.2:
+#   - return str (not Path or process)
+#   - on rc != 0 or empty output, return "" (no ToolError)
+#   - caller is expected to check truthiness before parsing
+# These will be adopted by P4 (recon) and P5 (detect) stages.
+
+
+def run_file(program) -> str:
+    """Run `file X` and return the single-line file-type description.
+
+    Example output: "ELF 32-bit LSB executable, Intel 80386, ..."
+    Used in P4 recon to confirm arch (32 vs 64) and binary type.
+    """
+    cp = subprocess.run(
+        ["file", str(program)],
+        capture_output=True, text=True, check=False,
+    )
+    return (cp.stdout or cp.stderr).strip()
+
+
+def run_readelf(program, *flags: str) -> str:
+    """Run `readelf <flags> X` and return stdout.
+
+    Common flag presets (caller picks):
+      - "-h"  ELF header (arch, type, entry point)
+      - "-d"  dynamic section (NEEDED libs, RUNPATH/RPATH)
+      - "-s"  symbol table (.symtab + .dynsym)
+      - "-l"  program headers (segments, INTERP)
+      - "-S"  section headers
+      - "-a"  all of the above (large output)
+
+    Flags are passed as-is; do not pass user input. Defaults to no
+    flags (readelf prints summary).
+    """
+    cmd = ["readelf", *flags, str(program)]
+    cp = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    return cp.stdout
+
+
+def run_strings(program, min_len: int = 4) -> str:
+    """Run `strings -n <min_len> X` and return newline-separated strings.
+
+    Default min_len=4 matches binutils default. Used to extract candidate
+    format-string / "/bin/sh" / error-message candidates for detect phase.
+    """
+    cp = subprocess.run(
+        ["strings", "-n", str(min_len), str(program)],
+        capture_output=True, text=True, check=False,
+    )
+    return cp.stdout
+
+
+def run_nm(program) -> str:
+    """Run `nm X` and return the symbol table (one entry per line).
+
+    Format: "ADDR TYPE NAME" (e.g., "0804bf14 d _DYNAMIC"). Used in P4
+    recon to find libc-required symbols (system / puts / printf / gets).
+    May fail on stripped binaries (returns "" — caller must check).
+    """
+    cp = subprocess.run(
+        ["nm", str(program)],
+        capture_output=True, text=True, check=False,
+    )
+    return cp.stdout
+
+
 __all__ = [
     "ToolError",
     "run_checksec", "run_ropper", "run_objdump_disasm", "run_ldd",
+    # P1.3a: static binutils suite (临时需求 #4)
+    "run_file", "run_readelf", "run_strings", "run_nm",
 ]

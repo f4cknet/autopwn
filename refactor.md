@@ -457,6 +457,64 @@ def run(ctx: ExploitContext) -> int:
 
 ---
 
+## 4. 临时需求 #4：工具集扩展
+
+> 状态：🔄 进行中（Owner 决策 2026-06-07）
+> 范围：仅 `autopwn/core/runner.py`
+> 任务 ID：`P1.3a` / `P1.3b` / `P1.3c` / `P1.3d`
+> Refs：`rebuild.md#P1.3a` ... `P1.3d`
+
+### 4.1 为什么需要
+
+P1.3 落地后，`autopwn/core/runner.py` 只包装了 4 个工具（`checksec`/`ropper`/`objdump`/`ldd`），刚好覆盖 P4 recon 阶段的最小需求。**但 P4.2（libc）/ P5.x（detect 各种漏洞）/ P6（primitives）/ P7（strategies）会需要更多工具**（`file` / `readelf` / `strings` / `nm` / `ROPgadget` / `cyclic` / `one_gadget` / `seccomp-tools` / `strace` / `ltrace` / `gdb` / `qemu-system-x86`）。
+
+**等到 P4-P7 当下要用了再补 wrapper**，会出现两类问题：
+1. **接口分裂**：每个调用现场自己拼 `subprocess.run(...)` 参数，签名不一致（路径传 str 还是 Path、是否传 `capture_output`、是否用 `shell=True`）
+2. **收口不彻底**：违反 §1 铁律 1 "实施以 `rebuild.md` 为准" —— 调用现场绕开 `core/runner` 直接 subprocess，不在治理范围内
+
+**提前在 P1.3 阶段把工具集收口**，让 P4-P7 阶段直接 `from autopwn.core.runner import run_xxx`，不再各自写 subprocess 拼装代码。
+
+### 4.2 架构约束（沿用 §3.1 + §3.2）
+
+- **依赖方向不变**：`core/runner.py` 不向上 import（不引 `recon` / `detect` / `exp` / `primitives`）
+- **接口最小化**：每个 `run_X(program, **kwargs) -> str` / `-> Path` / `-> subprocess.Popen`（视工具特性而定）
+- **错误处理**：
+  - 必须成功的工具（`checksec`）→ 抛 `ToolError`
+  - 可降级的工具（`strings` / `nm` / `ROPgadget` 等即使失败也返回空字符串/空 Path）
+  - 交互式工具（`gdb` / `qemu-system-x86`）→ 不抛异常，由调用者管生命周期
+- **stdin/stdout/stderr 策略**：
+  - 默认 `subprocess.run(capture_output=True, text=True, check=False)`
+  - 大输出（`objdump` / `strings` / `nm`）→ `text=True` 直接返回字符串（与 P1.3 一致）
+  - 流式输出（`strace` / `ltrace`）→ 暂时不实现流式，仅一次性 `capture_output`
+  - 交互式（`gdb` / `qemu`）→ `subprocess.Popen`，不 wait
+
+### 4.3 任务拆分
+
+| ID | 范围 | 工时 | 工具 | 关键决策点 |
+|----|------|------|------|------------|
+| **P1.3a** | 静态 binutils 套件 | 2h | `file` / `readelf` / `strings` / `nm` | 这 4 个都有标准 binutils 输出格式；返回 `str`；失败 → 空串 |
+| **P1.3b** | ROP / 模式 套件 | 2h | `ROPgadget` / `cyclic` / `one_gadget` | ROPgadget 与 ropper 接口相似但输出格式不同；cyclic 用于 PADDING 校准；one_gadget 用于 libc-based 快速 RCE |
+| **P1.3c** | 动态 / sandbox 套件 | 3h | `strace` / `ltrace` / `seccomp-tools` / `gdb` | strace/ltrace 一次性 capture；seccomp-tools 返回 JSON；gdb 用 `-batch -ex` 跑脚本 |
+| **P1.3d** | 跨架构模拟 | 2h | `qemu-system-x86`（+`qemu-system-i386` / `qemu-system-aarch64`）| 返回 Popen 句柄；**不**用 capture_output（qemu 是常驻进程） |
+
+合计 9h。每个子任务 1 PR，遵守 §2.1 400 行 diff 上限。
+
+### 4.4 与 P1.3 的关系
+
+- P1.3 是 "**做地基**"：4 个最小工具 + `ToolError` + 接口范式
+- P1.3a/b/c/d 是 "**扩工具集**"：沿用 P1.3 的接口范式，加 11+ 工具
+- 不破坏 P1.3 既有 API：`run_checksec` / `run_ropper` / `run_objdump_disasm` / `run_ldd` 签名不变
+- 不替换 `_legacy.py` 调用点：调用点替换是 P1.5 任务；P1.3a/b/c/d 只提供工具
+
+### 4.5 风险与缓解
+
+详见 `rebuild.md#R14`。要点：
+- **接口一致性**：每个 `run_X` 签名遵守 §4.2 范式；Reviewer 必查
+- **输出解析鲁棒性**：每个 `run_X` 输出格式不固定（特别是 `one_gadget` / `seccomp-tools`），调用方需先 sanity check
+- **依赖工具版本**：工具不同版本输出格式略变；P9.1 单元测试用 docker 固定版本（暂未实现，先用本机版本）
+
+---
+
 ## 8. 兼容性与迁移策略
 
 ### 8.1 CLI 兼容

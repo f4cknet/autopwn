@@ -110,6 +110,10 @@
 | P1.1 | `core/logging.py`：搬运 `Colors` + `print_*` | ✅ | @Ba1_Ma0 | 3h | 0.6h | #P1.1 | 搬 Colors/12 print_*/VERBOSE → autopwn/core/logging.py；_legacy.py re-export；set_verbose() setter 修 main() global 重绑定 bug；.gitignore core*→/core*；补 P0.1 漏 core/__init__.py；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（无回归）；铁律 4：✅ 合并 ✅ pytest N/A (P9) ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
 | P1.2 | `core/fs.py`：`set_permission` + `add_current_directory_prefix` + 临时目录 ctxmgr | ✅ | @Ba1_Ma0 | 2h | 0.5h | #P1.2 | 搬 set_permission（os.system→os.chmod 0o755）+ add_current_directory_prefix + temp_workdir ctxmgr；_legacy.py re-export；§2.6 验证 27/28=96% vs v3.1 baseline（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
 | P1.3 | `core/runner.py`：封装 `checksec` / `ropper` / `objdump` / `ldd`，输出走 `subprocess.run(capture_output=True)` | ✅ | @Ba1_Ma0 | 4h | 0.7h | #P1.3 | 建 4 个 run_* + ToolError；checksec/ropper 合并 stdout+stderr（pwntools/ropper 写 stderr），objdump/ldd 仅 stdout；本 PR 不替换 _legacy.py 调用点（留给 P1.5）；§2.6 验证 27/28=96% vs v3.1（用 90s timeout 吃下 canary 暴力枚举时序非确定性）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
+| **P1.3a** | **临时需求 #4 - 静态 binutils 套件**（**file / readelf / strings / nm**） | ✅ | @Ba1_Ma0 | 2h | 0.4h | #P1.3a | 加 run_file / run_readelf(*flags) / run_strings(min_len) / run_nm；返回 str；degrade gracefully（失败 → 空串）；§2.6 27/28=96% vs v3.1（无回归，本 PR 不替换 _legacy.py 调用点）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
+| **P1.3b** | **临时需求 #4 - ROP / 模式 套件**（**ROPgadget / cyclic / one_gadget**） | ⏳ | @Ba1_Ma0 | 2h | — | — | ROPgadget 输出格式与 ropper 不同；cyclic 用于 PADDING 校准；one_gadget 用于 libc-based 快速 RCE；见 refactor.md §4 / §6.2 P1.3b |
+| **P1.3c** | **临时需求 #4 - 动态 / sandbox 套件**（**strace / ltrace / seccomp-tools / gdb**） | ⏳ | @Ba1_Ma0 | 3h | — | — | strace/ltrace 一次性 capture；seccomp-tools JSON 输出；gdb `-batch -ex` 跑脚本；见 refactor.md §4 / §6.2 P1.3c |
+| **P1.3d** | **临时需求 #4 - 跨架构模拟**（**qemu-system-x86 / i386 / aarch64**） | ⏳ | @Ba1_Ma0 | 2h | — | — | 返回 Popen 句柄（qemu 常驻进程），不 capture_output；见 refactor.md §4 / §6.2 P1.3d |
 | P1.4 | 替换 `autopwn.py` 中所有 `print_banner()` / `print_*` 调用为 `from autopwn.core.logging import ...` | ⏳ | — | 2h | — | — | |
 | P1.5 | 替换 `autopwn.py` 中所有 `os.system('ropper ... > ropper.txt')` 模式，调用 `runner.run_ropper` | ⏳ | — | 3h | — | — | |
 | P1.6 | 删除 `cleanup_core_files` 线程的硬编码 `os.system('rm -rf core*')`，改用 `core/fs.py` 中的回收函数 | ⏳ | — | 1h | — | — | |
@@ -651,6 +655,55 @@ def run_ldd(program: Path) -> str:
 - **timeout 跟进项**（待 P9/CI 阶段处理）：`scripts/run_verify.sh` 默认 60s 在新机器负载下不稳定；建议 bump 到 90s 写进 §2.6 标准流程
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 3441 vs v3.1 3625（fuzzing 时序差异，与 P1.1/P1.2/P0.8 同类）
 - **commit 引用**：`ae59c78`（P1.3）— `da3ac0a` (P1.2) → `ae59c78` (P1.3)
+
+**P1.3a 详细步骤**（`core/runner.py` 扩展）：
+
+依据 `refactor.md §4.2` 接口范式（返回 `str` + 失败降级为空串），在 `autopwn/core/runner.py` 末尾追加 4 个静态 binutils 套件函数：
+
+```python
+def run_file(program) -> str:
+    """Run `file X` and return the single-line file-type description."""
+    cp = subprocess.run(["file", str(program)], capture_output=True, text=True, check=False)
+    return (cp.stdout or cp.stderr).strip()
+
+def run_readelf(program, *flags: str) -> str:
+    """Run `readelf <flags> X` and return stdout. Flags: -h/-d/-s/-l/-S/-a."""
+    cp = subprocess.run(["readelf", *flags, str(program)], capture_output=True, text=True, check=False)
+    return cp.stdout
+
+def run_strings(program, min_len: int = 4) -> str:
+    """Run `strings -n <min_len> X` and return newline-separated strings."""
+    cp = subprocess.run(["strings", "-n", str(min_len), str(program)], capture_output=True, text=True, check=False)
+    return cp.stdout
+
+def run_nm(program) -> str:
+    """Run `nm X` and return the symbol table (one entry per line)."""
+    cp = subprocess.run(["nm", str(program)], capture_output=True, text=True, check=False)
+    return cp.stdout
+```
+
+**P1.3a 实施记录（2026-06-07）**：
+
+- **扩展** `autopwn/core/runner.py`（+45 行）：4 个新函数 + `__all__` 列表更新
+- **不动 `_legacy.py`**：re-export 不加（无 caller），P1.5 改 os.system 调用点时会直接 `from autopwn.core.runner import run_xxx`
+- **接口一致性**（R14 reviewer 必查）：4 个函数全部 `-> str` + 失败空串 + 单一参数 `program`（除 `readelf *flags` / `strings min_len`）— 符合 `refactor.md §4.2` 范式
+- **功能单测**（手测，pytest 体系待 P9）：
+  - `run_file('./Challenge/canary')` → "ELF 32-bit LSB executable, Intel 80386, ..." ✓
+  - `run_readelf(prog, '-h')` → ELF Header + Class: ELF32 + ... ✓
+  - `run_readelf(prog, '-d')` → Dynamic section + NEEDED libc.so.6 ✓
+  - `run_strings(prog, 4)` → 81 strings，包含 `gets`/`puts`/`/bin/sh` 等 ✓
+  - `run_nm(prog)` → 符号表，包含 `_DYNAMIC` / `system` / `puts` 等 ✓
+  - 失败路径：file 缺失 → error string；nm 缺失 → 空串（两种行为不同，caller 各自处理）
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL + fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（无回归）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.2 + §6.2 + `refactor.md §4` 同步
+  - 详见 `logs/comparison/summary.md`
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 4094 vs v3.1 3625（fuzzing 时序差异）
+- **commit 引用**：见下
 
 **P1.2 详细步骤**（`core/fs.py` 示例）：
 ```python
@@ -1354,6 +1407,7 @@ python -m venv /tmp/autopwn-test
 | **R11** | v3.1 vs v4.0 CLI 输出 diff 不通过（P0.0 改名后） | 🟢 低 | P0.0 banner/help/启动流程与 v3.1 一致（仅 banner 文本/VERSION/GITHUB 不同，属预期） | ✅ |
 | ~~**R12**~~ | ~~P0.0 品牌变更决策未拍板~~ | ~~🟡 中~~ | ✅ **已 Resolved 2026-06-06**：`f4cknet/autopwn` / `qzdx_soc` / `4.0.dev0` / 方案 B | ✅ |
 | **R13** | v3.1 既有 race condition（`Information_Collection.txt` 并发写） | 🟡 中 | 已发现：v3.1 simulation 暴露；P0.7 串行 runner 规避；P1 `core/fs.py` 用 `tempfile.TemporaryDirectory` 根治 | ⏳ |
+| **R14** | **临时需求 #4：runner 工具集扩展接口漂移** | 🟡 中 | P1.3a/b/c/d 共加 11+ 工具，每个签名/错误处理/输出格式需遵守 `refactor.md §4.2` 范式；Reviewer 必查：①签名是否最小化 ②失败是否降级（返回空串/空 Path/不抛）③stdin/stdout/stderr 策略是否统一；**缓解**：每个工具独立函数 + byte-level 对比 + §2.6 5-binary 重跑回归；P1.3 已有 4 个工具作为范式基线 | ⏳ |
 
 > 新增风险请在 PR 中 append 一行；每周例会同 Owner 评估。
 

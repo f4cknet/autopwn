@@ -611,3 +611,79 @@ P1.3 落地后，`autopwn/core/runner.py` 只包装了 4 个工具（`checksec`/
 > - `exp/strategies/` 的每个文件 < 150 行；超过即拆
 > - `orchestrator.py` 不允许出现具体函数名（`ret2_system_x32` 之类），只允许 `ExploitStrategy` 类引用
 > - 任何 PR 必须跑通 `pytest tests/integration/` 再合
+
+---
+
+## 13. 过渡期临时文件（不在 §4 目标结构中）
+
+> **本节解决一个常见困惑**：v3.1 → v4.0 重构是**渐进式**迁移（11 个阶段 P0–P10 + 临时需求），
+> 不可能一夜完成。在此期间，代码库中存在 **2 个临时文件**——它们在 §4 目标结构中
+> 没有位置，但在 v4.0 发布前是必要的"脚手架"。如果你看到这两个文件并疑惑"为什么 §4
+> 目录结构里没有它们"，本节给你完整答案。
+
+### 13.1 临时文件清单
+
+| 文件 | 估算行数 | 性质 | 来源 | 删除时机 |
+|---|---|---|---|---|
+| `autopwn/_legacy.py` | ~3688 | v3.1 单体（v3.1 `autopwn.py` 3720 行整体）| P0.4：`autopwn.py` 退化为 5 行 shim 后，原代码整体 `git mv` 到 `_legacy.py` 保留历史 | **P8.5**：所有函数搬到 `recon/` / `detect/` / `primitives/` / `exp/strategies/` / `report/` 后，整个文件删除 |
+| `autopwn/_compat.py` | ~197 | `ExploitContext` ↔ 旧 `exploit_info` dict 桥模块 | P2.3：Owner 决策新建（`§8.3` 明确要求 P2 阶段"写一份 setter 同步桥"，P2.3 落地）| **P8.5**：P7 完成后所有 reader 改读 `ctx.xxx`，桥函数无消费者，整体删除 |
+
+### 13.2 为什么不能一步到位删除
+
+| 顾虑 | 缓解策略 | 来源 spec |
+|---|---|---|
+| **`_legacy.py` 直接删除会破坏 `python autopwn.py` 行为**：v3.1 的 79 个顶层函数（包括 `main()` 决策树、`generate_docx_report`、`ret2_system_x32` 等 30+ 利用函数）需要被新代码**逐步替代** | P0–P8 每阶段做"掏空"操作：删一个层（Colors → `core/`；recon → `recon/`；detect → `detect/`；...），保留 0 行为变更（`AGENTS.md §2.6` 5-binary 串行 + 2-log 对比验证）| `§7` P0–P8 阶段表 |
+| **`_compat.py` 是 P2.4 消除 9 个写点的关键基础设施**：`_legacy.py` 中有 **34 个 `exploit_info[...]` 读点**散落在 `generate_docx_report` / `generate_exploitation_code` 模板里，无法在 P2 阶段一次全部改读 `ctx` | 桥函数让**新代码**用 `ctx`，**旧代码**继续读 `exploit_info`，**双向 mutation 可见**（两者 alias 同一 dict 对象）。P3 + P7 改读 `ctx` 后，桥函数无消费者 → P8.5 删 | `§8.3` P2 阶段：`保留 exploit_info 全局 dict（写一份 setter 到 ExploitContext 字段的同步桥），逐步替换` |
+| **直接改名会丢 git blame / git log 历史**（v3.1 → v4.0 行级责任追溯需要）| P0.4 用 `git mv` 改名而非 delete+add，**保留行级 blame**可追溯到原 `heimao-box/pwnpasi` v3.1 commit | git 不可篡改原则 |
+
+### 13.3 完整性检查（每阶段 PR Reviewer 必查）
+
+| 指标 | 当前 | 目标 | 失败判定 |
+|---|---|---|---|
+| `_legacy.py` 净行数 | 3688 → 各阶段单调下降 | P8 末 ≈ 0 | 某阶段行数不降反升 → Reviewer 退回 |
+| `grep -nE "exploit_info\[[^]]+\] *=" autopwn/_legacy.py` | P2.4 后 = 0 | 0 | 任何 P2.4 之后 PR 引入新写点 → L1 违规 |
+| `grep -rn "from autopwn._compat" autopwn/ --include='*.py'` | P2.4 后 = 1（仅 `_legacy.py`）| P8.5 前 = 0 | 新增 caller 必须经 Owner 审批 |
+| 新增 PR 是否 import 任何 `_legacy_*` / `_compat_*` 名字 | 应当 = 0 | 0 | 任何新依赖 → Reviewer 退回 |
+| P8.5 PR 标题格式 | — | `[P8.5] delete _legacy.py + _compat.py` | 缺任务 ID → L1 |
+
+### 13.4 与正式阶段任务的对应
+
+按 `rebuild.md §3` 里程碑：
+
+| M | 范围 | `_legacy.py` 操作 | `_compat.py` 操作 |
+|---|---|---|---|
+| **M0** ✅ | P0 + P1 | 单体 3688 行（Colors/print_*/fs/runner 搬到 `core/` 后减 ~200 行）| 不存在 |
+| **M1** 🟡 P2 ✅ P3 ⏳ | P2 + P3 | 顶层 2 处 L3305–3306 + L350–356 写点改桥调用（0 写点剩余，34 读点保留）| 197 行活跃（`sync_ctx_to_legacy` / `record_success` 桥在用）|
+| **M2** ⏳ | P4 + P5 | 减 ~1500 行（recon + detect 函数搬走）| 桥仍活跃（success 路径仍走 `_legacy_info`）|
+| **M3** ⏳ | P6 + P7 | 减 ~1500 行（primitives + 30+ 策略搬走）| P7 末 reader 改读 `ctx`，桥进入退役期 |
+| **M4** ⏳ | P8 | 减 ~400 行（main() 决策树搬走）| 0 caller |
+| **M5** ⏳ | P9 + P10 | 仅剩 import 转发 | 仅剩 `__all__` 列表 |
+| **P8.5** ⏳ | cleanup | 🗑️ **删除** | 🗑️ **删除** |
+
+### 13.5 P8.5 决策检查清单
+
+P8.5 删除这两个文件前，Owner 必须验证：
+
+1. ✅ `_legacy.py` 中 0 个非 trivial 业务函数（grep 验证：只允许 `import` / re-export）
+2. ✅ `_compat.py` 中 0 个 caller（`grep -rn "from autopwn._compat\|import autopwn._compat" autopwn/ --include='*.py'` 仅返回 0 行）
+3. ✅ 根目录 `autopwn.py` shim 一并删除（3 行 `from autopwn.cli import main`；CLI 入口改为 `python -m autopwn`）
+4. ✅ `pyproject.toml` 仍声明 `autopwn = "autopwn.cli:main"` console_scripts（P10 已落地）
+5. ✅ `§2.6` 5-binary 串行 + 2-log 对比 PASS（最后一次回归保险）
+6. ✅ 文档：移除本节 / `rebuild.md §3.1` / `AGENTS.md §6` 中所有"临时文件"引用，标注"v4.0 已删"
+
+> **不要做的事**：不要在某次"顺手"的 PR 里删除这两个文件。它们**必须**有自己的 P8.5 任务
+> 行（见 `rebuild.md §4.9 P8.5`）和独立 commit，遵循铁律 2（新需求先更新文档）+ 铁律 4
+> （6 关验收）。
+
+### 13.6 关键引用
+
+| 你想看 | 跳到 |
+|---|---|
+| 临时文件行级追踪表 | `rebuild.md §3.1`（每个 milestone 的具体行数变化）|
+| `_legacy.py` 函数级别的搬迁映射 | `refactor.md §5`（拆分映射表 79 个函数 → 新位置）|
+| `_compat.py` API 设计 | `rebuild.md §6.3 P2.3 / P2.4` 实施记录 |
+| P8.5 任务详情 | `rebuild.md §4.9 P8.5` + `§6.9 P8.5 详细步骤` |
+| 为什么 P4 不能删 exploit_info（refactor §8.3 旧承诺 vs rebuild §6.3 P2.3 实际延期到 P8.5）| `rebuild.md §6.3 P2.3 桥函数` 注释 |
+
+---
+

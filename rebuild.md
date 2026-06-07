@@ -15,8 +15,9 @@
 | **第一次接触本次重构** | **必读 [`AGENTS.md`](./AGENTS.md) §1 铁律** → §1 → §2 → §3 → §4 |
 | **想认领任务** | `AGENTS.md` §1 铁律 → §2 图例 → §4 找 ⏳ → §6 详细步骤 → §5 约定 |
 | **正在做某个阶段** | §6 当前阶段 → §7 Review 清单 → §9 同步机制 |
-| **Code Review** | §7 对应阶段 checklist → §9 风险表 + `AGENTS.md` §3 违规表 + §2.6 验证方法论 |
+| **Code Review** | §7 对应阶段 checklist → §9 风险表 + `AGENTS.md §3` 违规表 + §2.6 验证方法论 |
 | **只关心进度** | §3 里程碑 + §4 总览表 |
+| **看到 `_legacy.py` / `_compat.py` 困惑** | `refactor.md §13`（架构层 WHY）+ **§3.1 下方**（实施层行数追踪）|
 
 > **本文件是"活文档"**：状态行（`⏳ 🔄 👀 ✅ ⚠️ ❌`）随 PR 合并实时更新，详见 §2。
 
@@ -80,6 +81,47 @@
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
 > 整体进度：**0 / 6 里程碑完成**
+
+---
+
+### 3.1 过渡期临时文件生命周期（横切关注点）
+
+> **配套**：`refactor.md §13` 是架构层详细说明（为什么存在 / 什么时候删 / Reviewer 必查项）。
+> 本节只跟踪**行级 / caller 级**变化，给干活的人一个直观进度条。
+
+| 文件 | 来源 | M0 ✅ | M1 🟡 | M2 ⏳ | M3 ⏳ | M4 ⏳ | M5 ⏳ | P8.5 |
+|---|---|---|---|---|---|---|---|---|
+| `autopwn/_legacy.py` | P0.4 `git mv` v3.1 单体 | 3688 行 | 3688 行（**写点 -9，剩 34 读**）| 持续 -1500 | 持续 -1500 | 持续 -400 | 接近 0 | 🗑️ 删 |
+| `autopwn/_compat.py` | P2.3 Owner 决策新建 | 不存在 | 197 行（**桥在用**）| 桥活跃 | P7 末 0 caller | 仅 `__all__` | 0 行 | 🗑️ 删 |
+| `autopwn.py` 根 shim | P0.4 5 行 | 5 行 | 5 行 | 5 行 | 5 行 | 5 行 | 5 行 | 🗑️ 删（→ `python -m autopwn`）|
+
+**关键检查点**（每个 P 阶段 PR 必查）：
+
+- **P2.4 之后**：`grep -nE "exploit_info\[[^]]+\] *=" autopwn/_legacy.py` 必须 **0 行** ✅（P2.4 已达成）
+- **P7 之后**：`grep -rn "from autopwn._compat" autopwn/ --include='*.py'` 必须 **0 行**（准备 P8.5 删除）
+- **P8 之后**：`_legacy.py` 净行数 < 100（仅剩 import 转发 + `if __name__ == "__main__"` 入口）
+- **P8.5 PR 标题**：`[P8.5] delete _legacy.py + _compat.py`（独立 commit，不与代码改动混）
+
+**与 §4 任务的对应**：
+
+| 横切关注点 | 主要落点 |
+|---|---|
+| `_legacy.py` 行数减 1（删除 `cleanup_core_files` 线程） | P1.6 |
+| `_legacy.py` 减 ~50（搬 Colors/print_*）| P1.1 |
+| `_legacy.py` 减 ~30（搬 fs 工具）| P1.2 |
+| `_legacy.py` 减 ~20（搬 subprocess wrapper 调用点）| P1.5 |
+| `_legacy.py` 写点 -9（桥函数）| **P2.3 + P2.4** ✅ |
+| `_legacy.py` 减 ~1500（搬 recon / detect）| P4 + P5 |
+| `_legacy.py` 减 ~1500（搬 primitives / 30+ 策略）| P6 + P7 |
+| `_legacy.py` 减 ~400（搬 main() 决策树）| P8.1 + P8.2 + P8.3 |
+| `_compat.py` 创建 | **P2.3** ✅ |
+| `_compat.py` 加 `record_success` | **P2.4** ✅ |
+| `_compat.py` 0 caller | P7 末 |
+| 🗑️ `_legacy.py` + `_compat.py` 删除 | **P8.5** ⏳ |
+
+> **常见错误**（已在历次 review 中出现）：在 P2 阶段后期发现 `_legacy.py` 仍被新增代码 import。
+> **正确做法**：P3 起的所有新代码（`report/` / `recon/` / `detect/` / `primitives/` / `exp/strategies/`）
+> **只** import `autopwn.context` / `autopwn.core` / 同层 / 互不依赖，禁止 `from autopwn._legacy import ...`。
 
 ---
 

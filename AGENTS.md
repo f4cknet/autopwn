@@ -244,6 +244,7 @@ python3 tools/verify_v31_v40.py    # 生成 logs/comparison/summary.md
 | 治理规则变更 | 本文件，需 Owner 签字 |
 | 旧→新文件路径 | `rebuild.md` §11 附录 B |
 | 决策树优先级 | `rebuild.md` §11 附录 A |
+| `_legacy.py` / `_compat.py` 是什么 | `refactor.md §13`（架构 WHY）+ `rebuild.md §3.1`（行数追踪表）|
 
 ---
 

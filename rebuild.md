@@ -766,6 +766,55 @@ def run_qemu_system(arch: str, program, *args: str) -> subprocess.Popen:
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期）
 - **commit 引用**：`601173f`（P1.3d）— `7cab410` (P1.3c) → `601173f` (P1.3d)
 
+**P1.5 详细步骤**（替换 _legacy.py 中 os.system 调用）：
+
+P1.5 是 P1.3 + P1.3a-d 18 个 runner wrapper 的**调用方采用**——P1.3 系列只提供工具，P1.5 真正用上：
+
+```python
+# 13 处 os.system + 4 处文件读 + 3 处 shell pipe 全部替换
+# 关键替换映射：
+#   os.system(f"ldd X | awk ... > libc_path.txt") + open()
+#     -> run_ldd(program) + Python .strip() / .split()
+#   os.system(f"checksec X > file 2>&1") + open()
+#     -> run_checksec(program) (str)
+#   os.system(f"objdump -d X > file 2>&1") + open()
+#     -> run_objdump_disasm(program, intel=True|False)
+#   3x os.system(f"ropper ... >> ropper.txt") + open()
+#     -> 3x run_ropper + concat splitlines()
+#   os.system(f"ropper ... > ropper.txt") (x4 in find_rop_gadgets_x32)
+#     -> 4x run_ropper
+#   os.system(f"strings X | grep /bin/sh > file") + open()
+#     -> run_strings(program) + 'in' check
+#   os.system(f"objdump -d -M intel X | grep -A20 func")
+#     -> run_objdump_disasm(program, intel=True) + Python enumerate[20:]
+#   3x open("Objdump_Scan.txt") (downstream consumers)
+#     -> self-contained run_objdump_disasm(program, intel=False) (AT&T)
+```
+
+**P1.5 实施记录（2026-06-07）**：
+
+- **修改** `autopwn/_legacy.py`（净 -126 行）：13 处 os.system + 4 处文件读 + 3 处 shell pipe 全部替换
+- **修改** `autopwn/core/runner.py`：`run_objdump_disasm` 加 `intel: bool = True` 参数（AT&T 兼容）
+- **不动**：`autopwn.py` shim、`autopwn/cli.py`、`core/logging.py`、`core/fs.py`、所有 `__init__.py`
+- **剩 2 处 os.system（不在 P1.5 范围）**：
+  - L32 `os.system('ulimit -c 0 ...')` — 核心转储防护（启动期，全局）
+  - L42 `os.system('rm -rf core* ...')` — 清理线程（每 1 秒）→ **P1.6 任务**
+- **cwd 污染彻底清除**：跑完 `Challenge/canary` 后**无** `Information_Collection.txt` / `ropper.txt` / `Objdump_Scan.txt` / `libc_path.txt` / `check_binsh.txt`
+- **踩坑 #1**：3 个函数（`analyze_vulnerable_functions` / `vuln_func_name` / `asm_stack_overflow`）**也读 Objdump_Scan.txt**。原代码靠 `scan_plt_functions` 先写文件，**隐式依赖链**。P1.5 修：每个函数**自给自足**调 `run_objdump_disasm`
+- **踩坑 #2**：`vuln_func_name()` 原本用全局 `program` 变量（无参数）。改成接 `program` 参数后**所有调用点都要传**。修：2 处调用点改 `vuln_func_name(program)`
+- **踩坑 #3（最关键）**：`asm_stack_overflow` 的 regex `lea\s+(-?0x[0-9a-f]+)\(%[er]bp\)` 是 **AT&T 语法**（`lea -0x10(%rbp), %rax`），但 `run_objdump_disasm` 默认输出 **intel 语法**（`lea rax, [rbp-0x10]`）— **regex 不匹配**，函数返回 None，padding 错位 → ret2_system_x64 收到 `padding=None` → TypeError。**第一次 §2.6 验证 5/5 rc=1 回归**，3 轮调试才定位。修：`run_objdump_disasm(program, intel: bool = True)` 加可选参数；legacy 3 函数用 `intel=False` 保留 AT&T 输出
+- **第 1-3 次 §2.6 失败 + 第 4 次 PASS**：3 个 bug 互相掩盖，迭代修复
+- **§2.6 验证结果**（最终 PASS）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— **4/5 rc=0**（canary PARTIAL + fmtstr1/level3_x64/pie/rip 全部 PASS）
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（**无回归**）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.2 + §6.2 同步
+  - 详见 `logs/comparison/summary.md`
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期）
+- **commit 引用**：`7a6cbe0`（P1.5）— `bb20de9` (P1.4 doc) → `7a6cbe0` (P1.5)
+
 **P1.4 决策记录（2026-06-07）**：
 
 **状态变更**：⏳ → ✅（**由 P1.1 顺手完成，无独立 PR**）

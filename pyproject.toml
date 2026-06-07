@@ -58,3 +58,20 @@ packages = [
 
 [tool.setuptools.package-data]
 autopwn = ["py.typed"]
+
+[tool.pytest.ini_options]
+# Register custom markers used by autopwn tests (P5.5 / P9).
+# ``pytest -m detect`` runs the P5 detect layer unit tests.
+# ``pytest -m "not integration"`` skips slow end-to-end tests
+# (used by §2.6 quick verification flow).
+markers = [
+    "detect: P5 detect layer unit tests (overflow/fmtstr/canary/binsh)",
+    "recon: P4 recon layer unit tests",
+    "primitive: P6 primitives layer unit tests",
+    "strategy: P7 strategies layer unit tests",
+    "integration: end-to-end Challenge/ binary tests (P9.4)",
+]
+# Test discovery: tests/ directory, files matching test_*.py.
+testpaths = ["tests"]
+# Run tests in file order (deterministic CI output).
+python_files = ["test_*.py"]

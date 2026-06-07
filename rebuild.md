@@ -202,7 +202,7 @@
 | P5.2 | `detect/fmtstr.py`：搬 `detect_format_string_vulnerability` + `find_offset` | 🔄 | @Minzhi_Zhou | 3h | 0.6h | feature/p5.2-detect-fmtstr | 烟雾测试 OK：fmtstr1 vulnerable=True/2 triggers + offset=11；level3_x64 vulnerable=True/6 triggers；legacy ports 字节级 parity |
 | P5.3 | `detect/canary.py`：搬 `leakage_canary_value` + `canary_fuzz`；写入 `ctx.canary` | 🔄 | @Minzhi_Zhou | 3h | 1.0h | feature/p5.3-detect-canary | 烟雾测试 OK：leakage 10 leaks/100 max=100 字节级 parity；canary_fuzz(max_c=3, max_padding=3) returns None（预期，暴力枚举需 ~7min）；legacy port 写 canary.txt 100 行字节级一致 |
 | P5.4 | `detect/binsh.py`：搬 `check_binsh_string` + `check_binsh` | 🔄 | @Minzhi_Zhou | 1h | 0.3h | feature/p5.4-detect-binsh | 烟雾测试 OK：5 二进制 check_binsh 返回正确（canary=F, fmtstr1=T, level3_x64=F, pie=T, rip=T），ctx.binsh_in_binary 同步 |
-| P5.5 | 单元测试：每个 detect 函数对 `Challenge/` 下对应二进制跑一遍 | ⏳ | — | 4h | — | — | |
+| P5.5 | 单元测试：每个 detect 函数对 `Challenge/` 下对应二进制跑一遍 | 🔄 | @Minzhi_Zhou | 4h | 0.8h | feature/p5.5-detect-tests | pytest -m detect 全绿 21/21；涵盖 4 个 detect 模块 × 2-3 个测试 + 5 个 binary 矩阵化 (test_detect_binsh)；v3.1 vs v4.0 96% 一致无回归 |
 
 ### 4.7 P6 — Primitives 层
 
@@ -2478,6 +2478,36 @@ def test_test_stack_overflow_finds_canary():
     padding = test_stack_overflow(ctx)
     assert padding > 0  # canary 二进制也有栈溢出
 ```
+
+
+
+**P5.5 实施记录** (commit on `feature/p5.5-detect-tests`，Owner @Minzhi_Zhou, 0.8h)：
+
+* **文件**：
+  * `tests/__init__.py` (1 行)
+  * `tests/conftest.py` (53 行) — sys.path + ctx_for factory + challenge_dir fixture
+  * `tests/unit/__init__.py` (0 行)
+  * `tests/unit/test_detect_overflow.py` (96 行) — 5 测试
+  * `tests/unit/test_detect_fmtstr.py` (60 行) — 5 测试
+  * `tests/unit/test_detect_canary.py` (108 行) — 5 测试 (含 1 monkey-patch)
+  * `tests/unit/test_detect_binsh.py` (43 行) — 6 测试 (parametrized × 5 binary)
+  * `pyproject.toml` — 加 `[tool.pytest.ini_options]` + 5 markers (detect / recon / primitive / strategy / integration)
+* **测试统计**：21 测试 / 21 通过 / 1 警告 (pwn BytesWarning，v3.1 同样)
+* **关键设计决策**：
+  * **挑战 binary 矩阵化** (`test_detect_binsh::test_returns_bool`)：5 binary × 1 expected bool = 5 测试覆盖全矩阵
+  * **monkey-patch trick** (`test_detect_canary::test_writes_ctx_canary_on_success`)：mock `pwn.process` 返回 FakeIO，绕开 7-min 暴力枚举验证 `ctx.canary` 写入路径
+  * **`ctx_for` factory** (`conftest.py`)：单一函数构造 4 个 Challenge binary 的 `ExploitContext`；避免每个测试手写 7 行
+  * **`AUTOPWN_CHALLENGE_DIR` env var** (`conftest.py`)：CI 时可指向其他 binary 目录
+  * **P9 测试基础设施预留**：`pyproject.toml` markers 注册了 `recon` / `primitive` / `strategy` / `integration`（P4 / P6 / P7 / P9.4 会用到）
+* **验证**：
+  * `pytest -m detect` → 21 passed in 1.84s
+  * `pytest -m "not integration"` → 21 passed in 1.27s
+  * `pytest tests/` → 21 passed in 1.54s
+  * `pytest --collect-only` → 21 tests collected
+* **未动**：
+  * `recon/` 测试 (P4 没建测试，P9 才补)
+  * 集成测试 (P9.4 范围)
+  * CI workflow (P9.5 范围)
 
 **验收**
 - 4 个 detect 函数对 Challenge/ 全部 4 个二进制都有用例

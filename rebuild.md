@@ -123,7 +123,7 @@
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
 | P2.1 | `context.py`：定义 `BinaryInfo` / `LibcInfo` / `RopGadgetsX64` / `RopGadgetsX32` / `CanaryInfo` / `ExploitContext` | ✅ | @Minzhi_Zhou | 4h | 0.4h | #P2.1 | 新增 `autopwn/context.py`（146 行）+ `autopwn/__init__.py` re-export 6 个 dataclass；**零行为变更**（不替换 `exploit_info` / 不改 `_legacy.py` / 不改 `cli.py` — 这些是 P2.3-P2.5 任务）；所有字段按 `refactor.md §3.2.1` + `rebuild.md §6.3 P2.1` 范式：`@dataclass(slots=True)` + `field(default_factory=...)` for 可变默认 + `LibcInfo.elf: object` 避免 pwntools 循环导入 + `ctx.log()` 路由到 `core.logging` print_*；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（无回归，**预期**：纯加文件不引入行为差异）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#3.2.1 |
-| P2.2 | `context.py`：实现 `ExploitContext.from_args(args)` 工厂 | ⏳ | — | 2h | — | — | |
+| P2.2 | `context.py`：实现 `ExploitContext.from_args(args)` 工厂 | ✅ | @Minzhi_Zhou | 2h | 0.3h | #P2.2 | 新增 `@classmethod from_args(args: argparse.Namespace) -> ExploitContext` + `ContextError(RuntimeError)` 异常类；映射 6 个现有 CLI flag（`-l/-ip/-p/-libc/-f/-v`）+ P8 forward-compat（`--report-dir`）；**BinaryInfo 占位**字段（`bit=0`/`relro="Unknown"`/其余 `False`）— 标注 P4.1 recon 阶段会 overwrite；**零行为变更**（不替换 `_legacy.py` 调用点 — P2.3 任务）；错误消息与 legacy `print_error` 文本**逐字一致**（Test 14 验证）；15 项烟雾测试全过 + P2.1 6 项回归全过；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（无回归，**预期**：纯加 method）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#3.2.1 |
 | P2.3 | `autopwn.py` 顶层构造 `ctx = ExploitContext.from_args(args)`，并写一个 ctx → `exploit_info` dict 的桥函数（**仅 P2 阶段保留，作用是让旧代码不立即报错**） | ⏳ | — | 2h | — | — | 过渡 |
 | P2.4 | 旧 `exploit_info` 写操作改为调用桥函数 | ⏳ | — | 1h | — | — | 过渡 |
 | P2.5 | 旧 `update_exploit_info` 标注 deprecation warning | ⏳ | — | 0.5h | — | — | 过渡 |
@@ -1180,6 +1180,52 @@ def sync_ctx_to_legacy(ctx: ExploitContext) -> None:
     _legacy_info['architecture'] = f"x{ctx.binary.bit}"
     _legacy_info['success'] = True  # 由 record_success 触发
 ```
+
+**P2.2 实施记录（2026-06-07）**：
+
+- **扩展** `autopwn/context.py`（+125 行）：新增 `ContextError` + `ExploitContext.from_args()` classmethod
+- **`ContextError(RuntimeError)`**：替换 legacy `print_error + sys.exit(1)` 模式；P2.3 会在 `cli.py` 顶层 catch 后路由回相同 UX（红字 + exit 1）；同时是 `refactor.md §11 #5` 计划中首个 typed exception（P4-P7 会引入 `ReconError` / `DetectionError` / `StrategyError` 子类）
+- **`ExploitContext.from_args(args: argparse.Namespace) -> ExploitContext`**：
+  - 类型检查：非 `argparse.Namespace` → `TypeError`
+  - 验证：3 个 `ContextError` 路径（missing binary / missing libc / mismatched ip-port）— **错误消息与 legacy `print_error` 文本逐字一致**（Test 14 验证：`'target binary not found: /nope/foo'` 与 legacy L3291 完全相同）
+  - 映射 6 个现有 flag + P8 forward-compat：
+    - `-l/--local` → `ctx.binary.path` (Path, must exist)
+    - `-ip/-p` → `ctx.remote = (host, port)` if both else `None` + `ctx.mode = 'remote'|'local'`
+    - `-libc/--libc` → `ctx.libc.path` (Path, must exist if provided)
+    - `-f/--fill` → `ctx.padding` (default 0)
+    - `-v/--verbose` → `ctx.verbose` (bool)
+    - `--report-dir`（P8 才会加）→ `ctx.report_dir`（用 `getattr` 防御性默认 `"."`）
+    - `--no-report`（P8 才会加）→ **故意不映射**（等 P3 加 `ctx.enable_report: bool` 字段再处理）
+  - BinaryInfo 占位字段：`bit=0` / `relro="Unknown"` / 其余 `False` — 显式注释"P4.1 recon 阶段会 overwrite"
+- **`autopwn/__init__.py` 扩展**：`ContextError` 加进 re-export + `__all__`
+- **零行为变更**：`_legacy.py` / `cli.py` / `autopwn.py` shim 全部不动 — P2.3 才会替换 `main()` 入口
+- **15 项烟雾测试**（手测，pytest 体系待 P9）：
+  - 1-7：各种 arg 组合（minimal / remote / libc / -f 112 / -v / P8 report_dir forward-compat / 全部一起）
+  - 8：TypeError on dict input
+  - 9：ContextError on missing binary
+  - 10：ContextError on missing libc
+  - 11：ContextError on ip without port
+  - 12：ContextError on port without ip
+  - 13：real argparse parser (与 _legacy.py 同形) 完整跑通
+  - 14：error message 字符串逐字匹配 legacy
+  - 15：returned object is ExploitContext with expected fields
+- **6 项 P2.1 回归测试**（防 P2.2 误改 P2.1 已建字段）：
+  - ✅ BinaryInfo slots 仍生效（`ctx.binary.foo = 'bar'` → AttributeError）
+  - ✅ `ctx.log()` 路由仍工作
+  - ✅ `from_args` 是 `@classmethod`（inspect 验证）
+  - ✅ `ContextError` 是 `RuntimeError` 子类
+  - ✅ P2.2 **没有**添加 P3.4 的 `last_exploit` 字段（正确延后）
+  - ✅ P2.2 **没有**添加 P3 的 `enable_report` 字段（正确延后）
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL + fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（**无回归**）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.3 + §6.3 同步
+  - 详见 `logs/comparison/summary.md`
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，与 P0.7–P2.1 同类）
+- **commit 引用**：`4bc9adc`（P2.2）— `2bdf254` (P2.1 doc) → `4bc9adc` (P2.2)
 
 **P2.1 实施记录（2026-06-07）**：
 

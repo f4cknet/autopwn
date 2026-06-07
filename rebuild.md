@@ -113,7 +113,7 @@
 | **P1.3a** | **临时需求 #4 - 静态 binutils 套件**（**file / readelf / strings / nm**） | ✅ | @Ba1_Ma0 | 2h | 0.4h | #P1.3a | 加 run_file / run_readelf(*flags) / run_strings(min_len) / run_nm；返回 str；degrade gracefully（失败 → 空串）；§2.6 27/28=96% vs v3.1（无回归，本 PR 不替换 _legacy.py 调用点）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
 | **P1.3b** | **临时需求 #4 - ROP / 模式 套件**（**ROPgadget / cyclic / one_gadget**） | ✅ | @Ba1_Ma0 | 2h | 0.4h | #P1.3b | 加 run_ropgadget(*filters) / run_cyclic_create(length) / run_cyclic_find(pattern) / run_one_gadget(libc)；ROPgadget 不用 --nocolor（版本不支持）；cyclic 忽略 stderr DeprecationWarning；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
 | **P1.3c** | **临时需求 #4 - 动态 / sandbox 套件**（**strace / ltrace / seccomp-tools / gdb**） | ✅ | @Ba1_Ma0 | 3h | 0.5h | #P1.3c | 加 run_strace / run_ltrace / run_seccomp / run_gdb_batch；4 个都写 stderr（syscall/lib-call/seccomp-event/pwndbg 彩色），wrapper 用 stdout+stderr 合并 + `errors='replace'` 吃非 UTF-8；seccomp-tools 默认 dump；gdb `-batch -nx`；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
-| **P1.3d** | **临时需求 #4 - 跨架构模拟**（**qemu-system-x86 / i386 / aarch64**） | ⏳ | @Ba1_Ma0 | 2h | — | — | 返回 Popen 句柄（qemu 常驻进程），不 capture_output；见 refactor.md §4 / §6.2 P1.3d |
+| **P1.3d** | **临时需求 #4 - 跨架构模拟**（**qemu-system-x86 / i386 / aarch64**） | ✅ | @Ba1_Ma0 | 2h | 0.5h | #P1.3d | 加 run_qemu_user(arch, ...) + run_qemu_system(arch, ...) 两个 Popen 接口；user-mode（pwntools 风格，含 aarch64/arm/i386 等） + system-mode（仅 x86_64/i386 在本机可用；aarch64 需 `apt install qemu-system-arm` 额外装）；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
 | P1.4 | 替换 `autopwn.py` 中所有 `print_banner()` / `print_*` 调用为 `from autopwn.core.logging import ...` | ⏳ | — | 2h | — | — | |
 | P1.5 | 替换 `autopwn.py` 中所有 `os.system('ropper ... > ropper.txt')` 模式，调用 `runner.run_ropper` | ⏳ | — | 3h | — | — | |
 | P1.6 | 删除 `cleanup_core_files` 线程的硬编码 `os.system('rm -rf core*')`，改用 `core/fs.py` 中的回收函数 | ⏳ | — | 1h | — | — | |
@@ -720,6 +720,51 @@ def run_gdb_batch(program, *commands: str) -> str:
   - 详见 `logs/comparison/summary.md`
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期）
 - **commit 引用**：`7cab410`（P1.3c）— `4af923e` (P1.3b) → `7cab410` (P1.3c)
+
+**P1.3d 详细步骤**（`core/runner.py` 扩展）：
+
+依据 `refactor.md §4.2` 末段（交互式工具特殊接口），在 `autopwn/core/runner.py` 末尾追加 2 个 qemu wrapper — **不返回 str，返回 `subprocess.Popen` 句柄**（例外）：
+
+```python
+def run_qemu_user(arch: str, program, *args: str) -> subprocess.Popen:
+    """User-mode emulation: `qemu-<arch> <args> <program>`.
+    pwntools 风格 — 跑 ARM binary 在 x86_64 host 上（无需 boot OS）。
+    支持：aarch64 / arm / i386 / mips / riscv* 等（取决于 qemu-user 包）。
+    动态链接需传 `-L <sysroot>` 找 libc。"""
+    cmd = [f"qemu-{arch}", *args, str(program)]
+    return subprocess.Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+
+def run_qemu_system(arch: str, program, *args: str) -> subprocess.Popen:
+    """Full-system emulation: `qemu-system-<arch> <args> <program>`.
+    boot 整个 VM。少用于 CTF 场景，本机仅 x86_64 / i386 可用。"""
+    cmd = [f"qemu-system-{arch}", *args, str(program)]
+    return subprocess.Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+```
+
+**P1.3d 实施记录（2026-06-07）**：
+
+- **扩展** `autopwn/core/runner.py`（+50 行）：2 个新函数 + `__all__` 列表更新
+- **不动 `_legacy.py`**：Popen 接口是 P5/P7 用，re-export 不加
+- **接口例外**：qemu 是常驻进程，**不**遵守 §4.2 "返回 str" 范式（refactor.md §4.2 末段明文允许）
+- **踩坑 #1**：pwntools.md 写 `qemu-system-x86`（包名），实际二进制是 `qemu-system-x86_64` + `qemu-system-i386`（同包多个 symlink）。**`qemu-system-aarch64` 在本机没装**（`qemu-system-arm` 也没装）。已装的是 `qemu-user` 包（`qemu-aarch64` / `qemu-arm` / `qemu-i386` 等）—— pwntools 风格二进制利用走 user-mode，本就是正确工具
+- **踩坑 #2**：`Popen` 对缺失二进制会**立即抛 `FileNotFoundError`**（不是返回失败 Popen）。这是 Python 标准 Popen 行为，caller 需 `try/except FileNotFoundError` 处理。文档化在 docstring
+- **踩坑 #3**：qemu 跨架构运行是静默失败（如 `qemu-aarch64` 跑 x86 canary → rc=255，stderr 空）。caller 需 check `p.returncode` 后再 `communicate()`，或用 `p.poll()` 判断
+- **功能单测**（手测，pytest 体系待 P9）：
+  - `run_qemu_user('i386', canary)` + `communicate(input=b'AAAA\n', timeout=10)` → rc=0，stdout 含 `stack protector` ✓
+  - `run_qemu_user('aarch64', '/nonexistent')` + communicate → rc=1（caller 判 rc）✓
+  - `run_qemu_user('aarch64', x86_canary)` → rc=255（跨架构不兼容，预期）✓
+  - `run_qemu_system('x86_64', '/dev/null')` → 启动 + kill + wait OK ✓
+  - `run_qemu_system('aarch64', ...)` → `FileNotFoundError`（caller 需 catch）✓
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL + fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（无回归）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.2 + §6.2 同步
+  - 详见 `logs/comparison/summary.md`
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期）
+- **commit 引用**：见下
 
 **P1.3a 详细步骤**（`core/runner.py` 扩展）：
 

@@ -346,6 +346,92 @@ def run_gdb_batch(program, *commands: str) -> str:
     return cp.stdout + cp.stderr
 
 
+# =====================================================================
+# P1.3d: cross-architecture emulation suite (临时需求 #4)
+# =====================================================================
+# These return subprocess.Popen (NOT str) because qemu is a long-running
+# emulator process. Caller owns the process lifecycle: send input via
+# .stdin, read output via .stdout / .stderr, terminate via .kill() /
+# .terminate() / .wait(timeout=...). This is the exception to the
+# §4.2 "return str" contract; explicitly called out in refactor.md §4.2
+# last paragraph.
+#
+# Two flavors:
+#   - run_qemu_user:  user-mode emulation (qemu-<arch>), e.g. run ARM
+#                     binary on x86_64 host. This is what pwntools
+#                     `process(['qemu-aarch64', ...])` uses.
+#   - run_qemu_system: full-system emulation (qemu-system-<arch>), e.g.
+#                     boot a whole VM. Less useful for CTF; included
+#                     for completeness and OS-level testing.
+#
+# Note: aarch64 system emulation (qemu-system-aarch64) is NOT installed
+# on this machine. User-mode aarch64 (qemu-aarch64) IS installed (via
+# qemu-user package). For binary exploitation, user-mode is the right
+# tool anyway — Pwntools does the same.
+
+
+def run_qemu_user(arch: str, program, *args: str) -> subprocess.Popen:
+    """Run `qemu-<arch> <args> <program>` and return the Popen handle.
+
+    User-mode emulation: runs the binary as if it were on the target
+    arch, without booting a full OS. This is what pwntools does.
+
+    Common arch values (depends on qemu-user package):
+      - "aarch64", "aarch64_be"  64-bit ARM
+      - "arm", "armeb"          32-bit ARM
+      - "i386"                  32-bit x86
+      - "mips", "mipsel", "mips64", ...
+      - "riscv32", "riscv64"
+
+    For dynamically linked binaries, pass "-L <sysroot>" so qemu can
+    find the target's libc:
+      run_qemu_user("aarch64", "./bin", "-L", "/usr/aarch64-linux-gnu")
+
+    For statically linked or static qemu builds, no -L needed.
+
+    Returns subprocess.Popen (NOT str). Caller owns the process:
+        p = run_qemu_user("i386", "./bin")
+        try:
+            p.stdin.write(b"AAAA\n")
+            p.stdin.flush()
+            out = p.stdout.read(100)
+        finally:
+            p.kill()
+            p.wait(timeout=2)
+    """
+    cmd = [f"qemu-{arch}", *args, str(program)]
+    return subprocess.Popen(
+        cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
+def run_qemu_system(arch: str, program, *args: str) -> subprocess.Popen:
+    """Run `qemu-system-<arch> <args> <program>` and return the Popen handle.
+
+    Full-system emulation: boots a VM. Most useful arch values on a
+    typical dev machine:
+      - "x86_64", "i386"   (provided by qemu-system-x86 package)
+    Note: aarch64 system emulation (qemu-system-aarch64) is NOT
+    installed here; use run_qemu_user for ARM.
+
+    Typical use: pass kernel + initrd + disk image as args. For bare
+    binary execution (less common, not the same as user-mode):
+        run_qemu_system("x86_64", "/dev/null", "-kernel", "./bin", "-nographic")
+
+    Returns subprocess.Popen (NOT str). Same lifecycle as run_qemu_user.
+    """
+    cmd = [f"qemu-system-{arch}", *args, str(program)]
+    return subprocess.Popen(
+        cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+
 __all__ = [
     "ToolError",
     "run_checksec", "run_ropper", "run_objdump_disasm", "run_ldd",
@@ -355,4 +441,6 @@ __all__ = [
     "run_ropgadget", "run_cyclic_create", "run_cyclic_find", "run_one_gadget",
     # P1.3c: dynamic / sandbox suite (临时需求 #4)
     "run_strace", "run_ltrace", "run_seccomp", "run_gdb_batch",
+    # P1.3d: cross-arch emulation suite (临时需求 #4)
+    "run_qemu_user", "run_qemu_system",
 ]

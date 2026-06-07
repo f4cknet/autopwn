@@ -18,6 +18,7 @@ from autopwn import cli  # noqa: E402, F401
 from autopwn.context import (  # noqa: E402, F401
     BinaryInfo,
     CanaryInfo,
+    ContextError,
     ExploitContext,
     LibcInfo,
     RopGadgetsX64,
@@ -26,6 +27,6 @@ from autopwn.context import (  # noqa: E402, F401
 
 __all__ = [
     "__version__", "__author__", "__org__", "__github__", "cli",
-    "BinaryInfo", "CanaryInfo", "ExploitContext",
+    "BinaryInfo", "CanaryInfo", "ContextError", "ExploitContext",
     "LibcInfo", "RopGadgetsX64", "RopGadgetsX32",
 ]

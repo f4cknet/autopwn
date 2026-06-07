@@ -10,8 +10,8 @@ Design principles (enforced by §6.3 reviewer checklist):
   * ``LibcInfo.elf`` is typed as ``object`` to avoid pulling pwntools at import time.
 
 Adoption roadmap (see ``rebuild.md`` §4.3):
-  * P2.1 (this PR) — define the dataclasses only; no behavior change.
-  * P2.2 — add ``ExploitContext.from_args(args)`` factory.
+  * P2.1 (✅ 2026-06-07) — define the dataclasses only; no behavior change.
+  * P2.2 (this PR) — add ``ExploitContext.from_args(args)`` factory + ``ContextError``.
   * P2.3 — build ``ctx = ExploitContext.from_args(args)`` at the top of ``main()``
             and wire a bridge (``autopwn._compat.sync_ctx_to_legacy``) so old
             ``exploit_info[...] = ...`` call sites keep working.
@@ -21,9 +21,25 @@ Adoption roadmap (see ``rebuild.md`` §4.3):
 """
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Tuple
+
+
+class ContextError(RuntimeError):
+    """Raised when ``ExploitContext`` construction fails.
+
+    Replaces the legacy ``print_error(...)`` + ``sys.exit(1)`` pattern in
+    ``main()`` (see ``autopwn/_legacy.py`` L3290-3296).  P2.3 will catch
+    ``ContextError`` in ``cli.py`` and route to the same UX (red error
+    message + exit code 1), keeping CLI behaviour bit-for-bit identical
+    to v3.1.
+
+    The class is also a building block for refactor.md §11 #5 ("typed
+    exceptions: ReconError / DetectionError / StrategyError").  P4-P7
+    will introduce their own subclasses if needed.
+    """
 
 
 @dataclass(slots=True)
@@ -165,6 +181,104 @@ class ExploitContext:
         }
         router.get(level, print_info)(message)
 
+    @classmethod
+    def from_args(cls, args: argparse.Namespace) -> "ExploitContext":
+        """Build an ``ExploitContext`` from an ``argparse.Namespace``.
+
+        Maps the 6 current CLI flags from ``_legacy.main()``:
+
+          ``-l/--local``  → ``ctx.binary.path`` (Path, must exist)
+          ``-ip/--ip``    → ``ctx.remote`` (host, port) when remote
+          ``-p/--port``   → ``ctx.remote`` (host, port) when remote
+          ``-libc/--libc``→ ``ctx.libc.path`` (Path, must exist)
+          ``-f/--fill``   → ``ctx.padding`` (manual override)
+          ``-v/--verbose``→ ``ctx.verbose`` (bool)
+
+        plus forward-compatible defaults via ``getattr`` for the P8
+        additions (``--report-dir`` → ``ctx.report_dir``; ``--no-report``
+        is intentionally NOT mapped — P3 will add ``ctx.enable_report``).
+
+        Fields NOT derivable from args (``BinaryInfo.bit`` /
+        ``stack_canary`` / ``pie`` / ``nx`` / ``relro`` /
+        ``rwx_segments`` / ``stripped``) are **placeholders** and will be
+        populated by the recon phase (P4.1) which overwrites
+        ``ctx.binary`` with a fully populated ``BinaryInfo``.  See
+        ``rebuild.md`` §6.5 P4.1.
+
+        Args:
+          args: parsed ``argparse.Namespace`` from ``parser.parse_args()``.
+
+        Returns:
+          A new ``ExploitContext`` instance.
+
+        Raises:
+          TypeError: if ``args`` is not an ``argparse.Namespace``.
+          ContextError: on any validation failure (missing file,
+            mismatched ip/port).  The error message exactly matches the
+            legacy ``print_error`` text so log diff stays at zero.
+        """
+        if not isinstance(args, argparse.Namespace):
+            raise TypeError(
+                f"ExploitContext.from_args expects argparse.Namespace, "
+                f"got {type(args).__name__}"
+            )
+
+        # 1) Validate target binary (matches legacy L3290-3292)
+        raw_local = Path(args.local)
+        if not raw_local.exists():
+            raise ContextError(f"target binary not found: {args.local}")
+
+        # 2) Determine mode (matches legacy L3294-3296)
+        has_ip = bool(getattr(args, "ip", None))
+        has_port = bool(getattr(args, "port", None))
+        if has_ip ^ has_port:
+            raise ContextError(
+                "both IP and port must be specified for remote exploitation"
+            )
+        mode = "remote" if (has_ip and has_port) else "local"
+        remote = (args.ip, args.port) if mode == "remote" else None
+
+        # 3) Libc (matches legacy L3318-3326)
+        libc = LibcInfo()
+        libc_arg = getattr(args, "libc", None)
+        if libc_arg:
+            libc_path = Path(libc_arg)
+            if not libc_path.exists():
+                raise ContextError(f"libc file not found: {libc_arg}")
+            libc = LibcInfo(path=libc_path)
+
+        # 4) Placeholder BinaryInfo — recon phase (P4.1) overwrites.
+        #    bit=0 / relro="Unknown" are sentinels meaning "not yet probed";
+        #    P4.1's checksec.collect() replaces this entire BinaryInfo with
+        #    one populated from `checksec` output.
+        binary = BinaryInfo(
+            path=raw_local,
+            bit=0,                  # P4.1 sets 32 or 64
+            stack_canary=False,     # P4.1
+            pie=False,              # P4.1
+            nx=False,               # P4.1
+            relro="Unknown",        # P4.1 sets "Full" / "Partial" / "No"
+            rwx_segments=False,     # P4.1
+            stripped=False,         # P4.1
+        )
+
+        # 5) Manual padding override
+        padding = getattr(args, "fill", 0) or 0
+
+        # 6) Runtime flags (forward-compat for P8 --report-dir / --no-report)
+        verbose = bool(getattr(args, "verbose", False))
+        report_dir = Path(getattr(args, "report_dir", "."))
+
+        return cls(
+            binary=binary,
+            mode=mode,
+            remote=remote,
+            libc=libc,
+            padding=padding,
+            verbose=verbose,
+            report_dir=report_dir,
+        )
+
 
 __all__ = [
     "BinaryInfo",
@@ -173,4 +287,5 @@ __all__ = [
     "RopGadgetsX32",
     "CanaryInfo",
     "ExploitContext",
+    "ContextError",
 ]

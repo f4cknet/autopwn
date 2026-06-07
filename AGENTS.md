@@ -265,9 +265,10 @@ python3 tools/verify_v31_v40.py    # 生成 logs/comparison/summary.md
 
 | 日期 | 版本 | 变更 | 起草 | Review |
 |---|---|---|---|---|
-| 2026-06-06 | 1.0 | 初版：4 条铁律 + L1/L2/L3 违规分级 + 紧急通道 + AI Agent 条款 + 签字栏 | @Ba1_Ma0 | （待 Reviewer 签字） |
-| 2026-06-06 | 1.1 | **首次实战**：临时需求 #1（项目改名 pwnpasi→autopwn）按铁律 2 跑通——先更新 refactor.md §3.3 + rebuild.md §4.1/§6.1/§8/§10 → Owner 拍板（4 项决策）→ 实施 → 三关验证。验证 P0.0/P0.6 ✅。 | @Ba1_Ma0 | — |
-| 2026-06-07 | 1.2 | **临时需求 #2+#3 落地**：B-002 验证方法论规范化——加 §2.6（串行 + logs/ + 7 关键节点 debug + 2-log 对比）。P0.7（验证基础设施）+ P0.8（v3.1 vs v4.0 严格对比 96% 一致 PASS）按 §2.6 跑通。B-002 Resolved 2026-06-07。 | @Ba1_Ma0 | — |
+| 2026-06-06 | 1.0 | 初版：4 条铁律 + L1/L2/L3 违规分级 + 紧急通道 + AI Agent 条款 + 签字栏 | @Minzhi_Zhou | （待 Reviewer 签字） |
+| 2026-06-06 | 1.1 | **首次实战**：临时需求 #1（项目改名 pwnpasi→autopwn）按铁律 2 跑通——先更新 refactor.md §3.3 + rebuild.md §4.1/§6.1/§8/§10 → Owner 拍板（4 项决策）→ 实施 → 三关验证。验证 P0.0/P0.6 ✅。 | @Minzhi_Zhou | — |
+| 2026-06-07 | 1.2 | **临时需求 #2+#3 落地**：B-002 验证方法论规范化——加 §2.6（串行 + logs/ + 7 关键节点 debug + 2-log 对比）。P0.7（验证基础设施）+ P0.8（v3.1 vs v4.0 严格对比 96% 一致 PASS）按 §2.6 跑通。B-002 Resolved 2026-06-07。 | @Minzhi_Zhou | — |
+| 2026-06-07 | 1.3 | **临时需求 #4 + Owner rename**：B-001 团队改名 B-002 已 Resolved 后，**临时需求 #4**（runner 工具集扩展）按铁律 2 跑通——4 个子任务 P1.3a-d 加 14 个工具 + 2 个 qemu Popen 接口；同时 **Owner 名字从 @Ba1_Ma0 改为 @Minzhi_Zhou**——本文件签字栏 / changelog 三行 / rebuild.md §4.2 16 行 Owner 列 / tools/verify_v31_v40.py header / logs/comparison/summary.md 共 ~50 处全替换。**保留**（非 Owner）：refactor.md:265 + README.md:185 + LICENSE:3 + rebuild.md:286/294/408 中 pwnpasi 原作者 @Ba1_Ma0 引用（MIT 历史致谢，不可改）；git 历史中 9+ 个 commit 的 author name **不可改**（git 不可篡改原则）。 | @Minzhi_Zhou | — |
 
 ---
 
@@ -275,5 +276,5 @@ python3 tools/verify_v31_v40.py    # 生成 logs/comparison/summary.md
 > 文档先行不是繁文缛节，是为了**让团队（包括未来的你和未来的 AI）能在任何时间点快速进入状态**。一次不遵守的代价是后续十次混乱。
 >
 > **签字栏**（首次发布由 Owner 签字）：
-> - 项目 Owner：@Ba1_Ma0
+> - 项目 Owner：@Minzhi_Zhou（2026-06-07 由 @Ba1_Ma0 改名）
 > - 首次发布：2026-06-06

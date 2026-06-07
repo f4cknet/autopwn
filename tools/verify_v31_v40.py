@@ -1,5 +1,5 @@
 """P0.8: v3.1 vs v4.0 关键行为标记对比 + summary.md 生成。
-Owner: @Ba1_Ma0
+Owner: @Minzhi_Zhou
 """
 import re
 from pathlib import Path
@@ -72,7 +72,7 @@ def main():
 > **生成时间**: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC
 > **方法论**: 串行 runner（scripts/run_verify.sh）+ 60s/binary timeout
 > **目的**: 验证 P0.0 全局改名（pwnpasi -> autopwn）+ P0.7 验证基础设施 引入的 v4.0 与 v3.1 行为一致性
-> **Owner**: @Ba1_Ma0
+> **Owner**: @Minzhi_Zhou
 > **Ref**: rebuild.md §6.1 P0.8
 
 ## 1. 数据来源

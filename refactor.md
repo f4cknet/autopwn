@@ -265,6 +265,11 @@ class ExploitPrimitive(ABC):
 - 不再保留 `@Ba1_Ma0` 作为代码作者；其原项目以 MIT 协议开源，attribution 写在 README 历史致谢段
 - 决策记录见 `rebuild.md` §10 B-001（已 ✅ Resolved）
 
+**Owner handle 决策（2026-06-07）**：当前项目 Owner 自 2026-06-07 起从 `@Ba1_Ma0` 改为 `@Minzhi_Zhou`。注意**两层身份**：
+- **`@Ba1_Ma0`** 是 `heimao-box/pwnpasi` 原作者（MIT 协议要求保留 attribution），其名字在 `LICENSE:3` / `README.md:185` / `refactor.md:265` / `rebuild.md:286,294,408` 中保留
+- **`@Minzhi_Zhou`** 是当前 `f4cknet/autopwn` 项目 Owner，所有治理引用（AGENTS.md 签字栏 / changelog / §4.2 O 列 / §6.1 决策行 / tools/verify_v31_v40.py header / logs/comparison/summary.md Owner 行）已切换
+- 决策记录见 `AGENTS.md §8` v1.3 changelog
+
 **回归保证**：v3.1 的 `Challenge/` 4 个二进制跑出的行为（strategy 名 / 关键地址 / shell 行为），在 v4.0 必须**完全一致**。P0.5 实施时要做一次完整 diff。
 
 **实施位置**：所有文件层面的实际改名集中在 `rebuild.md` §6.1 P0.0 任务中；本节只描述**目标命名**与**决策点**。

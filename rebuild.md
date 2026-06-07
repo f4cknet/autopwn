@@ -93,27 +93,27 @@
 
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
-| **P0.0** | **全局重命名 `pwnpasi` → `autopwn`**（**临时需求 #1**） | ✅ | @Ba1_Ma0 | 3h | 0.5h | #P0.0 | 已完成；R12 Resolved；验证：banner/help/烟雾测试三关通过；详见 §6.1 P0.0 验证段 |
-| P0.1 | 新建 `autopwn/` 目录及子包目录（`core recon detect primitives exp report`） | ✅ | @Ba1_Ma0 | 1h | 0.2h | #P0.1-P0.5 | 8 个包目录 + 占位 __init__.py |
-| P0.2 | 写各包 `__init__.py`（含 `__all__` 占位） | ✅ | @Ba1_Ma0 | 1h | 0.1h | #P0.1-P0.5 | autopwn/__init__.py 带版本/作者/组织；re-export cli；子包标准 __all__ |
-| P0.3 | 写 `pyproject.toml`（PEP 621），声明依赖 | ✅ | @Ba1_Ma0 | 2h | 0.2h | #P0.1-P0.5 | name=autopwn / deps 5 项 / entry_points autopwn=autopwn.cli:main |
-| P0.4 | `autopwn.py` 改为 shim，转发到 `autopwn.cli.main` | ✅ | @Ba1_Ma0 | 1h | 0.1h | #P0.1-P0.5 | 5 行 shim；monolith 移入 autopwn/_legacy.py（git mv 保留历史）|
-| P0.5 | 验证 `python autopwn.py -l Challenge/canary` 与重构前行为一致 | ✅ | @Ba1_Ma0 | 1h | 0.3h | #P0.1-P0.5 | 5 项：语法/import/`--help`×2 入口/canary 烟雾测试 全过 |
-| **P0.6** | **文档交叉引用**：`rebuild.md` §0 顶部加"必读 `AGENTS.md`"指引 | ✅ | @Ba1_Ma0 | 0.5h | 0.2h | #P0.6 | doc-only，与 P0.0 同步完成 |
-| **P0.7** | **验证基础设施**（Owner 决策 2026-06-07，临时需求 #2） | ✅ | @Ba1_Ma0 | 3h | 0.8h | #P0.7 | 27/28 关键标记一致（96%）；4/5 SUCCESS；race condition 已规避；见 §6.1 P0.7 |
-| **P0.8** | **重跑 v3.1 vs v4.0 严格对比**（用 P0.7 新方法论） | ✅ | @Ba1_Ma0 | 1h | 0.3h | #P0.8 | 4/5 SUCCESS；96% 关键标记一致；PASS 结论；logs/comparison/summary.md；见 §6.1 P0.8 |
+| **P0.0** | **全局重命名 `pwnpasi` → `autopwn`**（**临时需求 #1**） | ✅ | @Minzhi_Zhou | 3h | 0.5h | #P0.0 | 已完成；R12 Resolved；验证：banner/help/烟雾测试三关通过；详见 §6.1 P0.0 验证段 |
+| P0.1 | 新建 `autopwn/` 目录及子包目录（`core recon detect primitives exp report`） | ✅ | @Minzhi_Zhou | 1h | 0.2h | #P0.1-P0.5 | 8 个包目录 + 占位 __init__.py |
+| P0.2 | 写各包 `__init__.py`（含 `__all__` 占位） | ✅ | @Minzhi_Zhou | 1h | 0.1h | #P0.1-P0.5 | autopwn/__init__.py 带版本/作者/组织；re-export cli；子包标准 __all__ |
+| P0.3 | 写 `pyproject.toml`（PEP 621），声明依赖 | ✅ | @Minzhi_Zhou | 2h | 0.2h | #P0.1-P0.5 | name=autopwn / deps 5 项 / entry_points autopwn=autopwn.cli:main |
+| P0.4 | `autopwn.py` 改为 shim，转发到 `autopwn.cli.main` | ✅ | @Minzhi_Zhou | 1h | 0.1h | #P0.1-P0.5 | 5 行 shim；monolith 移入 autopwn/_legacy.py（git mv 保留历史）|
+| P0.5 | 验证 `python autopwn.py -l Challenge/canary` 与重构前行为一致 | ✅ | @Minzhi_Zhou | 1h | 0.3h | #P0.1-P0.5 | 5 项：语法/import/`--help`×2 入口/canary 烟雾测试 全过 |
+| **P0.6** | **文档交叉引用**：`rebuild.md` §0 顶部加"必读 `AGENTS.md`"指引 | ✅ | @Minzhi_Zhou | 0.5h | 0.2h | #P0.6 | doc-only，与 P0.0 同步完成 |
+| **P0.7** | **验证基础设施**（Owner 决策 2026-06-07，临时需求 #2） | ✅ | @Minzhi_Zhou | 3h | 0.8h | #P0.7 | 27/28 关键标记一致（96%）；4/5 SUCCESS；race condition 已规避；见 §6.1 P0.7 |
+| **P0.8** | **重跑 v3.1 vs v4.0 严格对比**（用 P0.7 新方法论） | ✅ | @Minzhi_Zhou | 1h | 0.3h | #P0.8 | 4/5 SUCCESS；96% 关键标记一致；PASS 结论；logs/comparison/summary.md；见 §6.1 P0.8 |
 
 ### 4.2 P1 — 基础设施层
 
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
-| P1.1 | `core/logging.py`：搬运 `Colors` + `print_*` | ✅ | @Ba1_Ma0 | 3h | 0.6h | #P1.1 | 搬 Colors/12 print_*/VERBOSE → autopwn/core/logging.py；_legacy.py re-export；set_verbose() setter 修 main() global 重绑定 bug；.gitignore core*→/core*；补 P0.1 漏 core/__init__.py；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（无回归）；铁律 4：✅ 合并 ✅ pytest N/A (P9) ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
-| P1.2 | `core/fs.py`：`set_permission` + `add_current_directory_prefix` + 临时目录 ctxmgr | ✅ | @Ba1_Ma0 | 2h | 0.5h | #P1.2 | 搬 set_permission（os.system→os.chmod 0o755）+ add_current_directory_prefix + temp_workdir ctxmgr；_legacy.py re-export；§2.6 验证 27/28=96% vs v3.1 baseline（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
-| P1.3 | `core/runner.py`：封装 `checksec` / `ropper` / `objdump` / `ldd`，输出走 `subprocess.run(capture_output=True)` | ✅ | @Ba1_Ma0 | 4h | 0.7h | #P1.3 | 建 4 个 run_* + ToolError；checksec/ropper 合并 stdout+stderr（pwntools/ropper 写 stderr），objdump/ldd 仅 stdout；本 PR 不替换 _legacy.py 调用点（留给 P1.5）；§2.6 验证 27/28=96% vs v3.1（用 90s timeout 吃下 canary 暴力枚举时序非确定性）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
-| **P1.3a** | **临时需求 #4 - 静态 binutils 套件**（**file / readelf / strings / nm**） | ✅ | @Ba1_Ma0 | 2h | 0.4h | #P1.3a | 加 run_file / run_readelf(*flags) / run_strings(min_len) / run_nm；返回 str；degrade gracefully（失败 → 空串）；§2.6 27/28=96% vs v3.1（无回归，本 PR 不替换 _legacy.py 调用点）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
-| **P1.3b** | **临时需求 #4 - ROP / 模式 套件**（**ROPgadget / cyclic / one_gadget**） | ✅ | @Ba1_Ma0 | 2h | 0.4h | #P1.3b | 加 run_ropgadget(*filters) / run_cyclic_create(length) / run_cyclic_find(pattern) / run_one_gadget(libc)；ROPgadget 不用 --nocolor（版本不支持）；cyclic 忽略 stderr DeprecationWarning；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
-| **P1.3c** | **临时需求 #4 - 动态 / sandbox 套件**（**strace / ltrace / seccomp-tools / gdb**） | ✅ | @Ba1_Ma0 | 3h | 0.5h | #P1.3c | 加 run_strace / run_ltrace / run_seccomp / run_gdb_batch；4 个都写 stderr（syscall/lib-call/seccomp-event/pwndbg 彩色），wrapper 用 stdout+stderr 合并 + `errors='replace'` 吃非 UTF-8；seccomp-tools 默认 dump；gdb `-batch -nx`；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
-| **P1.3d** | **临时需求 #4 - 跨架构模拟**（**qemu-system-x86 / i386 / aarch64**） | ✅ | @Ba1_Ma0 | 2h | 0.5h | #P1.3d | 加 run_qemu_user(arch, ...) + run_qemu_system(arch, ...) 两个 Popen 接口；user-mode（pwntools 风格，含 aarch64/arm/i386 等） + system-mode（仅 x86_64/i386 在本机可用；aarch64 需 `apt install qemu-system-arm` 额外装）；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
+| P1.1 | `core/logging.py`：搬运 `Colors` + `print_*` | ✅ | @Minzhi_Zhou | 3h | 0.6h | #P1.1 | 搬 Colors/12 print_*/VERBOSE → autopwn/core/logging.py；_legacy.py re-export；set_verbose() setter 修 main() global 重绑定 bug；.gitignore core*→/core*；补 P0.1 漏 core/__init__.py；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（无回归）；铁律 4：✅ 合并 ✅ pytest N/A (P9) ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
+| P1.2 | `core/fs.py`：`set_permission` + `add_current_directory_prefix` + 临时目录 ctxmgr | ✅ | @Minzhi_Zhou | 2h | 0.5h | #P1.2 | 搬 set_permission（os.system→os.chmod 0o755）+ add_current_directory_prefix + temp_workdir ctxmgr；_legacy.py re-export；§2.6 验证 27/28=96% vs v3.1 baseline（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
+| P1.3 | `core/runner.py`：封装 `checksec` / `ropper` / `objdump` / `ldd`，输出走 `subprocess.run(capture_output=True)` | ✅ | @Minzhi_Zhou | 4h | 0.7h | #P1.3 | 建 4 个 run_* + ToolError；checksec/ropper 合并 stdout+stderr（pwntools/ropper 写 stderr），objdump/ldd 仅 stdout；本 PR 不替换 _legacy.py 调用点（留给 P1.5）；§2.6 验证 27/28=96% vs v3.1（用 90s timeout 吃下 canary 暴力枚举时序非确定性）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
+| **P1.3a** | **临时需求 #4 - 静态 binutils 套件**（**file / readelf / strings / nm**） | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P1.3a | 加 run_file / run_readelf(*flags) / run_strings(min_len) / run_nm；返回 str；degrade gracefully（失败 → 空串）；§2.6 27/28=96% vs v3.1（无回归，本 PR 不替换 _legacy.py 调用点）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
+| **P1.3b** | **临时需求 #4 - ROP / 模式 套件**（**ROPgadget / cyclic / one_gadget**） | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P1.3b | 加 run_ropgadget(*filters) / run_cyclic_create(length) / run_cyclic_find(pattern) / run_one_gadget(libc)；ROPgadget 不用 --nocolor（版本不支持）；cyclic 忽略 stderr DeprecationWarning；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
+| **P1.3c** | **临时需求 #4 - 动态 / sandbox 套件**（**strace / ltrace / seccomp-tools / gdb**） | ✅ | @Minzhi_Zhou | 3h | 0.5h | #P1.3c | 加 run_strace / run_ltrace / run_seccomp / run_gdb_batch；4 个都写 stderr（syscall/lib-call/seccomp-event/pwndbg 彩色），wrapper 用 stdout+stderr 合并 + `errors='replace'` 吃非 UTF-8；seccomp-tools 默认 dump；gdb `-batch -nx`；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
+| **P1.3d** | **临时需求 #4 - 跨架构模拟**（**qemu-system-x86 / i386 / aarch64**） | ✅ | @Minzhi_Zhou | 2h | 0.5h | #P1.3d | 加 run_qemu_user(arch, ...) + run_qemu_system(arch, ...) 两个 Popen 接口；user-mode（pwntools 风格，含 aarch64/arm/i386 等） + system-mode（仅 x86_64/i386 在本机可用；aarch64 需 `apt install qemu-system-arm` 额外装）；§2.6 27/28=96% vs v3.1（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4 |
 | P1.4 | 替换 `autopwn.py` 中所有 `print_banner()` / `print_*` 调用为 `from autopwn.core.logging import ...` | ⏳ | — | 2h | — | — | |
 | P1.5 | 替换 `autopwn.py` 中所有 `os.system('ropper ... > ropper.txt')` 模式，调用 `runner.run_ropper` | ⏳ | — | 3h | — | — | |
 | P1.6 | 删除 `cleanup_core_files` 线程的硬编码 `os.system('rm -rf core*')`，改用 `core/fs.py` 中的回收函数 | ⏳ | — | 1h | — | — | |
@@ -254,7 +254,7 @@ P1 ───┘           ├── P3 ──┤
 
 ### 6.1 P0 — 改名 + 包骨架 + shim
 
-**🟢 状态**：✅ P0.0–P0.8 全完成（Owner 决策 2026-06-07）｜**🔴 优先级**：P0｜**⏱ 预估**：14.5h（实际 1.4h）｜**👤 Owner**：@Ba1_Ma0
+**🟢 状态**：✅ P0.0–P0.8 全完成（Owner 决策 2026-06-07）｜**🔴 优先级**：P0｜**⏱ 预估**：14.5h（实际 1.4h）｜**👤 Owner**：@Minzhi_Zhou
 
 **目标**：
 1. **P0.0**：全局重命名 `pwnpasi` → `autopwn`（临时需求 #1）
@@ -1575,6 +1575,7 @@ python -m venv /tmp/autopwn-test
 | ~~**R12**~~ | ~~P0.0 品牌变更决策未拍板~~ | ~~🟡 中~~ | ✅ **已 Resolved 2026-06-06**：`f4cknet/autopwn` / `qzdx_soc` / `4.0.dev0` / 方案 B | ✅ |
 | **R13** | v3.1 既有 race condition（`Information_Collection.txt` 并发写） | 🟡 中 | 已发现：v3.1 simulation 暴露；P0.7 串行 runner 规避；P1 `core/fs.py` 用 `tempfile.TemporaryDirectory` 根治 | ⏳ |
 | **R14** | **临时需求 #4：runner 工具集扩展接口漂移** | 🟡 中 | P1.3a/b/c/d 共加 11+ 工具，每个签名/错误处理/输出格式需遵守 `refactor.md §4.2` 范式；Reviewer 必查：①签名是否最小化 ②失败是否降级（返回空串/空 Path/不抛）③stdin/stdout/stderr 策略是否统一；**缓解**：每个工具独立函数 + byte-level 对比 + §2.6 5-binary 重跑回归；P1.3 已有 4 个工具作为范式基线 | ⏳ |
+| **R15** | **Owner handle 变更（@Ba1_Ma0 → @Minzhi_Zhou）治理影响** | 🟢 低 | 两层身份混淆风险：当前 Owner = `@Minzhi_Zhou`（治理）vs pwnpasi 原作者 = `@Ba1_Ma0`（MIT 致谢）；**保留**（非 Owner 引用，**法律 / 历史原因**）：① `LICENSE:3`（MIT 协议要求保留原 copyright 声明；本 PR 第一次误改，已 revert）② `README.md:185`（MIT 致谢段）③ `refactor.md:265`（B-001 决策记录）④ `rebuild.md:286,294,408`（B-001 决策记录）；**变更**（Owner 引用）：`AGENTS.md` 签字栏 / 3 行 changelog / `rebuild.md` §4.2 16 行 O 列 / `rebuild.md` §6.1 决策行 / `tools/verify_v31_v40.py` header / `logs/comparison/summary.md` Owner 行（~50 处全替换）；**不可改**：git 历史 9+ commit 的 author name（违反 git 不可篡改）；git config 已切到 `MinZhi_Zhou <zmzsg100@gmail.com>`，未来 commit 不会再带 `Ba1_Ma0` 名字。**未来若需法律意义上的新 copyright line**（如 "Modifications copyright (c) 2026 Minzhi_Zhou"），可单独提 PR | ⏳ |
 
 > 新增风险请在 PR 中 append 一行；每周例会同 Owner 评估。
 

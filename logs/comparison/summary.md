@@ -3,7 +3,7 @@
 > **生成时间**: 2026-06-07 03:22:02 UTC
 > **方法论**: 串行 runner（scripts/run_verify.sh）+ 60s/binary timeout
 > **目的**: 验证 P0.0 全局改名（pwnpasi -> autopwn）+ P0.7 验证基础设施 引入的 v4.0 与 v3.1 行为一致性
-> **Owner**: @Ba1_Ma0
+> **Owner**: @Minzhi_Zhou
 > **Ref**: rebuild.md §6.1 P0.8
 
 ## 1. 数据来源

@@ -179,7 +179,7 @@
 | **P3.3** | `report/code.py`：搬运 `generate_exploitation_code`；改为读 `ExploitInfo` | ✅ | @Minzhi_Zhou | 3h | 0.6h | #P3.3 | 新建 `autopwn/report/code.py`（187 行）`generate_code(info, out_dir) -> str`；`_legacy.py` 删 `generate_exploitation_code`（-135 行）；**`docx.py` import 切换**：从 `autopwn._legacy` 切到 `autopwn.report.code`（P3.2 留的临时 import 清理）；**`out_dir` 参数 forward-compat**：P3.3 不写文件（保持 legacy 行为——只返回 code 字符串），但 P3.4/P3.5 可用 `out_dir` 写 `{target}_wp.py` artifact；20 个 `exploit_info['x']` 读点全部改 `info.x`；**f-string 模板 byte-for-byte 保留**（7 种 exploit type 全部产生与 legacy 一致输出：ret2system x64/x32, ret2libc write x64/x32, Format String, execve syscall, generic fallback）；`_legacy.py` 净 -136 行（3590→3454）；12 项功能单测全过（re-export/签名/5 主流 exploit type 全部分支/format string 走 addresses.get('offset', ...)/generic fallback 含 repr(bytes)/empty addresses 跳段/target_name basename 提取 4 种 address 格式化）；§2.6 验证 4/5 SUCCESS + 27/28=96% 一致 vs v3.1 baseline（**无回归**）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4.4 |
 | P3.4 | `handle_exploitation_success` 改为 `record_success(ctx, info, primitive)`，生成 docx/code 改为订阅 | ⏳ | — | 2h | — | — | |
 | P3.5 | CLI 加 `--no-report` / `--report-dir` 参数 | ⏳ | — | 1h | — | — | |
-| P3.6 | docx 依赖 `python-docx` 改为 `try/except ImportError` 降级为 markdown | ⏳ | — | 1h | — | — | |
+| **P3.6** | docx 依赖 `python-docx` 改为 `try/except ImportError` 降级为 markdown | ✅ | @Minzhi_Zhou | 1h | 0.3h | #P3.6 | `report/docx.py` 加模块级 `try/except ImportError` 包装 `from docx import Document / WD_ALIGN_PARAGRAPH`；`_HAS_DOCX = True/False` 标志位；新加 `_generate_markdown(info, out_dir) -> Path` fallback 函数（覆盖 docx 5 段：Basic Info / BOF Info / Address table / Code / Summary + footer + Note）；`generate_docx` 入口 dispatch：`_HAS_DOCX=False` 时调 markdown fallback 并改 print 消息为 "Exploitation report generated (markdown fallback): ..."；**1 处有意偏离**：`try/except ImportError` 放模块顶层（spec 在 caller 端 catch）—— 因为 module-level import 失败在 import 期而非 call 期，caller 端 catch 永远不触发；模块顶层 try/except + `_HAS_DOCX` flag 是正确实现 spec 意图的方案；8 项功能单测全过（_HAS_DOCX 标志位/re-export/docx 路径正常/md 路径 5 段齐全/4 种 address 格式化/empty addresses 跳段/真 docx 缺失用 meta_path blocker 验证/无 cwd 污染）；§2.6 验证 4/5 SUCCESS + 27/28=96% 一致 vs v3.1 baseline（**无回归**——本机 python-docx 已装，走 docx 路径）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4.4, refactor.md#10 |
 
 ### 4.5 P4 — Recon 层
 
@@ -1671,6 +1671,70 @@ def generate_code(info: ExploitInfo, out_dir: Path) -> str:
 - **f-string 模板 byte-for-byte 保留**：5 主流 exploit type 输出与 v3.1 完全一致（_legacy 删 135 行无 regression 即证）
 - **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
 - **commit 引用**：`ded551a`（P3.3）— `5d2fe36` (P3.2 docs) → `ded551a` (P3.3)
+
+---
+
+**P3.6 详细步骤**（`report/docx.py` markdown fallback）：
+
+依据 `refactor.md §4.4 P3.6` + `rebuild.md §6.4` spec + `refactor.md §10`，把 `python-docx` import 改为模块级 `try/except ImportError`，docx 缺失时降级为 markdown report：
+
+```python
+# autopwn/report/docx.py
+try:
+    from docx import Document
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    _HAS_DOCX = True
+except ImportError:
+    Document = None
+    WD_ALIGN_PARAGRAPH = None
+    _HAS_DOCX = False
+
+def _generate_markdown(info, out_dir):
+    """Write {target}_wp.md with same 5 sections as docx + footer."""
+    # ... 5 sections + footer + "Note" about fallback ...
+    return report_path
+
+def generate_docx(info, out_dir):
+    if not _HAS_DOCX:
+        return _generate_markdown(info, out_dir)  # P3.6 dispatch
+    # ... 原有 docx body ...
+```
+
+**1 处有意偏离 spec**：
+
+- spec 把 `try/except ImportError` 放 caller 端（`record_success`）
+- **实际放模块顶层** + `_HAS_DOCX` flag
+
+原因：module-level import 失败在 import 期（`autopwn.report.docx` 被加载时），不是 call 期。caller 端的 `except ImportError` 永远捕获不到（ImportError 在 caller 自身 import 时就抛了）。模块顶层 try/except + flag dispatch 是实现 spec 意图（"docx 缺失时降级为 markdown"）的正确位置。已在 docx.py 顶部 docstring 详述。
+
+**P3.6 实施记录（2026-06-07）**：
+
+- **修改** `autopwn/report/docx.py`（216 → 311 行，净 +95）：
+  - 3 import 改为模块顶层 `try/except ImportError` + `_HAS_DOCX` flag
+  - 新加 `_generate_markdown(info, out_dir) -> Path`（5 段 + footer + Note，~80 行）
+  - `generate_docx` 入口加 dispatch：`_HAS_DOCX=False` 调 markdown fallback 并改 print 消息加 "(markdown fallback)" 后缀
+  - 函数内 lazy import 移除（已升模块级）
+- **未改其他文件**（docx.py 是唯一改动点）
+- **8 项功能单测**（手测，pytest 体系待 P9）全过：
+  1. `_HAS_DOCX = True`（本机 python-docx 已装）
+  2. `generate_docx` re-export 自 `report`
+  3. docx 路径正常（37472B → 37585B 微变是 timestamp 字段）
+  4. md fallback monkey-patch 验证：含 9 个 section 标记（5 段 + footer 2 + Note）
+  5. md fallback 4 种 address 格式化（int / str_int / str_hex / garbage）
+  6. md fallback 跳 empty addresses + empty payload 段
+  7. **真 docx 缺失**：`sys.meta_path` 插入 `_Blocker` raise ImportError → 重新 import → `_HAS_DOCX=False` → 走 md fallback 路径成功
+  8. md fallback 零 cwd 污染
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL + 4/5 PASS（**无回归**——本机有 docx，走 docx 路径）
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.4 + §6.4 同步
+  - 详见 `logs/comparison/summary.md`
+- **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
+- **P3.4 衔接**：`generate_docx` 已可被 caller 安全 dispatch（无论 docx 是否可用，函数都返回 Path or None，错误降级为 markdown）
+- **commit 引用**：（待回填）
 
 ---
 

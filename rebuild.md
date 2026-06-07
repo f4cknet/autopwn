@@ -1908,7 +1908,7 @@ set_current_ctx(ctx)  # P3.5: stash ctx for record_success
 - **"EXPLOITATION SUCCESSFUL!" banner byte-for-byte 不变**
 - **Exploitation report generated 行不变**（走 docx 路径 + cwd 时与 v3.1 一致）
 - **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
-- **commit 引用**：（待回填）
+- **commit 引用**：`8664759`（P3.5）— `f94c4cd` (P3.4 docs) → `8664759` (P3.5)
 
 ---
 

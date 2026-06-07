@@ -186,7 +186,7 @@
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
 | P4.1 | `recon/checksec.py`：搬运 `Information_Collection` + `collect_binary_info` + `display_binary_info`；返回 `BinaryInfo` | ✅ | @Minzhi_Zhou | 4h | 0.6h | #P4.1 | 新加 `autopwn/recon/checksec.py`（177 行）+ `recon/__init__.py` re-export；3 个函数：`collect(program) -> BinaryInfo`（pure，§6.5 P4.1 spec 改 1 处：DEV-1 `stripped` 改 regex 否则 "Stripped" in out 误判 label vs value）+ `display(info)` 表格打印 + `_legacy_information_collection(program)`（v3.1 死代码 `Information_Collection` 的字面 port，0 caller，underscore 前缀）；**未替换 `_legacy.py` 调用点**（P8 orchestrator 责任）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；35 字段 + 5 视觉 + 5 边缘测试 + 5 legacy port 测试全过；详见 §6.5 P4.1 实施记录 |
-| P4.2 | `recon/libc.py`：合并 `detect_libc` + `ldd_libc` 为 `detect(ctx) → LibcInfo` | ⏳ | — | 2h | — | — | |
+| P4.2 | `recon/libc.py`：合并 `detect_libc` + `ldd_libc` 为 `detect(ctx) → LibcInfo` | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P4.2 | 新加 `autopwn/recon/libc.py`（209 行）+ `recon/__init__.py` re-export `detect`；1 个 public 函数 `detect(ctx, program) -> LibcInfo`（pure，3 阶段：user override (`ctx.libc.path`) → ldd auto-detect → empty LibcInfo）+ 1 个 helper `_parse_libc_path(ldd_out)` + 2 个 legacy port (`_legacy_detect_libc` / `_legacy_ldd_libc`，0 caller / 1 caller，含原 print 行为供字节级保真)；`LibcInfo.elf` 维持 `None`（懒加载 — P7 strategy 才 `ELF(libc_path)`，避免 pwntools 在 recon 期 import）；**未替换 `_legacy.py` 调用点**（P8 orchestrator 责任）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × detect() + 1 user-override + 1 empty-LibcInfo + 6 _parse_libc_path edge case + 3 legacy port = 16 测试全过；详见 §6.5 P4.2 实施记录 |
 | P4.3 | `recon/plt.py`：`scan_plt_functions` 返回 dict，写入 `ctx.has_*` 标志 | ⏳ | — | 3h | — | — | |
 | P4.4 | `recon/rop.py`：搬 `find_rop_gadgets_x64/x32`，返回 `RopGadgetsX64/X32` | ⏳ | — | 4h | — | — | |
 | P4.5 | `recon/bss.py`：搬 `find_large_bss_symbols` + `find_ftmstr_bss_symbols` | ⏳ | — | 2h | — | — | |
@@ -2019,6 +2019,72 @@ grep -n "globals().get(" autopwn.py
   - P8 orchestrator 整合 `recon/checksec.collect` + `recon/libc.detect` + ... 进 `run_recon_phase(ctx)`，并把 5 个新模块的返回值灌进 `ctx.binary` / `ctx.libc` / `ctx.has_*` / `ctx.gadgets_*` 字段
 
 **Refs**: refactor.md §3.2.1（BinaryInfo spec）/ refactor.md §5（79 函数 → 新位置映射表）
+
+---
+
+**P4.2 实施记录（2026-06-07）**：
+
+- **新文件** `autopwn/recon/libc.py`（209 行）：1 public + 1 helper + 2 legacy ports
+  - `detect(ctx, program) -> LibcInfo` — **pure**（无 print / 无 globals / 无 IO 除了 1 次 `run_ldd`）；3 阶段 resolution：①user override（`ctx.libc.path`，匹配 main() L3111-3116）②ldd auto-detect（`run_ldd` + 解析，匹配 main() L3117-3119 + `detect_libc` L142-150）③empty `LibcInfo()`
+  - `_parse_libc_path(ldd_out: str) -> Optional[str]` — 私有 helper，提取 `libc.so.6 => /path` 字段；6 边缘 case（normal / x86_64 / static / empty / no-libc / libc++.so.6 false positive）全处理
+  - `_legacy_detect_libc(program) -> Optional[str]` — v3.1 `detect_libc` 字面 port（L132-158），**保 v3.1 print 行为**：P0.7 §2.6.1 `print_debug` 关键节点 + `print_info` "detecting libc path automatically" + `print_success` "libc path detected: …" + `print_warning` "libc path not found in ldd output" + `print_error` "failed to detect libc: …"
+  - `_legacy_ldd_libc(program) -> Optional[str]` — v3.1 `ldd_libc` 字面 port（L160-182）；**保原代码结构**（用 `subprocess.run` 直接，不走 `core.runner.run_ldd`）— 这样 git-archaeology 时 diff 与原一致
+
+- **修改** `autopwn/recon/__init__.py`（22 → 33 行）：re-export `detect` + 更新 `__all__` + 顶部 docstring 增 P4.2 status
+
+- **设计决策**：
+  - **`LibcInfo.elf` 维持 `None`**：v3.1 在 `ret2libc_write_x64` L906-908 懒加载 `ELF(libc_path)`；新模块不引入 pwntools 依赖到 recon 期，P7 strategy 才需要时再 `ctx.libc.elf = ELF(str(ctx.libc.path))`
+  - **`detect()` 是 pure**（与 P4.1 `collect()` 范式一致）：不打印 user-facing 消息，user-facing 输出由 P8 orchestrator 控制；§2.6.1 关键节点 `print_debug` 在 `_legacy_detect_libc`（仍是生产路径）保留
+  - **签名 `detect(ctx, program)` 而非 spec 字面 `detect(ctx)`**：refactor.md §5 明文要求 `(ctx, program)`；`program` 显式参数让函数自包含（不依赖 `ctx.binary.path` 是否被 P4.1 overwrite 之前/之后调用）
+
+- **零行为变更**：`_legacy.py` 一字未动（3469 行未变）；main() 仍走 `_legacy.detect_libc`；新模块是**并行、可单元测试**实现
+
+- **16 项功能单测**（手测，pytest 体系待 P9）全过：
+  1. 5 binary × `detect()` 解析为 5 个预期路径（canary/fmtstr1→`/lib32/libc.so.6`；level3_x64/pie/rip→`/lib/x86_64-linux-gnu/libc.so.6`）
+  2. `info.path` 是 `Path` 类型
+  3. `info.elf` 是 `None`（懒加载契约）
+  4. `info.base == 0`（P7 才会 set）
+  5. `LibcInfo` slots 强制（`info.foo = 'bar'` → `AttributeError`）
+  6. user override（`ctx.libc.path = /some/custom`）不被 auto-detect 覆盖
+  7. mock `run_ldd` 返回空 → `detect()` 返回空 `LibcInfo`（path=None）
+  8. `_parse_libc_path` 6 edge case（normal / x86_64 / static-linked / empty / no-libc-substring / libc++.so.6 false positive）
+  9. `_legacy_detect_libc` 返回正确路径（canary → `/lib32/libc.so.6`）
+  10. `_legacy_ldd_libc` 返回正确路径（canary → `/lib32/libc.so.6`）
+  11. `_legacy_detect_libc` 对不存在文件返回 `None`（走 `print_warning` 分支）
+  12. `from autopwn.recon import detect` re-export 路径有效
+  13. `_legacy_*` 不在 `__all__`（underscore-prefix 私有性）
+  14. cwd 零污染（无 `libc_path.txt` 落盘）
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（90s 截断预期） + fmtstr1/level3_x64/pie/rip 全部 PASS（**4/5 SUCCESS，与 v3.1 baseline 持平**）
+  - 关 4：关键日志对比 vs v3.1 baseline — **27/28 = 96% 一致**（**无回归**）
+  - 关 5：Reviewer — Owner 自审（§2.2 单人项目）
+  - 关 6：文档同步 — `rebuild.md` §4.5 + §6.5 同步
+  - 详见 `logs/comparison/summary.md`（P4.2 重新生成）
+  - **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
+
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，与 P0.7–P4.1 同类，**非功能差异**）
+
+- **修复 P4.1 铁律 1 偏差**：P4.1 commit `f3bbf0c` 误删了 `### 6.6 P5 — Detect 层` section header（仅 P5 主体内容保留；git diff 验证 —line 模式确认被删）。P4.2 PR 恢复该 header，并增 P4.2 实施记录。属于 L1 轻微违规（§3.1 违规与升级表「PR 标题未引用任务 ID」/「任务粒度超 400 行」同行 — 文档漏更新但任务已合并；本 PR 同任务补偿修复）
+
+- **与 P4.7 globals() 清理的关系**：P4.2 **不**触碰 `globals()`（libc 检测路径本就不依赖 globals）；P4.7 仍只需删 PLT/ROP 路径的 22 处
+
+- **后续步骤**：
+  - P4.3（plt）扫描 PLT 函数 → 写 `ctx.has_system/has_puts/has_write/has_printf/has_backdoor/has_callsystem` 6 个 bool
+  - P4.4（rop）找 ROP gadgets → 写 `ctx.gadgets_x64: RopGadgetsX64` 或 `ctx.gadgets_x32: RopGadgetsX32`
+  - P4.5（bss）找大 BSS 段（fmtstr shellcode 存储） → 写 `ctx.fmtstr_buf`
+  - P4.6（asm）静态分析 vuln func + 栈帧 padding 调整
+  - P4.7 删 22 处 `globals().get(...)` 改读 `ctx.has_*`（R1 风险点）
+  - P4.8 删 `set_function_flags` 副作用
+  - P8 orchestrator 整合 5 个 P4.x 模块 + 5 个 P5.x detect 模块进 `run_recon_phase(ctx)` / `run_detect_phase(ctx)`
+
+**Refs**: refactor.md §3.2.1（LibcInfo spec）/ refactor.md §5（79 函数 → 新位置映射表）
+
+---
+
+### 6.6 P5 — Detect 层
 
 **🟢 状态**：⏳ Pending｜**🟡 优先级**：P1｜**⏱ 预估**：15h
 

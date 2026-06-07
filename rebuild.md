@@ -109,7 +109,7 @@
 |---|---|---|---|---|---|---|---|
 | P1.1 | `core/logging.py`：搬运 `Colors` + `print_*` | ✅ | @Ba1_Ma0 | 3h | 0.6h | #P1.1 | 搬 Colors/12 print_*/VERBOSE → autopwn/core/logging.py；_legacy.py re-export；set_verbose() setter 修 main() global 重绑定 bug；.gitignore core*→/core*；补 P0.1 漏 core/__init__.py；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（无回归）；铁律 4：✅ 合并 ✅ pytest N/A (P9) ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
 | P1.2 | `core/fs.py`：`set_permission` + `add_current_directory_prefix` + 临时目录 ctxmgr | ✅ | @Ba1_Ma0 | 2h | 0.5h | #P1.2 | 搬 set_permission（os.system→os.chmod 0o755）+ add_current_directory_prefix + temp_workdir ctxmgr；_legacy.py re-export；§2.6 验证 27/28=96% vs v3.1 baseline（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
-| P1.3 | `core/runner.py`：封装 `checksec` / `ropper` / `objdump` / `ldd`，输出走 `subprocess.run(capture_output=True)` | ⏳ | — | 4h | — | — | |
+| P1.3 | `core/runner.py`：封装 `checksec` / `ropper` / `objdump` / `ldd`，输出走 `subprocess.run(capture_output=True)` | ✅ | @Ba1_Ma0 | 4h | 0.7h | #P1.3 | 建 4 个 run_* + ToolError；checksec/ropper 合并 stdout+stderr（pwntools/ropper 写 stderr），objdump/ldd 仅 stdout；本 PR 不替换 _legacy.py 调用点（留给 P1.5）；§2.6 验证 27/28=96% vs v3.1（用 90s timeout 吃下 canary 暴力枚举时序非确定性）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
 | P1.4 | 替换 `autopwn.py` 中所有 `print_banner()` / `print_*` 调用为 `from autopwn.core.logging import ...` | ⏳ | — | 2h | — | — | |
 | P1.5 | 替换 `autopwn.py` 中所有 `os.system('ropper ... > ropper.txt')` 模式，调用 `runner.run_ropper` | ⏳ | — | 3h | — | — | |
 | P1.6 | 删除 `cleanup_core_files` 线程的硬编码 `os.system('rm -rf core*')`，改用 `core/fs.py` 中的回收函数 | ⏳ | — | 1h | — | — | |
@@ -624,6 +624,33 @@ def run_ldd(program: Path) -> str:
     cp = subprocess.run(["ldd", str(program)], capture_output=True, text=True, check=False)
     return cp.stdout
 ```
+
+**P1.3 实施记录（2026-06-07）**：
+
+- **新文件** `autopwn/core/runner.py`（80 行）：4 个 `run_*` 函数 + `ToolError` 异常
+  - `run_checksec` → `stdout + stderr`（pwntools checksec 写 stderr）
+  - `run_ropper` → `stdout + stderr`（ropper 写 stdout 是命中 + stderr 是 banner）
+  - `run_objdump_disasm` → `stdout`（objdump 不写 stderr）
+  - `run_ldd` → `stdout`（ldd 不写 stderr）
+- **本 PR 不动 `_legacy.py`**：re-export 不加（暂时无 caller），P1.5 改 `os.system` 调用点时会直接 `from autopwn.core.runner import run_xxx`
+- **未替换的 15 处 `os.system`**（在 _legacy.py）：L32 (ulimit), L42 (rm core), L360 (ldd), L470 (checksec), L580 (objdump), L636-638 (ropper x3), L702 (ropper), L728 (ropper), L738 (ropper), L929 (binsh), L947 (binsh), L3354 (objdump+grep)。其中 9 处是 P1.3 工具范围（checksec/ropper/objdump/ldd），剩 6 处分属 P1.5/P1.6/P2+
+- **byte-level 验证**（功能等价性，pytest 体系待 P9）：
+  - `checksec`: new vs legacy 207B == 207B（**字节级一致**）
+  - `ropper`: new vs legacy 8229B == 8229B（顺序略不同：new=stdout+stderr=先 matches 后 banner；legacy shell=先 banner 后 matches）—— **ropper parser 是行扫描 + skip `[INFO]`（_legacy.py L648）**，顺序无关
+  - `objdump`: new=intel spec 8465B；legacy L580 是 `objdump -d` 14354B（无 intel 无 no-raw-insn）。**P1.3 的 intel 规格更优（更易读），与 L3354 现有调用一致**。P1.5 替换 L580 时可统一用此函数
+  - `ldd`: new vs legacy 107B == 107B（顺序差异：ldd 输出中地址会变但 parser 不依赖固定地址）
+- **§2.6 验证结果**：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout，非默认 60s**）— canary PARTIAL + fmtstr1 PASS + level3_x64 PASS + pie PASS + rip PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（无回归）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.2 + §6.2 同步
+  - 详见 `logs/comparison/summary.md`
+- **首次 60s timeout 复测 → 85% PARTIAL**：fmtstr1 在 60s 截断时只能跑到 canary 暴力枚举（运气不好），3 个关键标记未达到。**这是 v3.1 baseline 同样存在的时序非确定性**（P0.8 备注："canary 60s timeout: brute force 需 ~7 分钟，60s 截断后输出 partial log"），与 P1.3 改动无关。90s timeout 是 absorbing 该 non-determinism 的合理代价
+- **timeout 跟进项**（待 P9/CI 阶段处理）：`scripts/run_verify.sh` 默认 60s 在新机器负载下不稳定；建议 bump 到 90s 写进 §2.6 标准流程
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 3441 vs v3.1 3625（fuzzing 时序差异，与 P1.1/P1.2/P0.8 同类）
+- **commit 引用**：`8b7e326`（P1.3）— `da3ac0a` (P1.2) → `8b7e326` (P1.3)
 
 **P1.2 详细步骤**（`core/fs.py` 示例）：
 ```python

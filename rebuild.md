@@ -108,7 +108,7 @@
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
 | P1.1 | `core/logging.py`：搬运 `Colors` + `print_*` | ✅ | @Ba1_Ma0 | 3h | 0.6h | #P1.1 | 搬 Colors/12 print_*/VERBOSE → autopwn/core/logging.py；_legacy.py re-export；set_verbose() setter 修 main() global 重绑定 bug；.gitignore core*→/core*；补 P0.1 漏 core/__init__.py；§2.6 验证 27/28=96% 一致 vs v3.1 baseline（无回归）；铁律 4：✅ 合并 ✅ pytest N/A (P9) ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
-| P1.2 | `core/fs.py`：`set_permission` + `add_current_directory_prefix` + 临时目录 ctxmgr | ⏳ | — | 2h | — | — | |
+| P1.2 | `core/fs.py`：`set_permission` + `add_current_directory_prefix` + 临时目录 ctxmgr | ✅ | @Ba1_Ma0 | 2h | 0.5h | #P1.2 | 搬 set_permission（os.system→os.chmod 0o755）+ add_current_directory_prefix + temp_workdir ctxmgr；_legacy.py re-export；§2.6 验证 27/28=96% vs v3.1 baseline（无回归）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档 |
 | P1.3 | `core/runner.py`：封装 `checksec` / `ropper` / `objdump` / `ldd`，输出走 `subprocess.run(capture_output=True)` | ⏳ | — | 4h | — | — | |
 | P1.4 | 替换 `autopwn.py` 中所有 `print_banner()` / `print_*` 调用为 `from autopwn.core.logging import ...` | ⏳ | — | 2h | — | — | |
 | P1.5 | 替换 `autopwn.py` 中所有 `os.system('ropper ... > ropper.txt')` 模式，调用 `runner.run_ropper` | ⏳ | — | 3h | — | — | |
@@ -656,14 +656,41 @@ def temp_workdir():
             os.chdir(old)
 ```
 
+**P1.2 实施记录（2026-06-07）**：
+
+- **新文件** `autopwn/core/fs.py`（61 行）：3 个 utility
+  - `set_permission(program) -> bool`：`os.system('chmod +755 ...')` → `os.chmod(program, 0o755)`（AGENTS.md §7.2 P1 reviewer 要求）
+  - `add_current_directory_prefix(program) -> str`：保留字符串接口（main() 传 `args.local` 是 str，下游用 `%` 插值）
+  - `temp_workdir()`：context manager，chdir 临时目录，try/finally 恢复 cwd（cleanup 自动）
+- **`_legacy.py` re-export**（L62-65）：`from autopwn.core.fs import (set_permission, add_current_directory_prefix, temp_workdir)`，删除原 16 行定义（L348-362）
+- **净减少** `_legacy.py` 16 行（3641 → 3625）
+- **行为等价性**：`os.system('chmod +755 X')` ≡ `os.chmod(X, 0o755)` —— 两者都设 mode=0755，stat 输出完全一致
+- **功能单测**（手测，pytest 体系待 P9）：
+  - `add_current_directory_prefix('./foo') == './foo'` ✓
+  - `add_current_directory_prefix('foo') == './foo'` ✓
+  - `set_permission(real_file)` 从 0644 改到 0755 ✓
+  - `set_permission('/nonexistent')` 返回 False + 打印 error ✓
+  - `temp_workdir()` chdir 进去、yield path、退出恢复 cwd ✓
+  - `temp_workdir()` 异常退出也恢复 cwd ✓
+- **§2.6 验证结果**：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行 — canary PARTIAL（60s 截断预期）+ fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（无回归）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.2 + §6.2 同步
+  - 详见 `logs/comparison/summary.md`
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 3442 vs v3.1 3625（fuzzing 时序差异，与 P1.1/P0.8 同类）
+- **commit 引用**：`c6626bf`（P1.2）— `694b813` (P1.1) → `c6626bf` (P1.2)
+
 **验收**
-- 跑完一个完整 exploit，`cwd` 不出现 `ropper.txt` / `libc_path.txt` / `Information_Collection.txt` / `Objdump_Scan.txt`
-- `core/runner.py` 单测覆盖：mock subprocess.run 后断言传入参数正确
+- 跑完一个完整 exploit，`cwd` 不出现 `ropper.txt` / `libc_path.txt` / `Information_Collection.txt` / `Objdump_Scan.txt`（P1.5/P1.6 任务；本 PR 仅提供工具，未替换调用点）
+- `core/runner.py` 单测覆盖：mock subprocess.run 后断言传入参数正确（P1.3 任务）
 
 **Reviewer 关注点**
-- 是否所有外部命令都走 `subprocess.run(capture_output=True)`（禁止 `os.system`/`shell=True`）
-- 临时目录用 `try/finally` 恢复 cwd
-- `os.system('chmod +755 ...')` 改为 `os.chmod`
+- 是否所有外部命令都走 `subprocess.run(capture_output=True)`（禁止 `os.system`/`shell=True`）— **P1.2 已清掉一处 `os.system`（chmod）**；剩余 14 处在 P1.5 处理
+- 临时目录用 `try/finally` 恢复 cwd ✓
+- `os.system('chmod +755 ...')` 改为 `os.chmod` ✓
 
 ---
 

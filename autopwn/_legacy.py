@@ -58,6 +58,11 @@ from autopwn.core.logging import (  # noqa: F401, E402
     print_table_header, print_table_row,
 )
 
+# File system utilities (P1.2: moved to autopwn.core.fs, re-exported for backward compat)
+from autopwn.core.fs import (  # noqa: F401, E402
+    set_permission, add_current_directory_prefix, temp_workdir,
+)
+
 # Global variables for exploit information
 exploit_info = {
     'target_binary': '',
@@ -344,22 +349,6 @@ def handle_exploitation_success(exploit_type, payload, padding, addresses, vulne
     
     # Generate DOCX report
     generate_docx_report()
-
-def set_permission(program):
-    """Set executable permissions for the program."""
-    print_debug(f"chmod +x {program}")
-    try:
-        os.system(f"chmod +755 {program}")
-        return True
-    except Exception as e:
-        print_error(f"Failed to set permissions: {e}")
-        return False
-
-def add_current_directory_prefix(program):
-    """Add ./ prefix if not present"""
-    if not program.startswith('./'):
-        program = os.path.join('.', program)
-    return program
 
 def detect_libc(program):
     """Detect libc path automatically."""

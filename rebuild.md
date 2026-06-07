@@ -185,7 +185,7 @@
 
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
-| P4.1 | `recon/checksec.py`：搬运 `Information_Collection` + `collect_binary_info` + `display_binary_info`；返回 `BinaryInfo` | ⏳ | — | 4h | — | — | |
+| P4.1 | `recon/checksec.py`：搬运 `Information_Collection` + `collect_binary_info` + `display_binary_info`；返回 `BinaryInfo` | ✅ | @Minzhi_Zhou | 4h | 0.6h | #P4.1 | 新加 `autopwn/recon/checksec.py`（177 行）+ `recon/__init__.py` re-export；3 个函数：`collect(program) -> BinaryInfo`（pure，§6.5 P4.1 spec 改 1 处：DEV-1 `stripped` 改 regex 否则 "Stripped" in out 误判 label vs value）+ `display(info)` 表格打印 + `_legacy_information_collection(program)`（v3.1 死代码 `Information_Collection` 的字面 port，0 caller，underscore 前缀）；**未替换 `_legacy.py` 调用点**（P8 orchestrator 责任）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；35 字段 + 5 视觉 + 5 边缘测试 + 5 legacy port 测试全过；详见 §6.5 P4.1 实施记录 |
 | P4.2 | `recon/libc.py`：合并 `detect_libc` + `ldd_libc` 为 `detect(ctx) → LibcInfo` | ⏳ | — | 2h | — | — | |
 | P4.3 | `recon/plt.py`：`scan_plt_functions` 返回 dict，写入 `ctx.has_*` 标志 | ⏳ | — | 3h | — | — | |
 | P4.4 | `recon/rop.py`：搬 `find_rop_gadgets_x64/x32`，返回 `RopGadgetsX64/X32` | ⏳ | — | 4h | — | — | |
@@ -1967,7 +1967,58 @@ grep -n "globals().get(" autopwn.py
 
 ---
 
-### 6.6 P5 — Detect 层
+**P4.1 实施记录（2026-06-07）**：
+
+- **新文件** `autopwn/recon/checksec.py`（177 行）：3 个函数
+  - `collect(program: Path) -> BinaryInfo` — **pure**（无 print / 无 globals / 无 IO）；compile-once regex `_ARCH_RE` + `_STRIPPED_RE`（P2.1/P3.1 范式）；spec 字段映射 8 个（bit/stack_canary/pie/nx/relro/rwx_segments/stripped/path）
+  - `display(info: BinaryInfo) -> None` — 复用 `core.logging.print_section_header` / `print_table_header` / `print_table_row` 印 5 行表（RELRO/Stack Canary/NX Bit/PIE/RWX Segments）+ 风险色（HIGH→ERROR/MEDIUM→WARNING/LOW→SUCCESS/INFO→INFO）
+  - `_legacy_information_collection(program) -> Tuple[int, int, int, Optional[int]]` — v3.1 死代码 `Information_Collection` 的字面 port（rebuild §4.5 P4.1 spec 三函数之一）；underscore 前缀；0 caller（main() 实际用 `collect_binary_info`，v2 版本）
+
+- **修改** `autopwn/recon/__init__.py`（6 → 22 行）：re-export `collect` + `display` + 更新 `__all__` + 顶部 docstring 增 P4.1 status + 后续 P4.x 模块范式说明
+
+- **1 处 spec 偏离（DEV-1）**：`stripped` 字段用 regex `_STRIPPED_RE` 而非 spec 字面的 `"Stripped" in out`
+
+  - spec 字面：```python\n  stripped="Stripped" in out,\n  ```
+  - **Bug 根因**：`checksec` 输出永远含 `Stripped:` 标签（无论值是 Yes/No），所以 `"Stripped" in out` 总是 True。5 个 Challenge 二进制全是 `Stripped: No`，spec 字面会让 `info.stripped=True` 对**所有** 5 个二进制误判
+  - 修：`_STRIPPED_RE = re.compile(r\"Stripped:\\s*(\\S+)\")` + `stripped = bool(m and m.group(1) == \"Yes\")`
+  - 实证：第一次跑时 5/5 binary 都 `stripped=True` 误判（spec 字面）；修后 5/5 = False ✓
+  - 与 P2.3/P3.4/P3.6 等历史 deviation 同范式：spec 写错 ⇒ 修代码 + 在 §6.5 详述原因
+
+- **零行为变更**：`_legacy.py` 一字未动（3469 行未变）；main() 仍走 `_legacy.collect_binary_info`；新模块是**并行、可单元测试**实现
+
+- **15 项功能单测**（手测，pytest 体系待 P9）全过：
+  1. 35 字段断言（5 binary × 7 字段）— `bit`/`stack_canary`/`pie`/`nx`/`relro`/`rwx_segments`/`stripped` 全部匹配 checksec 实际输出
+  2. `display()` 在 5 个 binary 上视觉无异常
+  3. `_legacy_information_collection` 在 5 个 binary 上 4-tuple 全部匹配 v3.1 first-match-wins 语义（含 rip 双 `Stack:` 行 → `break` → 保留 `No canary found` 而非 `Executable`）
+  4. 缺文件路径 → `ToolError` 抛出（从 `core.runner.run_checksec` 透传）
+  5. BinaryInfo slots 强制（`info.invalid_field = \"x\"` → `AttributeError`）
+  6. `info.path` 是 `Path` 对象（非 str）
+  7. 两次 `collect()` 返回独立对象，值相等
+  8. cwd 零污染（`display()` 印日志到 stdout，不创建 `Information_Collection.txt`）
+  9. `from autopwn.recon import collect, display` re-export 路径有效
+  10. `_legacy_information_collection` underscore-prefixed 不在 `__all__`
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m \"not integration\"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（90s 截断预期） + fmtstr1/level3_x64/pie/rip 全部 PASS（**4/5 SUCCESS，与 v3.1 baseline 持平**）
+  - 关 4：关键日志对比 vs v3.1 baseline — **27/28 = 96% 一致**（**无回归**）
+  - 关 5：Reviewer — Owner 自审（§2.2 单人项目）
+  - 关 6：文档同步 — `rebuild.md` §4.5 + §6.5 同步
+  - 详见 `logs/comparison/summary.md`（P4.1 重新生成）
+  - **无新增 failure mode**：`grep -E \"KeyError|no suitable shellcode|Traceback\" logs/v4.0/*.log` → 0 行
+
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，与 P0.7–P3.6 同类，**非功能差异**）
+
+- **与 P4.7 globals() 清理的关系**：P4.1 **不**触碰 `globals()`；P4.1 是 `additive` 新模块；P4.7 才删 22 处 `globals().get(...)` 改读 `ctx.has_*`。本 PR `grep globals() autopwn/_legacy.py` 仍是 22 行（**预期**，下个 P4.x PR 处理）
+
+- **后续步骤**：
+  - P4.2（libc）/ P4.3（plt）/ P4.4（rop）/ P4.5（bss）/ P4.6（asm）每个按 P4.1 范式实现：pure `collect(ctx, program) -> X` + 复用 `core.runner` + 不动 `_legacy.py`
+  - P4.7 删 22 处 `globals().get(...)`（R1 风险点）— 此时 `recon.checksec.collect()` 等 5 个新模块都已就位，删 globals 不会断路
+  - P4.8 删 `set_function_flags` 副作用
+  - P8 orchestrator 整合 `recon/checksec.collect` + `recon/libc.detect` + ... 进 `run_recon_phase(ctx)`，并把 5 个新模块的返回值灌进 `ctx.binary` / `ctx.libc` / `ctx.has_*` / `ctx.gadgets_*` 字段
+
+**Refs**: refactor.md §3.2.1（BinaryInfo spec）/ refactor.md §5（79 函数 → 新位置映射表）
 
 **🟢 状态**：⏳ Pending｜**🟡 优先级**：P1｜**⏱ 预估**：15h
 

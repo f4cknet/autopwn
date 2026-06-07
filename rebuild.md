@@ -210,7 +210,7 @@
 |---|---|---|---|---|---|---|---|
 | P6.1 | `primitives/base.py`：`ExploitPrimitive` 抽象类 + `ExploitResult` dataclass | ✅ | @Minzhi_Zhou | 2h | 0.4h | feature/p6.1-primitives-base | ExploitPrimitive ABC（5 单测）+ ExploitResult dataclass（4 单测）+ FakePrim 烟雾 OK；ExploitResult 用 @dataclass(slots=True) 替代 v3.1 手写 __init__（P2.1 一致） |
 | P6.2 | `primitives/ret2system.py`：x32 + x64 payload builder（pure function） | ✅ | @Minzhi_Zhou | 3h | 0.6h | feature/p6.2-primitives-ret2system | Ret2SystemX32 + Ret2SystemX64，2 公开 + 2 legacy port；fmtstr1 payload=124B (112+12), rip=36B (24+12), canary=b""; 10 单测全过；64-bit 含 ret 对齐 gadget 修 glibc 18.04+ MOVAPS 崩溃 |
-| P6.3 | `primitives/ret2libc_put.py`：x32 + x64 payload builder | ⏳ | — | 4h | — | — | |
+| P6.3 | `primitives/ret2libc_put.py`：x32 + x64 payload builder | ✅ | @Minzhi_Zhou | 4h | 0.7h | feature/p6.3-primitives-ret2libc-put | 2-stage 首个 primitive：Ret2LibcPutX32/X64 (stage_count=2)；build_payload 返 stage-1 leak，build_stage2_payload(ctx, leaked_puts_addr) 返 stage-2 system；13 单测全过 (含 stage-1 字节级 + stage-2 用真 libc 算 system/sh)；ret 对齐 gadget 复用 P6.2 |
 | P6.4 | `primitives/ret2libc_write.py`：x32 + x64 payload builder | ⏳ | — | 4h | — | — | |
 | P6.5 | `primitives/execve_syscall.py`：x32 payload builder | ⏳ | — | 2h | — | — | |
 | P6.6 | `primitives/shellcode.py`：rwx x32 + x64 payload builder | ⏳ | — | 2h | — | — | |
@@ -2588,6 +2588,35 @@ class ExploitResult:
   * 假 gadgets (pop_rdi=0xDEAD, ret=0xBEEF) 字节级出现于 payload ✓
   * no gadgets / zero gadgets / canary → 全部 `b""` ✓
 * **下一步**：P6.3 (`ret2libc_put.py`, 4h 估) — 2-stage primitive (stage_count=2)；put 泄漏 libc → system
+
+**P6.3 实施记录** (commit on `feature/p6.3-primitives-ret2libc-put`，Owner @Minzhi_Zhou, 0.7h)：
+
+* **文件**：`autopwn/primitives/ret2libc_put.py` (451 行)
+* **公开 API**：
+  * `Ret2LibcPutX32` (x32, stage_count=2)：
+    * `build_payload(ctx) -> bytes` — stage-1 leak (`padding + puts_plt + main + puts_got`)
+    * `build_stage2_payload(ctx, leaked_puts_addr) -> bytes` — stage-2 system (`padding + system + 0 + sh`)
+  * `Ret2LibcPutX64` (x64, stage_count=2)：stage-1 加 `pop_rdi` gadget chain，stage-2 加 `ret` 对齐 gadget
+  * `_lookup_puts_and_main(program) -> (puts_plt, puts_got, main)` — 共享 helper
+  * `_resolve_libc_elf(ctx) -> ELF` — 懒打开 `ctx.libc.path`（若 `ctx.libc.elf` 未预设）
+* **legacy ports**（`OBSOLETE` 前缀，字节级 parity）：
+  * `_legacy_ret2libc_put_x32` — verbatim port of `_legacy.py:1706-1772`（含 LibcSearcher fallback）
+  * `_legacy_ret2libc_put_x64` — verbatim port of `_legacy.py:1773-1868`（含 `other_rdi_registers` 1/0 分支）
+* **关键设计决策**：
+  * **P6.1 抽象 contract 兼容**：2-stage primitive 必须满足 `build_payload(ctx) -> bytes`；选择让 `build_payload` 返 stage-1 (leak)，另增 `build_stage2_payload(ctx, leak)` 给 P7 strategy 调
+  * **P7 strategy 模式**：`payload1 = prim.build_payload(ctx); io.sendline; leak = u32(io.recv(4)); payload2 = prim.build_stage2_payload(ctx, leak); io.sendline`
+  * **`stage_count() -> 2`**：信号给 P7 orchestrator 必须调 2 次 sendline
+  * **懒解析 libc**：`_resolve_libc_elf` 优先用 `ctx.libc.elf`（P4.2 预设），否则懒打开 `ctx.libc.path`；缺失返 None → primitive 返 `b""`
+  * **真 libc 单测**：用 `/lib32/libc.so.6` (x32) + `/lib/x86_64-linux-gnu/libc.so.6` (x64) 验证 stage-2 system/sh 计算正确
+  * **fake_leak 数值**：`leaked_puts_addr=0x70000000` (x32) / `0x200000 + libc_puts_offset` (x64) 避免 p32/p64 负数 + 32/64 位溢出
+* **验证**：
+  * `Ret2LibcPutX32.stage_count() == 2` ✓
+  * `Ret2LibcPutX32().build_payload(fmtstr1)` 长度 = 100 + 12 ✓
+  * stage-1 字节级含 `e.plt["puts"]`, `e.symbols["main"]`, `e.got["puts"]` ✓
+  * stage-2 用真 libc + fake_leak 计算 system/sh 字节级正确
+  * `level3_x64` (no puts) → stage-1 返 `b""` ✓
+  * no gadgets / no libc → 全部 `b""` ✓
+* **下一步**：P6.4 (`ret2libc_write.py`, 4h 估) — 2-stage 类似但用 `write` 泄漏（64-bit 含 `pop_rsi`）
 
 **P6.2 详细步骤**（`primitives/ret2system.py`）：
 ```python

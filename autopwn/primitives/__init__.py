@@ -12,9 +12,10 @@ ELF parsing for symbol lookup is allowed and expected):
   * **P6.1** (``base``) — :class:`ExploitPrimitive` ABC +
     :class:`ExploitResult` dataclass (foundation for P6.2-P6.8).
   * **P6.2** (``ret2system``) — :class:`Ret2SystemX32` and
-    :class:`Ret2SystemX64` (the first concrete primitive;
-    ``ret2libc system('/bin/sh')`` with 64-bit stack-alignment
-    gadget).
+    :class:`Ret2SystemX64` (single-stage ret2libc system).
+  * **P6.3** (``ret2libc_put``) — :class:`Ret2LibcPutX32` and
+    :class:`Ret2LibcPutX64` (2-stage ret2libc; leak via
+    ``puts(puts@GOT)`` then return to ``system('/bin/sh')``).
 """
 from __future__ import annotations
 
@@ -26,10 +27,16 @@ from autopwn.primitives.ret2system import (
     Ret2SystemX32 as Ret2SystemX32,
     Ret2SystemX64 as Ret2SystemX64,
 )
+from autopwn.primitives.ret2libc_put import (
+    Ret2LibcPutX32 as Ret2LibcPutX32,
+    Ret2LibcPutX64 as Ret2LibcPutX64,
+)
 
 __all__: list[str] = [
     "ExploitPrimitive",
     "ExploitResult",
     "Ret2SystemX32",
     "Ret2SystemX64",
+    "Ret2LibcPutX32",
+    "Ret2LibcPutX64",
 ]

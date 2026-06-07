@@ -12,6 +12,10 @@ P5 layer is the **only** layer authorized to mutate ``ctx`` per
   * **P5.1** (``overflow``) — ``test_stack_overflow(ctx, program, bit)``
     and ``analyze_vulnerable_functions(ctx, program, bit)``;
     both write the discovered padding into ``ctx.padding``.
+  * **P5.2** (``fmtstr``) — ``detect_format_string_vulnerability(ctx, program)``
+    returning a :class:`FormatStringProbe` dataclass, and
+    ``find_offset(ctx, program)`` returning the 1-based offset
+    of the ``0x41414141`` sentinel in a leaked stack walk.
 """
 from __future__ import annotations
 
@@ -19,8 +23,16 @@ from autopwn.detect.overflow import (
     test_stack_overflow as test_stack_overflow,
     analyze_vulnerable_functions as analyze_vulnerable_functions,
 )
+from autopwn.detect.fmtstr import (
+    FormatStringProbe as FormatStringProbe,
+    detect_format_string_vulnerability as detect_format_string_vulnerability,
+    find_offset as find_offset,
+)
 
 __all__: list[str] = [
     "test_stack_overflow",
     "analyze_vulnerable_functions",
+    "FormatStringProbe",
+    "detect_format_string_vulnerability",
+    "find_offset",
 ]

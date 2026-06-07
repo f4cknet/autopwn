@@ -199,7 +199,7 @@
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
 | P5.1 | `detect/overflow.py`：搬 `test_stack_overflow` + `analyze_vulnerable_functions`；写入 `ctx.padding` | 🔄 | @Minzhi_Zhou | 4h | 0.8h | feature/p5.1-detect-overflow | 4× 二进制烟雾测试 OK：level3_x64 136=136, canary 静态 80, pie 静态 40 动态 48, rip 静态 19 动态 26 |
-| P5.2 | `detect/fmtstr.py`：搬 `detect_format_string_vulnerability` + `find_offset` | ⏳ | — | 3h | — | — | |
+| P5.2 | `detect/fmtstr.py`：搬 `detect_format_string_vulnerability` + `find_offset` | 🔄 | @Minzhi_Zhou | 3h | 0.6h | feature/p5.2-detect-fmtstr | 烟雾测试 OK：fmtstr1 vulnerable=True/2 triggers + offset=11；level3_x64 vulnerable=True/6 triggers；legacy ports 字节级 parity |
 | P5.3 | `detect/canary.py`：搬 `leakage_canary_value` + `canary_fuzz`；写入 `ctx.canary` | ⏳ | — | 3h | — | — | |
 | P5.4 | `detect/binsh.py`：搬 `check_binsh_string` + `check_binsh` | ⏳ | — | 1h | — | — | |
 | P5.5 | 单元测试：每个 detect 函数对 `Challenge/` 下对应二进制跑一遍 | ⏳ | — | 4h | — | — | |
@@ -2370,7 +2370,7 @@ grep -n "globals().get(" autopwn.py
 
 **子任务**：见 §4.6。
 
-**P5.1 实施记录** (commit on `feature/p5.1-detect-overflow`，Owner @Minzhi_Zhou, 0.8h)：
+**P5.1 实施记录** (commit `b46bb9f` on `feature/p5.1-detect-overflow`，Owner @Minzhi_Zhou, 0.8h, 4 files +412/-10)：
 
 * **文件**：`autopwn/detect/overflow.py` (358 行) + `autopwn/detect/__init__.py` (28 行)
 * **公开 API**（typed, 写 `ctx.padding`）：
@@ -2393,6 +2393,32 @@ grep -n "globals().get(" autopwn.py
   * `_legacy.py` 本身（P8.1 wiring 时再删）
   * `recon/`（P4 已完成）
   * `main()` 调用顺序（P8.3 编排时再切）
+
+**P5.2 实施记录** (commit on `feature/p5.2-detect-fmtstr`，Owner @Minzhi_Zhou, 0.6h)：
+
+* **文件**：`autopwn/detect/fmtstr.py` (371 行)
+* **公开 API**（typed, 不写 ctx——P5.2 spec 未列 ctx field）：
+  * `detect_format_string_vulnerability(ctx, program) -> FormatStringProbe`
+  * `find_offset(ctx, program) -> int`
+  * `FormatStringProbe` (dataclass) — `vulnerable: bool` + `triggers: int`
+* **legacy ports**（`OBSOLETE` 前缀，纯字节级 parity）：
+  * `_legacy_detect_format_string_vulnerability(program) -> bool` — verbatim port of `_legacy.py:749-811`
+  * `_legacy_find_offset(program) -> int` — verbatim port of `_legacy.py:833-861`
+* **关键设计决策**：
+  * `detect_format_string_vulnerability` 返回 `FormatStringProbe` dataclass 而非裸 `bool`——保留触发次数供 P7 fmtstr strategy 选 follow-up
+  * `find_offset` 用 `pwn.process`（非 `subprocess.Popen`）——v3.1 L838 同款；`subprocess.communicate` 与 binary 的 line-buffered I/O 竞态（2026-06-07 在 `Challenge/fmtstr1` 上验证失败 → 改 pwn）
+  * `_MEMORY_PATTERN` 正则（`0x[0-9a-fA-F]+`）模块级 compile（P2.1 hot-regex pattern）
+  * 6 个 test payload (`_V31_TEST_CASES`) 与 v3.1 L752-757 字节级一致
+* **验证**：
+  * `format_string_probe(fmtstr1)` → `vulnerable=True, triggers=2`（v3.1 同步：fmtstr1 + level3_x64 都触发）
+  * `format_string_probe(level3_x64)` → `vulnerable=True, triggers=6`
+  * `find_offset(fmtstr1)` → `11`（与 v3.1 期望一致）
+  * `_legacy_*` 输出与 v3.1 `print_info / print_section_header / print_table_*` 字节级一致
+* **未动**：
+  * `_legacy.py` 本身
+  * `recon/`（P4）
+  * `ctx.fmtstr_offset` / `ctx.fmtstr_buf` 字段——spec 未要求，留待未来扩展
+
 
 **P5.5 验收**（关键）：
 ```python

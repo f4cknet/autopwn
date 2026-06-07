@@ -20,6 +20,9 @@ P5 layer is the **only** layer authorized to mutate ``ctx`` per
     returns list of ``(offset, hex_string)`` pairs; ``canary_fuzz(ctx, program, bit, leaks)``
     returns a :class:`CanaryInfo` (or ``None``) and writes it
     into ``ctx.canary``.
+  * **P5.4** (``binsh``) — ``check_binsh(ctx, program)`` returns
+    a bool (and writes it into ``ctx.binsh_in_binary``) indicating
+    whether the binary contains the ``/bin/sh`` string.
 """
 from __future__ import annotations
 
@@ -36,6 +39,9 @@ from autopwn.detect.canary import (
     leakage_canary_value as leakage_canary_value,
     canary_fuzz as canary_fuzz,
 )
+from autopwn.detect.binsh import (
+    check_binsh as check_binsh,
+)
 
 __all__: list[str] = [
     "test_stack_overflow",
@@ -45,4 +51,5 @@ __all__: list[str] = [
     "find_offset",
     "leakage_canary_value",
     "canary_fuzz",
+    "check_binsh",
 ]

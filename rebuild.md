@@ -201,7 +201,7 @@
 | P5.1 | `detect/overflow.py`：搬 `test_stack_overflow` + `analyze_vulnerable_functions`；写入 `ctx.padding` | 🔄 | @Minzhi_Zhou | 4h | 0.8h | feature/p5.1-detect-overflow | 4× 二进制烟雾测试 OK：level3_x64 136=136, canary 静态 80, pie 静态 40 动态 48, rip 静态 19 动态 26 |
 | P5.2 | `detect/fmtstr.py`：搬 `detect_format_string_vulnerability` + `find_offset` | 🔄 | @Minzhi_Zhou | 3h | 0.6h | feature/p5.2-detect-fmtstr | 烟雾测试 OK：fmtstr1 vulnerable=True/2 triggers + offset=11；level3_x64 vulnerable=True/6 triggers；legacy ports 字节级 parity |
 | P5.3 | `detect/canary.py`：搬 `leakage_canary_value` + `canary_fuzz`；写入 `ctx.canary` | 🔄 | @Minzhi_Zhou | 3h | 1.0h | feature/p5.3-detect-canary | 烟雾测试 OK：leakage 10 leaks/100 max=100 字节级 parity；canary_fuzz(max_c=3, max_padding=3) returns None（预期，暴力枚举需 ~7min）；legacy port 写 canary.txt 100 行字节级一致 |
-| P5.4 | `detect/binsh.py`：搬 `check_binsh_string` + `check_binsh` | ⏳ | — | 1h | — | — | |
+| P5.4 | `detect/binsh.py`：搬 `check_binsh_string` + `check_binsh` | 🔄 | @Minzhi_Zhou | 1h | 0.3h | feature/p5.4-detect-binsh | 烟雾测试 OK：5 二进制 check_binsh 返回正确（canary=F, fmtstr1=T, level3_x64=F, pie=T, rip=T），ctx.binsh_in_binary 同步 |
 | P5.5 | 单元测试：每个 detect 函数对 `Challenge/` 下对应二进制跑一遍 | ⏳ | — | 4h | — | — | |
 
 ### 4.7 P6 — Primitives 层
@@ -2445,6 +2445,27 @@ grep -n "globals().get(" autopwn.py
   * `_legacy.py` 本身
   * `recon/`（P4）
   * `canary.txt` 文件本身（P8.5 删 `_legacy_*` 时一起删）
+
+**P5.4 实施记录** (commit on `feature/p5.4-detect-binsh`，Owner @Minzhi_Zhou, 0.3h)：
+
+* **文件**：`autopwn/detect/binsh.py` (128 行)
+* **公开 API**（typed, 写 `ctx.binsh_in_binary`）：
+  * `check_binsh(ctx, program) -> bool` — 单一函数（合并 v3.1 两个 `check_binsh_string` + `check_binsh`）
+* **legacy ports**（`OBSOLETE` 前缀，纯字节级 parity）：
+  * `_legacy_check_binsh_string(program) -> bool` — verbatim port of `_legacy.py:721-741`
+  * `_legacy_check_binsh(program) -> bool` — verbatim port of `_legacy.py:743-747`
+* **关键设计决策**：
+  * **API 合并**：v3.1 的两个函数做同样的事，只是 verbose 程度不同；新版只暴露一个 `check_binsh` 公开函数（返回 bool），v3.1 两个版本作为 legacy ports 保留
+  * **复用 P1.3a `core.runner.run_strings`**：替代 v3.1 的 `os.system("strings X | grep /bin/sh > file")`（P1.5 已完成此切换）
+  * **`_BINSH = '/bin/sh'`**：提到模块级（v3.1 硬编码字符串）
+* **验证**：
+  * 5 Challenge 二进制全部 import + 调用成功
+  * 正确性：canary=F, fmtstr1=T, level3_x64=F, pie=T, rip=T（与 v3.1 main() 期望一致）
+  * `ctx.binsh_in_binary` 同步
+* **未动**：
+  * `_legacy.py` 本身
+  * `recon/`（P4）
+
 
 
 

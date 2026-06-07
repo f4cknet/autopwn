@@ -82,17 +82,15 @@ from autopwn.core.runner import (  # noqa: F401, E402
 # keeps both APIs in sync so P2.4 can convert call sites one at a time.
 # See autopwn/_compat.py module docstring for the deviations from the
 # rebuild.md §6.3 spec (no warn / bit=0 guard / no success=True at startup).
+# P2.4: update_exploit_info helper is GONE (replaced by record_success);
+# sync_ctx_to_legacy is extended with target_name/timestamp kwargs to
+# replace the L3305-3306 startup writes.
 from autopwn.context import ExploitContext, ContextError  # noqa: F401, E402
 from autopwn._compat import _legacy_info as exploit_info  # noqa: F401, E402
-from autopwn._compat import sync_ctx_to_legacy  # noqa: F401, E402
+from autopwn._compat import sync_ctx_to_legacy, record_success  # noqa: F401, E402
 
 # Color schemes + print_* + banner + VERBOSE moved to autopwn.core.logging (P1.1).
 # Re-export above keeps the 418 existing call sites in _legacy.py working unchanged.
-
-def update_exploit_info(key, value):
-    """Update global exploit information"""
-    global exploit_info
-    exploit_info[key] = value
 
 def generate_exploitation_code():
     """Generate complete exploitation code based on exploit type and information"""
@@ -347,16 +345,21 @@ def generate_docx_report():
 
 def handle_exploitation_success(exploit_type, payload, padding, addresses, vulnerability_type, architecture):
     """Handle successful exploitation by updating info and generating report"""
-    update_exploit_info('exploit_type', exploit_type)
-    update_exploit_info('payload', payload.hex() if hasattr(payload, 'hex') else str(payload))
-    update_exploit_info('padding', padding)
-    update_exploit_info('addresses', addresses)
-    update_exploit_info('vulnerability_type', vulnerability_type)
-    update_exploit_info('architecture', architecture)
-    update_exploit_info('success', True)
-    
+    # P2.4: single bridge call replaces 7 update_exploit_info(...) writes
+    # (which in turn called exploit_info[key] = value internally).
+    # record_success() sets the same 7 fields + success=True in the same
+    # order.  See autopwn/_compat.py for the kwargs spec.
+    record_success(
+        exploit_type=exploit_type,
+        payload=payload,
+        padding=padding,
+        addresses=addresses,
+        vulnerability_type=vulnerability_type,
+        architecture=architecture,
+    )
+
     print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
-    
+
     # Generate DOCX report
     generate_docx_report()
 
@@ -3294,12 +3297,17 @@ Examples:
     # P2.3: construct the typed ExploitContext and sync it into the legacy
     # exploit_info dict (alias to _compat._legacy_info).  This duplicates
     # the validation above, but doing it here means a future P2.4 cleanup
-    # can drop the legacy checks without changing the UX.  The bridge is
-    # effectively a no-op in P2.3 (L3305/L3306/L354-360 overwrite its
-    # values), but it establishes the API that P2.4 will lean on.
+    # can drop the legacy checks without changing the UX.
+    # P2.4: the bridge is extended with target_name + timestamp kwargs
+    # so the L3305-3306 startup writes can be deleted entirely.  The
+    # bridge becomes the only path to mutate _legacy_info.
     try:
         ctx = ExploitContext.from_args(args)
-        sync_ctx_to_legacy(ctx)
+        sync_ctx_to_legacy(
+            ctx,
+            target_name=os.path.basename(args.local),
+            timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        )
     except ContextError as e:
         # Preserve legacy UX: red error + exit 1.  Error text is identical
         # to what ExploitContext.from_args() raises, which itself matches
@@ -3311,12 +3319,7 @@ Examples:
     program = add_current_directory_prefix(args.local)
     libc_path = None
     bin_sh = 0  # Initialize bin_sh variable
-    
-    # Initialize exploit_info with basic information
-    global exploit_info
-    exploit_info['target_binary'] = os.path.basename(args.local)
-    exploit_info['timestamp'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
+
     print_info(f"target binary: {Colors.YELLOW}{program}{Colors.END}")
     
     if args.ip and args.port:

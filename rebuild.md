@@ -187,7 +187,7 @@
 |---|---|---|---|---|---|---|---|
 | P4.1 | `recon/checksec.py`：搬运 `Information_Collection` + `collect_binary_info` + `display_binary_info`；返回 `BinaryInfo` | ✅ | @Minzhi_Zhou | 4h | 0.6h | #P4.1 | 新加 `autopwn/recon/checksec.py`（177 行）+ `recon/__init__.py` re-export；3 个函数：`collect(program) -> BinaryInfo`（pure，§6.5 P4.1 spec 改 1 处：DEV-1 `stripped` 改 regex 否则 "Stripped" in out 误判 label vs value）+ `display(info)` 表格打印 + `_legacy_information_collection(program)`（v3.1 死代码 `Information_Collection` 的字面 port，0 caller，underscore 前缀）；**未替换 `_legacy.py` 调用点**（P8 orchestrator 责任）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；35 字段 + 5 视觉 + 5 边缘测试 + 5 legacy port 测试全过；详见 §6.5 P4.1 实施记录 |
 | P4.2 | `recon/libc.py`：合并 `detect_libc` + `ldd_libc` 为 `detect(ctx) → LibcInfo` | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P4.2 | 新加 `autopwn/recon/libc.py`（209 行）+ `recon/__init__.py` re-export `detect`；1 个 public 函数 `detect(ctx, program) -> LibcInfo`（pure，3 阶段：user override (`ctx.libc.path`) → ldd auto-detect → empty LibcInfo）+ 1 个 helper `_parse_libc_path(ldd_out)` + 2 个 legacy port (`_legacy_detect_libc` / `_legacy_ldd_libc`，0 caller / 1 caller，含原 print 行为供字节级保真)；`LibcInfo.elf` 维持 `None`（懒加载 — P7 strategy 才 `ELF(libc_path)`，避免 pwntools 在 recon 期 import）；**未替换 `_legacy.py` 调用点**（P8 orchestrator 责任）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × detect() + 1 user-override + 1 empty-LibcInfo + 6 _parse_libc_path edge case + 3 legacy port = 16 测试全过；详见 §6.5 P4.2 实施记录 |
-| P4.3 | `recon/plt.py`：`scan_plt_functions` 返回 dict，写入 `ctx.has_*` 标志 | ⏳ | — | 3h | — | — | |
+| P4.3 | `recon/plt.py`：`scan_plt_functions` 返回 dict，写入 `ctx.has_*` 标志 | ✅ | @Minzhi_Zhou | 3h | 0.5h | #P4.3 | 新加 `autopwn/recon/plt.py`（200 行）+ `recon/__init__.py` re-export `scan`；1 public + 1 helper + 2 legacy port：`scan(ctx, program) -> dict[str, int]`（6 函数，**P4 层首个 mutate ctx** 的模块 — 写 6 个 `ctx.has_*` bool；与 P4.1/P4.2 不同是因为 PLT 标志 6 个独立 bool 无自然 container）+ `_parse_plt_addresses(objdump_out)` helper + 2 个 legacy port（`_legacy_scan_plt_functions` 7 函数含 main 保 v3.1 行为 + `_legacy_set_function_flags`）；**deviation**: 新 `scan` 6 函数（drop `main`），v3.1 legacy port 7 函数（含 main，与 §4.5 spec 「`has_*` 标志」对应 — `main` 不 gate 任何 strategy 故 ctx 无 `has_main` 字段）；**未替换 `_legacy.py` 调用点**（P4.7 删 globals 时一并处理）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × scan + 1 幂等 + 1 re-overwrite + 4 _parse 边缘 + 4 legacy port + 1 cwd 污染 + 1 re-export = 16 测试全过；详见 §6.5 P4.3 实施记录 |
 | P4.4 | `recon/rop.py`：搬 `find_rop_gadgets_x64/x32`，返回 `RopGadgetsX64/X32` | ⏳ | — | 4h | — | — | |
 | P4.5 | `recon/bss.py`：搬 `find_large_bss_symbols` + `find_ftmstr_bss_symbols` | ⏳ | — | 2h | — | — | |
 | P4.6 | `recon/asm.py`：搬 `vuln_func_name` + `asm_stack_overflow` | ⏳ | — | 2h | — | — | |
@@ -2081,6 +2081,60 @@ grep -n "globals().get(" autopwn.py
   - P8 orchestrator 整合 5 个 P4.x 模块 + 5 个 P5.x detect 模块进 `run_recon_phase(ctx)` / `run_detect_phase(ctx)`
 
 **Refs**: refactor.md §3.2.1（LibcInfo spec）/ refactor.md §5（79 函数 → 新位置映射表）
+
+---
+
+**P4.3 实施记录（2026-06-07）**：
+
+- **新文件** `autopwn/recon/plt.py`（200 行）：1 public + 1 helper + 2 legacy ports
+  - `scan(ctx, program) -> dict[str, int]` — **P4 层首个 mutate ctx** 的模块；写 6 个 `ctx.has_*` bool（write/puts/printf/system/backdoor/callsystem）+ 返回 flags dict（与 v3.1 `set_function_flags` shape 一致 — 1/0 而非 True/False，方便下游 `if flags["system"]` 直接 int 比较）
+  - `_parse_plt_addresses(objdump_out) -> dict[str, str]` — 私有 helper，复用 `_PLT_FUNCS` 元组，扫描 `<func>@plt>:` 与 `<func>:` 两种 line 模式，first-match-wins
+  - `_legacy_scan_plt_functions(program) -> dict[str, str]` — v3.1 `scan_plt_functions` 字面 port（L357-399），**保 7 函数（含 main）+ FUNCTION ANALYSIS 表格打印** —— 1 caller (`_legacy.py` L3137)
+  - `_legacy_set_function_flags(function_addresses) -> dict[str, int]` — v3.1 `set_function_flags` 字面 port（L401-405），**保 7 函数 + 1/0 shape** —— 1 caller (`_legacy.py` L3138)
+
+- **修改** `autopwn/recon/__init__.py`（33 → 47 行）：re-export `scan` + 更新 `__all__` + 顶部 docstring 增 P4.3 status
+
+- **设计决策**：
+  - **`scan()` mutate ctx 是 P4 层范式转变**：P4.1 返 `BinaryInfo` / P4.2 返 `LibcInfo` 都是 immutable dataclass；PLT 6 个 bool 无 natural container，写 `ctx.has_*` 比构造新对象更自然。P8 整合时 `recon.plt.scan(ctx, ctx.binary.path)` 一次灌满 6 字段
+  - **新 `scan` 6 函数，legacy port 7 函数（含 main）**：spec 字段映射要求 `ctx.has_*` 6 个，v3.1 多扫了 `main`（用 `<main>:` 匹配，**总有**，无 strategy gate 价值）；新模块 drop `main`，legacy port 保 7 元素。**这是有意 spec deviation**（与 P4.1 的 DEV-1 风格相同：spec 漏掉 1 个字段或字段冗余时，修正 + 文档化）
+  - **flags dict 返回 1/0 而非 True/False**：v3.1 `_legacy.set_function_flags` 用 0/1，下游 14+ 处 `if globals().get('system', 0)` 是 int 比较；新 `scan` 保 1/0 shape 让 caller 切换 0 阻力
+
+- **零行为变更**：`_legacy.py` 一字未动（3469 行未变）；main() 仍走 `_legacy.scan_plt_functions` + `set_function_flags` + 22 处 `globals().get` 注入；新模块是**并行、可单元测试**实现
+
+- **16 项功能单测**（手测，pytest 体系待 P9）全过：
+  1. 5 binary × `scan()` — 验证 ctx.has_* + 返回 flags dict 全部正确（实际 PLT 数据：canary={puts,printf} / fmtstr1={puts,printf,system} / level3_x64={write} / pie={puts,system,backdoor} / rip={puts,system}）
+  2. `scan()` 幂等（同一 ctx 调两次结果一致）
+  3. re-scan 正确覆盖 `ctx.has_*`（不 sticky True/False）
+  4. `_parse_plt_addresses` 4 edge case：empty / `<func>:` / `<func@plt>:` / first-match-wins
+  5. cwd 零污染（无 `Objdump_Scan.txt` 落盘）
+  6. `from autopwn.recon import scan` re-export 路径有效
+  7. `_legacy_*` 不在 `__all__`（underscore-prefix 私有性）
+  8. legacy port 7 函数（含 main）shape 保 v3.1
+  9. ExploitContext slots 兼容（`ctx.has_system = True` 合法 — slots 仅禁**新增**字段，不禁**修改**已有字段）
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（90s 截断预期） + fmtstr1/level3_x64/pie/rip 全部 PASS（**4/5 SUCCESS，与 v3.1 baseline 持平**）
+  - 关 4：关键日志对比 vs v3.1 baseline — **27/28 = 96% 一致**（**无回归**）
+  - 关 5：Reviewer — Owner 自审（§2.2 单人项目）
+  - 关 6：文档同步 — `rebuild.md` §4.5 + §6.5 同步
+  - 详见 `logs/comparison/summary.md`（P4.3 重新生成）
+  - **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
+
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，与 P0.7–P4.2 同类，**非功能差异**）
+
+- **与 P4.7 globals() 清理的关系**：P4.3 **不**触碰 `globals()`；P4.3 是 `additive` 新模块；P4.7 删 22 处 `globals().get(...)` 时把 caller 改成 `if ctx.has_system:` 等，本模块的 6 个 bool 字段就是 P4.7 替换目标
+
+- **后续步骤**：
+  - P4.4（rop）找 ROP gadgets → 写 `ctx.gadgets_x64: RopGadgetsX64` 或 `ctx.gadgets_x32: RopGadgetsX32`（P4 第二个 mutate ctx 的模块）
+  - P4.5（bss）找大 BSS 段（fmtstr shellcode 存储） → 写 `ctx.fmtstr_buf`
+  - P4.6（asm）静态分析 vuln func + 栈帧 padding 调整
+  - P4.7 删 22 处 `globals().get(...)` 改读 `ctx.has_*` / `ctx.gadgets_*`（R1 风险点 — 此时 5 个新模块都已就位，删 globals 不会断路）
+  - P4.8 删 `set_function_flags` 副作用
+  - P8 orchestrator 整合 6 个 P4.x 模块 + 5 个 P5.x detect 模块进 `run_recon_phase(ctx)` / `run_detect_phase(ctx)`
+
+**Refs**: refactor.md §3.2.1（ExploitContext 6 个 has_* 字段）/ refactor.md §5（79 函数 → 新位置映射表）
 
 ---
 

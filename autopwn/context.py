@@ -153,6 +153,7 @@ class ExploitContext:
 
     # Runtime
     verbose: bool = False
+    enable_report: bool = True
     report_dir: Path = field(default_factory=Path.cwd)
 
     def log(self, message: str, level: str = "info") -> None:
@@ -194,9 +195,9 @@ class ExploitContext:
           ``-f/--fill``   → ``ctx.padding`` (manual override)
           ``-v/--verbose``→ ``ctx.verbose`` (bool)
 
-        plus forward-compatible defaults via ``getattr`` for the P8
-        additions (``--report-dir`` → ``ctx.report_dir``; ``--no-report``
-        is intentionally NOT mapped — P3 will add ``ctx.enable_report``).
+        plus forward-compatible defaults via ``getattr`` for the P3.5
+        additions (``--report-dir`` → ``ctx.report_dir``;
+        ``--no-report`` → ``ctx.enable_report`` — both now mapped).
 
         Fields NOT derivable from args (``BinaryInfo.bit`` /
         ``stack_canary`` / ``pie`` / ``nx`` / ``relro`` /
@@ -265,9 +266,27 @@ class ExploitContext:
         # 5) Manual padding override
         padding = getattr(args, "fill", 0) or 0
 
-        # 6) Runtime flags (forward-compat for P8 --report-dir / --no-report)
+        # 6) Runtime flags
         verbose = bool(getattr(args, "verbose", False))
-        report_dir = Path(getattr(args, "report_dir", "."))
+        # P3.5: --no-report flag inverts to enable_report=False.
+        # Default (no flag) is True (always generate report).
+        enable_report = not bool(getattr(args, "no_report", False))
+        # P3.5: --report-dir overrides the default cwd.
+        # If unset, default to cwd (matches legacy behavior).
+        report_dir_arg = getattr(args, "report_dir", None)
+        if report_dir_arg:
+            report_dir_path = Path(report_dir_arg)
+            # Create the directory if it doesn't exist (P3.5 UX
+            # improvement — legacy cwd was always writable)
+            try:
+                report_dir_path.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                raise ContextError(
+                    f"cannot create report directory {report_dir_arg}: {e}"
+                )
+            report_dir = report_dir_path
+        else:
+            report_dir = Path.cwd()
 
         return cls(
             binary=binary,
@@ -276,6 +295,7 @@ class ExploitContext:
             libc=libc,
             padding=padding,
             verbose=verbose,
+            enable_report=enable_report,
             report_dir=report_dir,
         )
 

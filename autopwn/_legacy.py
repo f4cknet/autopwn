@@ -3041,6 +3041,13 @@ Examples:
                        help='Manual overflow padding size')
     parser.add_argument('-v', '--verbose', action='store_true',
                        help='Enable verbose output')
+    # P3.5: report control flags.  See rebuild.md §4.4 P3.5 + §6.4 spec.
+    parser.add_argument('--no-report', action='store_true',
+                       help='Skip DOCX report generation (exploit still runs)')
+    parser.add_argument('--report-dir', type=str, default=None,
+                       help='Directory to write the DOCX report into '
+                            '(default: current working directory). '
+                            'Auto-created if it does not exist.')
     
     args = parser.parse_args()
     
@@ -3069,6 +3076,11 @@ Examples:
     # bridge becomes the only path to mutate _legacy_info.
     try:
         ctx = ExploitContext.from_args(args)
+        # P3.5: stash ctx in the report module's module-level carrier
+        # so record_success() can honor --no-report / --report-dir
+        # without us having to thread ctx through 14 caller signatures.
+        from autopwn.report import set_current_ctx
+        set_current_ctx(ctx)
         sync_ctx_to_legacy(
             ctx,
             target_name=os.path.basename(args.local),

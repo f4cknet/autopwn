@@ -178,7 +178,7 @@
 | **P3.2** | `report/docx.py`：搬运 `generate_docx_report`；改为读 `ExploitInfo` | ✅ | @Minzhi_Zhou | 2h | 0.5h | #P3.2 | 新建 `autopwn/report/docx.py`（189 行）`generate_docx(info, out_dir) -> Optional[Path]`；`_legacy.py` 删 `generate_docx_report`（-114 行）+ 删 3 个 `from docx import ...` + 加 `from pathlib import Path` + `handle_exploitation_success` 改构造 ExploitInfo + 调新函数（14 caller 签名不变）；**字段映射**：14 个 `exploit_info['x']` 读点全部改 `info.x`（`success` 字段删——ExploitInfo 仅在 success 路径构造）；`generate_exploitation_code` 仍 in `_legacy.py`（P3.3 搬走），新 docx 模块临时 `from autopwn._legacy import generate_exploitation_code`（1 处待 P3.3 清理）；`_legacy.py` 净 -101 行（3691→3590）；**零行为变更**：`out_dir=Path('.')` 默认，docx 仍生成到 cwd；路径打印 "Exploitation report generated: rip_wp.docx" 与 v3.1 baseline byte-for-byte 一致；10 项功能单测全过（re-export/签名/干跑 4 binary 名字/5 种 address 格式化/异常降级返回 None/cwd 零污染/handle_exploitation_success 签名不变/...）；§2.6 验证 4/5 SUCCESS + 27/28=96% 一致 vs v3.1 baseline（**无回归**）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4.4 |
 | **P3.3** | `report/code.py`：搬运 `generate_exploitation_code`；改为读 `ExploitInfo` | ✅ | @Minzhi_Zhou | 3h | 0.6h | #P3.3 | 新建 `autopwn/report/code.py`（187 行）`generate_code(info, out_dir) -> str`；`_legacy.py` 删 `generate_exploitation_code`（-135 行）；**`docx.py` import 切换**：从 `autopwn._legacy` 切到 `autopwn.report.code`（P3.2 留的临时 import 清理）；**`out_dir` 参数 forward-compat**：P3.3 不写文件（保持 legacy 行为——只返回 code 字符串），但 P3.4/P3.5 可用 `out_dir` 写 `{target}_wp.py` artifact；20 个 `exploit_info['x']` 读点全部改 `info.x`；**f-string 模板 byte-for-byte 保留**（7 种 exploit type 全部产生与 legacy 一致输出：ret2system x64/x32, ret2libc write x64/x32, Format String, execve syscall, generic fallback）；`_legacy.py` 净 -136 行（3590→3454）；12 项功能单测全过（re-export/签名/5 主流 exploit type 全部分支/format string 走 addresses.get('offset', ...)/generic fallback 含 repr(bytes)/empty addresses 跳段/target_name basename 提取 4 种 address 格式化）；§2.6 验证 4/5 SUCCESS + 27/28=96% 一致 vs v3.1 baseline（**无回归**）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4.4 |
 | **P3.4** | `handle_exploitation_success` 改为 `record_success(ctx, info, primitive)`，生成 docx/code 改为订阅 | ✅ | @Minzhi_Zhou | 2h | 0.5h | #P3.4 | 新加 `autopwn.report.record_success(info)` 订阅者 orchestrator（74 行含 docstring + `__all__` 更新）；`_legacy.handle_exploitation_success` 精简：从 33 行（6 dict 读 + 调 generate_docx）→ 21 行（构造 ExploitInfo + 调 record_success）；**P2.4 桥退役**：`_compat.record_success(...)` 6 kwargs 调用消失（取而代之是直接构造 ExploitInfo）；**保留** 2 个 dict 读（`target_binary` + `timestamp`）—— 这两个字段由 main() 启动时 `sync_ctx_to_legacy` 写入，**避免**为消除这 2 读而改动 14 个 caller 的策略函数签名（P3.5 接 ctx 后会彻底清掉）；**spec 偏离**：`record_success` 签名是 `(info)` 而非 spec 的 `(ctx, info, primitive)` —— P3.4 阶段 ctx 还未引入 `enable_report` 字段（P3.5 加），primitive 也不需要（P7 才用），P3.5 会把签名升级为 `(ctx, info)`；**dispatch 链**：`record_success` → `print_critical("EXPLOITATION SUCCESSFUL! ...")` → `generate_docx(info, Path('.'))`（P3.5 改用 `ctx.report_dir`）；`_legacy.py` 净 -12 行（3454→3442）；10 项功能单测全过（签名/mock dispatch/14 caller 不动/e2e 真生成 docx 37KB/旧 `_compat.record_success()` callsite 已消失/...）；§2.6 验证 4/5 SUCCESS + 27/28=96% 一致 vs v3.1 baseline（**无回归**）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4.4, refactor.md#3.2.2 |
-| P3.5 | CLI 加 `--no-report` / `--report-dir` 参数 | ⏳ | — | 1h | — | — | |
+| **P3.5** | CLI 加 `--no-report` / `--report-dir` 参数 | ✅ | @Minzhi_Zhou | 1h | 0.5h | #P3.5 | `argparse` 加 2 个 flag (`--no-report` store_true, `--report-dir` str)；`ExploitContext` 加 `enable_report: bool = True` 字段；`from_args` 映射（`--no-report` → `ctx.enable_report=False`；`--report-dir` → `ctx.report_dir` + `mkdir(parents=True, exist_ok=True)` 防御性创建）；**`report.record_success` 接 ctx 改写**——P3.4 deviation #1 fix：从 `(info)` 加 ctx 读取（用 module-level `_current_ctx` carrier + `set_current_ctx()` setter，**避免**为接 ctx 改 14 个 caller 签名）；加 `--no-report` gate（`if not ctx.enable_report: return` + 打印 "report generation skipped"）；用 `ctx.report_dir` 替换 `Path('.')`；defensive ctx=None 降级；main() 启动时 `set_current_ctx(ctx)` 把 ctx 装入 carrier；`_legacy.py` argparse 段 +9 行，`context.py` +17 行（`enable_report` 字段 + from_args 改写），`report/__init__.py` +25 行（carrier + gate + report_dir）；11 项功能单测全过（--help 展示/默认 enable_report=True/--no-report 触发/--report-dir 自动 mkdir/--report-dir 不可写 raise ContextError/--no-report 跳过 e2e/--report-dir 不污染 cwd/ctx=None 降级/banner 总打印/e2e --no-report/e2e --report-dir 真生成 docx/...）；§2.6 验证 4/5 SUCCESS + 27/28=96% 一致 vs v3.1 baseline（**无回归**）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4.4, refactor.md#3.2.2 |
 | **P3.6** | docx 依赖 `python-docx` 改为 `try/except ImportError` 降级为 markdown | ✅ | @Minzhi_Zhou | 1h | 0.3h | #P3.6 | `report/docx.py` 加模块级 `try/except ImportError` 包装 `from docx import Document / WD_ALIGN_PARAGRAPH`；`_HAS_DOCX = True/False` 标志位；新加 `_generate_markdown(info, out_dir) -> Path` fallback 函数（覆盖 docx 5 段：Basic Info / BOF Info / Address table / Code / Summary + footer + Note）；`generate_docx` 入口 dispatch：`_HAS_DOCX=False` 时调 markdown fallback 并改 print 消息为 "Exploitation report generated (markdown fallback): ..."；**1 处有意偏离**：`try/except ImportError` 放模块顶层（spec 在 caller 端 catch）—— 因为 module-level import 失败在 import 期而非 call 期，caller 端 catch 永远不触发；模块顶层 try/except + `_HAS_DOCX` flag 是正确实现 spec 意图的方案；8 项功能单测全过（_HAS_DOCX 标志位/re-export/docx 路径正常/md 路径 5 段齐全/4 种 address 格式化/empty addresses 跳段/真 docx 缺失用 meta_path blocker 验证/无 cwd 污染）；§2.6 验证 4/5 SUCCESS + 27/28=96% 一致 vs v3.1 baseline（**无回归**——本机 python-docx 已装，走 docx 路径）；铁律 4：✅ 合并 ⏸ pytest N/A ✅ 5-binary 串行 ✅ 关键日志 ✅ Owner 自审 ✅ 文档；Refs: refactor.md#4.4, refactor.md#10 |
 
 ### 4.5 P4 — Recon 层
@@ -1813,6 +1813,102 @@ def handle_exploitation_success(exploit_type, payload, padding, addresses, vulne
 - **"EXPLOITATION SUCCESSFUL!" banner byte-for-byte 不变**（print_critical 调用保留）
 - **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
 - **commit 引用**：`e162b9f`（P3.4）— `806f056` (P3.6 docs) → `e162b9f` (P3.4)
+
+---
+
+**P3.5 详细步骤**（CLI `--no-report` / `--report-dir`）：
+
+依据 `refactor.md §4.4 P3.5` + `rebuild.md §6.4` spec，在 `argparse` 加 2 个 flag，把 `enable_report` 字段加到 `ExploitContext`，让 `report.record_success` 走 ctx：
+
+```python
+# _legacy.py argparse
+parser.add_argument('--no-report', action='store_true', ...)
+parser.add_argument('--report-dir', type=str, default=None, ...)
+
+# context.py
+@dataclass
+class ExploitContext:
+    ...
+    enable_report: bool = True
+    report_dir: Path = field(default_factory=Path.cwd)
+
+@classmethod
+def from_args(cls, args):
+    ...
+    enable_report = not bool(getattr(args, "no_report", False))
+    report_dir_arg = getattr(args, "report_dir", None)
+    if report_dir_arg:
+        report_dir_path = Path(report_dir_arg)
+        report_dir_path.mkdir(parents=True, exist_ok=True)  # 防御性创建
+        report_dir = report_dir_path
+    else:
+        report_dir = Path.cwd()
+    ...
+
+# report/__init__.py
+_current_ctx: Optional[ExploitContext] = None
+
+def set_current_ctx(ctx): global _current_ctx; _current_ctx = ctx
+
+def record_success(info):
+    print_critical("EXPLOITATION SUCCESSFUL! ...")
+    ctx = _current_ctx
+    if ctx is not None and not ctx.enable_report:
+        print_info("report generation skipped (--no-report)")
+        return
+    out_dir = ctx.report_dir if ctx is not None else Path(".")
+    generate_docx(info, out_dir)
+
+# main()
+ctx = ExploitContext.from_args(args)
+set_current_ctx(ctx)  # P3.5: stash ctx for record_success
+```
+
+**1 处有意偏离 spec**：
+
+- spec 暗示 `record_success(ctx, info)` 显式加 ctx 参数
+- 实际用 module-level `_current_ctx` carrier + `set_current_ctx(ctx)` setter
+
+原因：14 个 `handle_exploitation_success` caller 都没有 ctx in scope。显式加 ctx 参数需要 plumb 14 个函数签名（10 个 strategy 函数 + 4 个 handle 远程变体）—— 大手术。module-level carrier 是 P3.4 注释里就预告的过渡方案，**P8.5 删除整个 `_compat.py` 时一并清理**（refactor.md §13.1 表中 `_legacy.py` P8.5 操作行）。
+
+**P3.5 实施记录（2026-06-07）**：
+
+- **修改** `autopwn/_legacy.py`（3442 → 3454 = +12 行）：
+  - argparse 加 2 flag（`--no-report` + `--report-dir`）
+  - main() 启动 `set_current_ctx(ctx)` 把 ctx 注入 carrier
+- **修改** `autopwn/context.py`（291 → 308 = +17 行）：
+  - ExploitContext 加 `enable_report: bool = True` 字段
+  - `from_args` 映射 2 个新 flag（`enable_report = not args.no_report`；`report_dir` + `mkdir(parents=True, exist_ok=True)`）
+  - `report_dir` 默认从 `Path(".")` 改为 `Path.cwd()`（语义更清晰）
+- **修改** `autopwn/report/__init__.py`（79 → 128 = +49 行）：
+  - 新加 module-level `_current_ctx: Optional[ExploitContext] = None` carrier
+  - 新加 `set_current_ctx(ctx)` setter
+  - `record_success` 改写：读 `_current_ctx` + `--no-report` gate + `ctx.report_dir` 替换 `Path('.')` + ctx=None defensive fallback
+  - `__all__` 加 `set_current_ctx`
+- **11 项功能单测**（手测，pytest 体系待 P9）全过：
+  1. `--no-report` + `--report-dir` 出现在 `--help` 输出
+  2. 默认 `ctx.enable_report = True`
+  3. `--no-report` 设 `ctx.enable_report = False`
+  4. `--report-dir` 自动 `mkdir(parents=True, exist_ok=True)` + `ctx.report_dir` 匹配
+  5. 不可写 `--report-dir` raise `ContextError`
+  6. `--no-report` 调 `record_success` 跳 docx 生成
+  7. `--report-dir` 让 docx 落到指定目录，cwd 零污染
+  8. ctx=None defensive fallback 到 cwd
+  9. banner 总是打印（独立于 `--no-report`）
+  10. e2e CLI: `python autopwn.py -l Challenge/rip --no-report` rc=0 + 跳 docx
+  11. e2e CLI: `python autopwn.py -l Challenge/rip --report-dir /tmp/cli_reports/` rc=0 + docx 在指定目录
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL + 4/5 PASS（**无回归**）
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.4 + §6.4 同步
+  - 详见 `logs/comparison/summary.md`
+- **"EXPLOITATION SUCCESSFUL!" banner byte-for-byte 不变**
+- **Exploitation report generated 行不变**（走 docx 路径 + cwd 时与 v3.1 一致）
+- **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
+- **commit 引用**：（待回填）
 
 ---
 

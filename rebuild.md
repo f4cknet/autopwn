@@ -703,7 +703,7 @@ def run_nm(program) -> str:
   - 关 6：文档同步 — `rebuild.md` §4.2 + §6.2 + `refactor.md §4` 同步
   - 详见 `logs/comparison/summary.md`
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 4094 vs v3.1 3625（fuzzing 时序差异）
-- **commit 引用**：见下
+- **commit 引用**：`3696262`（P1.3a）— `ae59c78` (P1.3) → `3696262` (P1.3a)
 
 **P1.3b 详细步骤**（`core/runner.py` 扩展）：
 
@@ -760,7 +760,7 @@ def run_one_gadget(libc_path) -> str:
   - 关 6：文档同步 — `rebuild.md` §4.2 + §6.2 同步
   - 详见 `logs/comparison/summary.md`
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期）
-- **commit 引用**：见下
+- **commit 引用**：`4af923e`（P1.3b）— `3696262` (P1.3a) → `4af923e` (P1.3b)
 
 **P1.2 详细步骤**（`core/fs.py` 示例）：
 ```python

@@ -198,7 +198,7 @@
 
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
-| P5.1 | `detect/overflow.py`：搬 `test_stack_overflow` + `analyze_vulnerable_functions`；写入 `ctx.padding` | ⏳ | — | 4h | — | — | |
+| P5.1 | `detect/overflow.py`：搬 `test_stack_overflow` + `analyze_vulnerable_functions`；写入 `ctx.padding` | 🔄 | @Minzhi_Zhou | 4h | 0.8h | feature/p5.1-detect-overflow | 4× 二进制烟雾测试 OK：level3_x64 136=136, canary 静态 80, pie 静态 40 动态 48, rip 静态 19 动态 26 |
 | P5.2 | `detect/fmtstr.py`：搬 `detect_format_string_vulnerability` + `find_offset` | ⏳ | — | 3h | — | — | |
 | P5.3 | `detect/canary.py`：搬 `leakage_canary_value` + `canary_fuzz`；写入 `ctx.canary` | ⏳ | — | 3h | — | — | |
 | P5.4 | `detect/binsh.py`：搬 `check_binsh_string` + `check_binsh` | ⏳ | — | 1h | — | — | |
@@ -2364,11 +2364,35 @@ grep -n "globals().get(" autopwn.py
 
 ### 6.6 P5 — Detect 层
 
-**🟢 状态**：⏳ Pending｜**🟡 优先级**：P1｜**⏱ 预估**：15h
+**🟢 状态**：🔄 In Progress (P5.1 落地, P5.2–P5.5 ⏳) ｜**🟡 优先级**：P1｜**⏱ 预估**：15h
 
 **目标**：漏洞检测函数全部入 `detect/`，写入 `ctx` 字段。
 
 **子任务**：见 §4.6。
+
+**P5.1 实施记录** (commit on `feature/p5.1-detect-overflow`，Owner @Minzhi_Zhou, 0.8h)：
+
+* **文件**：`autopwn/detect/overflow.py` (358 行) + `autopwn/detect/__init__.py` (28 行)
+* **公开 API**（typed, 写 `ctx.padding`）：
+  * `test_stack_overflow(ctx, program, bit, max_test=10000) -> int`
+  * `analyze_vulnerable_functions(ctx, program, bit) -> Optional[int]`
+* **legacy ports**（`OBSOLETE` 前缀，纯字节级 parity）：
+  * `_legacy_test_stack_overflow(program, bit) -> int` — verbatim port of `_legacy.py:541-580`
+  * `_legacy_analyze_vulnerable_functions(program, bit) -> Optional[int]` — verbatim port of `_legacy.py:581-636`
+* **关键设计决策**：
+  * 公开函数**只写 `ctx.padding`，不打 `print_*`**——与 P4.6 `recon/asm.py` 一致（P5 是唯一允许写 ctx 的层，见 `refactor.md` §3.2.1）
+  * 动态测试 `test_stack_overflow` 加 `max_test` 参数（默认 10000 保持 v3.1 行为；单测可传 32 加速）
+  * 静态测试 `analyze_vulnerable_functions` 是 P4.6 `asm_stack_overflow` 的姊妹——同样 `lea + dangerous_call` 正则，但额外维护 `vulnerable[]` 列表
+  * 复用 P4.6 已编译的 `_LEA_RE` 模式（`lea -0x10(%rbp)` AT&T 语法）
+* **验证**：
+  * 烟雾测试：4 个 Challenge 二进制（canary/level3_x64/pie/rip）全部 import + 静态/动态调用成功
+  * CLI 烟雾测试：`AUTOPWN_VERIFY_TIMEOUT=30 bash scripts/run_verify.sh v4.0-verify-p51 pie` → `EXPLOITATION SUCCESSFUL!`
+  * 与 v3.1 log 对比：level3_x64 `Padding: 136` 字节级一致
+  * 公开/legacy 路径行为对比：`analyze_vulnerable_functions(ctx, 'Challenge/level3_x64', 64) == 136` == `_legacy_analyze_vulnerable_functions` 输出
+* **未动**：
+  * `_legacy.py` 本身（P8.1 wiring 时再删）
+  * `recon/`（P4 已完成）
+  * `main()` 调用顺序（P8.3 编排时再切）
 
 **P5.5 验收**（关键）：
 ```python

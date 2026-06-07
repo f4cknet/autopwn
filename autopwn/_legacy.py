@@ -94,37 +94,40 @@ from autopwn._compat import sync_ctx_to_legacy, record_success  # noqa: F401, E4
 
 
 def handle_exploitation_success(exploit_type, payload, padding, addresses, vulnerability_type, architecture):
-    """Handle successful exploitation by updating info and generating report"""
-    # P2.4: single bridge call replaces 7 update_exploit_info(...) writes
-    # (which in turn called exploit_info[key] = value internally).
-    # record_success() sets the same 7 fields + success=True in the same
-    # order.  See autopwn/_compat.py for the kwargs spec.
-    record_success(
+    """Handle successful exploitation by building ExploitInfo and dispatching.
+
+    P3.4 refactor: the body is now a thin adapter that builds an
+    :class:`ExploitInfo` from the 6 caller-known kwargs (plus 2 startup
+    fields read from the legacy dict) and calls
+    :func:`autopwn.report.record_success` (the new subscriber
+    orchestrator).  This replaces the P2.4 ``_compat.record_success``
+    bridge for the 6 main fields — those now flow directly from kwargs
+    to the typed dataclass with no dict intermediary.
+
+    Why the 2 dict reads remain
+    ---------------------------
+    ``target_binary`` and ``timestamp`` are populated at startup by
+    ``main()`` via ``_compat.sync_ctx_to_legacy``.  Plumbing them
+    through the 14 caller signatures is out of scope for P3.4 (would
+    be a 14-site mechanical change touching ~10 strategy functions).
+    P3.5 will introduce ``ctx`` as the new carrier and these 2 dict
+    reads will move to ``ctx.binary.path.name`` and a fresh
+    ``datetime.now()`` call in :func:`record_success`.  For P3.4 the
+    dict reads are unchanged from P3.2.
+    """
+    from autopwn.report import ExploitInfo, record_success
+
+    info = ExploitInfo(
         exploit_type=exploit_type,
         payload=payload,
         padding=padding,
         addresses=addresses,
         vulnerability_type=vulnerability_type,
         architecture=architecture,
-    )
-
-    print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
-
-    # P3.2: build ExploitInfo from the dict populated by record_success
-    # above, then call the new typed generator.  P3.4 will collapse this
-    # to construct ExploitInfo directly from kwargs (no dict bridge).
-    from autopwn.report import ExploitInfo, generate_docx
-    _info = ExploitInfo(
-        exploit_type=exploit_info['exploit_type'],
-        payload=exploit_info['payload'],
-        padding=exploit_info['padding'],
-        addresses=exploit_info['addresses'],
-        vulnerability_type=exploit_info['vulnerability_type'],
-        architecture=exploit_info['architecture'],
         target_binary=exploit_info['target_binary'],
         timestamp=exploit_info['timestamp'],
     )
-    generate_docx(_info, Path('.'))
+    record_success(info)
 
 def detect_libc(program):
     """Detect libc path automatically."""

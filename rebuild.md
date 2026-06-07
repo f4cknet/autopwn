@@ -1670,7 +1670,7 @@ def generate_code(info: ExploitInfo, out_dir: Path) -> str:
   - 详见 `logs/comparison/summary.md`
 - **f-string 模板 byte-for-byte 保留**：5 主流 exploit type 输出与 v3.1 完全一致（_legacy 删 135 行无 regression 即证）
 - **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
-- **commit 引用**：（待回填）
+- **commit 引用**：`ded551a`（P3.3）— `5d2fe36` (P3.2 docs) → `ded551a` (P3.3)
 
 ---
 

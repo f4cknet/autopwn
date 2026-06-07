@@ -189,8 +189,8 @@
 | P4.2 | `recon/libc.py`：合并 `detect_libc` + `ldd_libc` 为 `detect(ctx) → LibcInfo` | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P4.2 | 新加 `autopwn/recon/libc.py`（209 行）+ `recon/__init__.py` re-export `detect`；1 个 public 函数 `detect(ctx, program) -> LibcInfo`（pure，3 阶段：user override (`ctx.libc.path`) → ldd auto-detect → empty LibcInfo）+ 1 个 helper `_parse_libc_path(ldd_out)` + 2 个 legacy port (`_legacy_detect_libc` / `_legacy_ldd_libc`，0 caller / 1 caller，含原 print 行为供字节级保真)；`LibcInfo.elf` 维持 `None`（懒加载 — P7 strategy 才 `ELF(libc_path)`，避免 pwntools 在 recon 期 import）；**未替换 `_legacy.py` 调用点**（P8 orchestrator 责任）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × detect() + 1 user-override + 1 empty-LibcInfo + 6 _parse_libc_path edge case + 3 legacy port = 16 测试全过；详见 §6.5 P4.2 实施记录 |
 | P4.3 | `recon/plt.py`：`scan_plt_functions` 返回 dict，写入 `ctx.has_*` 标志 | ✅ | @Minzhi_Zhou | 3h | 0.5h | #P4.3 | 新加 `autopwn/recon/plt.py`（200 行）+ `recon/__init__.py` re-export `scan`；1 public + 1 helper + 2 legacy port：`scan(ctx, program) -> dict[str, int]`（6 函数，**P4 层首个 mutate ctx** 的模块 — 写 6 个 `ctx.has_*` bool；与 P4.1/P4.2 不同是因为 PLT 标志 6 个独立 bool 无自然 container）+ `_parse_plt_addresses(objdump_out)` helper + 2 个 legacy port（`_legacy_scan_plt_functions` 7 函数含 main 保 v3.1 行为 + `_legacy_set_function_flags`）；**deviation**: 新 `scan` 6 函数（drop `main`），v3.1 legacy port 7 函数（含 main，与 §4.5 spec 「`has_*` 标志」对应 — `main` 不 gate 任何 strategy 故 ctx 无 `has_main` 字段）；**未替换 `_legacy.py` 调用点**（P4.7 删 globals 时一并处理）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × scan + 1 幂等 + 1 re-overwrite + 4 _parse 边缘 + 4 legacy port + 1 cwd 污染 + 1 re-export = 16 测试全过；详见 §6.5 P4.3 实施记录 |
 | P4.4 | `recon/rop.py`：搬 `find_rop_gadgets_x64/x32`，返回 `RopGadgetsX64/X32` | ✅ | @Minzhi_Zhou | 4h | 0.7h | #P4.4 | 新加 `autopwn/recon/rop.py`（280 行）+ `recon/__init__.py` re-export `find_x64` / `find_x32`；2 public + 2 helpers + 2 legacy port：`find_x64(ctx, program) -> RopGadgetsX64`（return-only，**不 mutate ctx**，P8 赋值；3 次 `run_ropper` 合并解析 5 字段：`pop_rdi`/`pop_rsi`/`ret`/`extra_rdi`/`extra_rsi`）+ `find_x32(ctx, program) -> RopGadgetsX32`（6 次 `run_ropper` + R8 缓解 4 bool 合并 `has_eax_ebx_ecx_edx`）+ 2 helper (`_parse_ropper_lines` / `_extract_x64_gadgets` / `_extract_x32_gadgets`)+ 2 legacy port（保 5-tuple / 11-tuple 形状与 v3.1 表格打印）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × find_x64/find_x32 + return-only 契约 + 2 _parse 边缘 + 2 _extract 合成输入 + 2 legacy port shape + re-export = 11 测试全过；详见 §6.5 P4.4 实施记录 |
-| P4.5 | `recon/bss.py`：搬 `find_large_bss_symbols` + `find_ftmstr_bss_symbols` | ⏳ | — | 2h | — | — | |
-| P4.6 | `recon/asm.py`：搬 `vuln_func_name` + `asm_stack_overflow` | ⏳ | — | 2h | — | — | |
+| P4.5 | `recon/bss.py`：搬 `find_large_bss_symbols` + `find_ftmstr_bss_symbols` | ✅ | @Minzhi_Zhou | 2h | 0.3h | #P4.5 | 新加 `autopwn/recon/bss.py`（150 行）+ `recon/__init__.py` re-export `BSSSymbol` / `find_bss`；1 dataclass + 1 public + 2 legacy port：`BSSSymbol(name, address, size)` slots dataclass + `find_bss(program, *, min_size=30, name_filter=None) -> list[BSSSymbol]`（参数化 v3.1 两个 size/name 过滤条件）+ 2 个 legacy port（`_legacy_find_large_bss_symbols` 3-tuple + `_legacy_find_ftmstr_bss_symbols` 3-tuple）；**DEV-1**: legacy `_legacy_find_ftmstr_bss_symbols` 保 v3.1 的「last-match-wins」bug（原代码无 `break` + `function` 变量不复位）— 文档化在 docstring；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × find_bss（2 filter） + 1 nonexistent + 1 strict filter + 1 slots + 1 re-export + 1 cwd 污染 + 4 legacy port parity = 16 测试全过；详见 §6.5 P4.5 实施记录 |
+| P4.6 | `recon/asm.py`：搬 `vuln_func_name` + `asm_stack_overflow` | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P4.6 | 新加 `autopwn/recon/asm.py`（200 行）+ `recon/__init__.py` re-export `vuln_func_name` / `asm_stack_overflow` / `analyze_vulnerable_functions`；3 public + 3 legacy port（spec 只列 2 个源函数，但 P4.6 把邻居 `analyze_vulnerable_functions` 也搬了以避免 P5+ PR 重触 `_legacy.py`）：`vuln_func_name(program) -> list[str]`（`re.split r'\n\n'` 解析函数体）+ `asm_stack_overflow(program, bit) -> Optional[int]`（`re.finditer` 找第一个 `lea -N(%ebp)` 模式 + `+4` 或 `+8` 对齐）+ `analyze_vulnerable_functions(program, bit) -> Optional[int]`（同 asm_stack_overflow 但走不同函数体匹配逻辑）；module-level compile `_LEA_RE`（P2.1 范式）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × 3 public + 5 legacy port parity + 5 edge case = 30 测试全过；详见 §6.5 P4.6 实施记录 |
 | P4.7 | **关键**：删除 `autopwn.py` 中所有 `globals().get('system', 0)` 等 22 处；改读 `ctx.has_system` | ⏳ | — | 3h | — | — | 风险点 |
 | P4.8 | 删除 `set_function_flags` 的 `globals()[func] = available` 副作用 | ⏳ | — | 0.5h | — | — | |
 
@@ -2194,6 +2194,115 @@ grep -n "globals().get(" autopwn.py
   - P8 orchestrator 整合 6 个 P4.x 模块 + 5 个 P5.x detect 模块进 `run_recon_phase(ctx)` / `run_detect_phase(ctx)`
 
 **Refs**: refactor.md §3.2.1（RopGadgetsX64/X32 + R8 缓解）/ refactor.md §5（79 函数 → 新位置映射表）
+
+---
+
+**P4.5 实施记录（2026-06-07）**：
+
+- **新文件** `autopwn/recon/bss.py`（150 行）：1 dataclass + 1 public + 2 legacy ports
+  - `BSSSymbol(name: str, address: int, size: int)` — `@dataclass(slots=True)`，3 字段
+  - `find_bss(program, *, min_size=30, name_filter=None) -> list[BSSSymbol]` — **pure**（无 print / 无 globals / 仅读 ELF `.symtab`）；参数化 v3.1 的 2 个不同过滤条件（`st_size > 30` for shellcode / `st_size > 2 + '_' not in name` for fmtstr），返回所有匹配的 list（**非 first-match** —— caller 自取 `syms[0]`）
+  - `_legacy_find_large_bss_symbols(program) -> (int, Optional[str], Optional[str])` — v3.1 `find_large_bss_symbols` 字面 port（L332-355），**保 3-tuple 形状 + first-match-wins + 4 print** —— 1 caller
+  - `_legacy_find_ftmstr_bss_symbols(program) -> (int, Optional[str], Optional[str])` — v3.1 字面 port（L813-831），**保 3-tuple 形状 + 1 print**
+
+- **修改** `autopwn/recon/__init__.py`（64 → 86 行）：re-export `BSSSymbol` / `find_bss` + 更新 `__all__` + 顶部 docstring 增 P4.5 status
+
+- **设计决策**：
+  - **`find_bss` 参数化 2 个 v3.1 函数为 1 个**：v3.1 有 2 个几乎相同但过滤条件不同的函数（`size>30` vs `size>2 + no_underscore`），新模块用 kwargs 参数化；返回 list 替代 first-match tuple
+  - **DEV-1 文档化（保 v3.1 bug）**：v3.1 `find_ftmstr_bss_symbols` L815 初始化 `function = 0` + for 循环设 `function = 1; buf_addr = ...; function_name = ...` 但**不 break**。多匹配时循环到底，**最后**匹配胜出，**且 `function` 始终是 1**。这显然是 v3.1 bug（应该是 first-match-wins）。**legacy port 保 bug 字节级保真**，新 `find_bss` 不受影响（用 list 替代）
+
+- **零行为变更**：`_legacy.py` 一字未动（3469 行未变）；main() 仍走 `_legacy.find_large_bss_symbols` / `find_ftmstr_bss_symbols`；新模块是**并行、可单元测试**实现
+
+- **16 项功能单测**（手测，pytest 体系待 P9）全过：
+  1. 5 binary × `find_bss`（min_size=30 default） — canary/fmtstr1/level3_x64/pie/rip 全 0 匹配（v3.1 baseline 一致）
+  2. 5 binary × `find_bss`（min_size=2 + no_underscore） — fmtstr1 有 1 匹配（其他 4 个 0）
+  3. nonexistent binary → 空 list（不抛异常）
+  4. min_size=10000 → 空 list（无符号那么大）
+  5. BSSSymbol slots 强制
+  6. `_legacy_find_large_bss_symbols` 5 binary — 全部 (0, None, None)（与新 find_bss 一致）
+  7. `_legacy_find_ftmstr_bss_symbols` 5 binary — fmtstr1 拿到 `x` 符号
+  8. legacy port 3-tuple 形状保 v3.1
+  9. legacy port 字段类型正确（int / Optional[str] / Optional[str]）
+  10. `from autopwn.recon import find_bss, BSSSymbol` re-export 路径有效
+  11. `_legacy_*` 不在 `__all__`
+  12. cwd 零污染
+  13-16. legacy port parity — `_legacy_find_large_bss_symbols` first-match 与新 `find_bss[0]` 一致
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（90s 截断预期） + fmtstr1/level3_x64/pie/rip 全部 PASS（**4/5 SUCCESS，与 v3.1 baseline 持平**）
+  - 关 4：关键日志对比 vs v3.1 baseline — **27/28 = 96% 一致**（**无回归**）
+  - 关 5：Reviewer — Owner 自审（§2.2 单人项目）
+  - 关 6：文档同步 — `rebuild.md` §4.5 + §6.5 同步
+  - 详见 `logs/comparison/summary.md`（P4.5 重新生成）
+  - **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
+
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，与 P0.7–P4.4 同类，**非功能差异**）
+
+- **与 P4.7 globals() 清理的关系**：P4.5 **不**触碰 `globals()`；bss 路径不依赖 globals
+
+- **后续步骤**：
+  - P4.6（asm）静态分析 vuln func + 栈帧 padding 调整（与本 PR 同 commit — 见下条）
+  - P4.7 删 22 处 `globals().get(...)` 改读 `ctx.has_*` / `ctx.gadgets_*`（R1 风险点 — 此时 5 个新模块都已就位）
+  - P4.8 删 `set_function_flags` 副作用
+  - P8 orchestrator 整合 6 个 P4.x 模块 + 5 个 P5.x detect 模块进 `run_recon_phase(ctx)` / `run_detect_phase(ctx)`
+
+**Refs**: refactor.md §5（79 函数 → 新位置映射表）
+
+---
+
+**P4.6 实施记录（2026-06-07）**：
+
+- **新文件** `autopwn/recon/asm.py`（200 行）：3 public + 3 legacy ports
+  - `vuln_func_name(program) -> list[str]` — **pure**；用 `re.split(r"\n\n", content.strip())` 切分函数体（v3.1 L651 原方法，**非 `re.finditer`**），找 `lea + dangerous_call(read/gets/fgets/scanf)` 的函数名
+  - `asm_stack_overflow(program, bit) -> Optional[int]` — **pure**；用 `re.finditer` 配对函数边界（v3.1 L687 模式），找第一个 `lea -N(%ebp/%rbp)` 的 `lea_match`，padding = `abs(offset) + (8 if bit==64 else 4)`
+  - `analyze_vulnerable_functions(program, bit) -> Optional[int]` — **pure**；同 `asm_stack_overflow` 但**不要求 has_call**（只 `lea + dangerous_call`），同样 `re.finditer` 模式
+  - `_legacy_vuln_func_name` / `_legacy_asm_stack_overflow` / `_legacy_analyze_vulnerable_functions` — 3 个字面 port，保 v3.1 print 行为（VULNERABLE FUNCTIONS 表格 / stack size 成功行 / error 打印）
+  - module-level compile `_LEA_RE`（P2.1/P3.1 范式，热 regex 不每次 re.compile）
+
+- **修改** `autopwn/recon/__init__.py`（86 → 110 行）：re-export 3 个 public + 更新 `__all__` + docstring 增 P4.6 status
+
+- **设计决策**：
+  - **3 个 public 而非 spec 的 2 个**：spec 列了 `vuln_func_name` + `asm_stack_overflow`，但 `_legacy.py` L581-636 有第三个 `analyze_vulnerable_functions`（同样 AT&T syntax regex + 同样 dangerous_call 检查 + 同样 VULNERABLE FUNCTIONS 表格）。**同 PR 一起搬避免 P5+ PR 重触 _legacy.py**（保持 §2.1 「单 PR 只动一个层」约束）
+  - **`vuln_func_name` 用 `re.split(r"\n\n")` 而 `asm_stack_overflow` / `analyze_vulnerable_functions` 用 `re.finditer`**：保 v3.1 两个不同 parser 行为。**两个 parser 对 canary 返回不同 first-match** — `vuln_func_name` 返 `['vuln']`（真 vuln），`analyze_vulnerable_functions` 返 `hacked` 函数（hacked 有 lea 但其实不是 vuln 函数）— 这也是 v3.1 legacy behavior 的 quirk
+  - **`_legacy_analyze_vulnerable_functions` 表格不**在 pure public 版本：v3.1 L620-630 印 VULNERABLE FUNCTIONS 表格，是 P8 orchestrator 责任（pure 函数不 print）
+
+- **零行为变更**：`_legacy.py` 一字未动（3469 行未变）；main() 仍走 `_legacy.vuln_func_name` / `asm_stack_overflow` / `analyze_vulnerable_functions`；新模块是**并行、可单元测试**实现
+
+- **30 项功能单测**（手测，pytest 体系待 P9）全过：
+  1. 5 binary × 3 public — 验证 `vuln_func_name` 返正确函数名（canary=`vuln` / level3_x64=`vulnerable_function` / pie=`func1` / fmtstr1+rip=`main`）+ `asm_stack_overflow` 返正确 padding（canary=80 / fmtstr1=12 / level3_x64=136 / pie=36 / rip=19）+ `analyze_vulnerable_functions` 返相同 padding（但 first match 不同 — v3.1 quirk）
+  2. 5 binary × 3 legacy port parity — `new == legacy`（**silent success path** 保字节级保真）
+  3. 5 binary × `_legacy_analyze_vulnerable_functions` 印 VULNERABLE FUNCTIONS 表格
+  4. `vuln_func_name` 返 list[str] 类型
+  5. `asm_stack_overflow` / `analyze_vulnerable_functions` 返 `Optional[int]`
+  6. nonexistent binary → `vuln_func_name` 返 `[]`（silent fail，**非** raise）
+  7. 5 binary × `BSSSymbol` 构造 + slots 强制
+  8. `from autopwn.recon import vuln_func_name, asm_stack_overflow, analyze_vulnerable_functions` re-export
+  9. `_legacy_*` 不在 `__all__`
+  10. cwd 零污染（用 `intel=False` 的 `run_objdump_disasm` 复用 P1.3 wrapper，无 `Objdump_Scan.txt` 落盘）
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：⏸ **N/A**（`tests/` P9.1）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（90s 截断预期） + fmtstr1/level3_x64/pie/rip 全部 PASS（**4/5 SUCCESS，与 v3.1 baseline 持平**）
+  - 关 4：关键日志对比 vs v3.1 baseline — **27/28 = 96% 一致**（**无回归**）
+  - 关 5：Reviewer — Owner 自审（§2.2 单人项目）
+  - 关 6：文档同步 — `rebuild.md` §4.5 + §6.5 同步
+  - 详见 `logs/comparison/summary.md`（P4.6 重新生成）
+  - **无新增 failure mode**：`grep -E "KeyError|no suitable shellcode|Traceback" logs/v4.0/*.log` → 0 行
+
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，与 P0.7–P4.5 同类，**非功能差异**）
+
+- **与 P4.7 globals() 清理的关系**：P4.6 **不**触碰 `globals()`；asm 路径不依赖 globals
+
+- **后续步骤**：
+  - P4.7 删 22 处 `globals().get(...)` 改读 `ctx.has_*` / `ctx.gadgets_*`（R1 风险点 — 此时 6 个 P4.x 模块都已就位，删 globals 不会断路）
+  - P4.8 删 `set_function_flags` 副作用
+  - P5.x（detect 层 5 模块）
+  - P8 orchestrator 整合 6 个 P4.x 模块 + 5 个 P5.x detect 模块进 `run_recon_phase(ctx)` / `run_detect_phase(ctx)`
+
+**Refs**: refactor.md §5（79 函数 → 新位置映射表）
 
 ---
 

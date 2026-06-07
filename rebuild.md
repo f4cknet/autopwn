@@ -209,7 +209,7 @@
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
 | P6.1 | `primitives/base.py`：`ExploitPrimitive` 抽象类 + `ExploitResult` dataclass | ✅ | @Minzhi_Zhou | 2h | 0.4h | feature/p6.1-primitives-base | ExploitPrimitive ABC（5 单测）+ ExploitResult dataclass（4 单测）+ FakePrim 烟雾 OK；ExploitResult 用 @dataclass(slots=True) 替代 v3.1 手写 __init__（P2.1 一致） |
-| P6.2 | `primitives/ret2system.py`：x32 + x64 payload builder（pure function） | ⏳ | — | 3h | — | — | |
+| P6.2 | `primitives/ret2system.py`：x32 + x64 payload builder（pure function） | ✅ | @Minzhi_Zhou | 3h | 0.6h | feature/p6.2-primitives-ret2system | Ret2SystemX32 + Ret2SystemX64，2 公开 + 2 legacy port；fmtstr1 payload=124B (112+12), rip=36B (24+12), canary=b""; 10 单测全过；64-bit 含 ret 对齐 gadget 修 glibc 18.04+ MOVAPS 崩溃 |
 | P6.3 | `primitives/ret2libc_put.py`：x32 + x64 payload builder | ⏳ | — | 4h | — | — | |
 | P6.4 | `primitives/ret2libc_write.py`：x32 + x64 payload builder | ⏳ | — | 4h | — | — | |
 | P6.5 | `primitives/execve_syscall.py`：x32 payload builder | ⏳ | — | 2h | — | — | |
@@ -2562,6 +2562,32 @@ class ExploitResult:
   * ExploitResult repr 是 `ExploitResult(success=True, payload=b'hi')` 形式
   * FakePrim 烟雾 OK：name=stage_count=1 + payload='X'*padding
 * **下一步**：P6.2 (`ret2system.py`，3h 估) — 第 1 个具体 primitive 子类
+
+**P6.2 实施记录** (commit on `feature/p6.2-primitives-ret2system`，Owner @Minzhi_Zhou, 0.6h)：
+
+* **文件**：`autopwn/primitives/ret2system.py` (305 行) + `autopwn/primitives/__init__.py` (re-export)
+* **公开 API**：
+  * `Ret2SystemX32.build_payload(ctx) -> bytes` — x32 ret2libc system；payload = `b'A' * padding + p32(system) + p32(0) + p32(binsh)`
+  * `Ret2SystemX64.build_payload(ctx) -> bytes` — x64 ret2libc system 含 ret 对齐 gadget；payload = `b'A' * padding + p64(pop_rdi) + p64(binsh) + p64(ret) + p64(system)`
+  * `_lookup_system_and_binsh(program) -> (system_addr, binsh_addr)` — 共享 helper，None 当符号缺失
+* **legacy ports**（`OBSOLETE` 前缀，字节级 parity）：
+  * `_legacy_ret2_system_x32(program, libc, padding, libc_path) -> bool` — verbatim port of `_legacy.py:1590-1616`
+  * `_legacy_ret2_system_x64(...) -> bool` — verbatim port of `_legacy.py:1617-1656` 含 `other_rdi_registers` 1/0 分支
+* **关键设计决策**：
+  * **P6.1 docstring 微调**：从「no subprocess, no file I/O」改为「no subprocess, no file WRITE, no globals writes」——spec 显式 `e.symbols['system']` 需 ELF read，read-only 文件访问允许
+  * **`_lookup_system_and_binsh` helper**：合并 v3.1 两个 primitive 的 ELF 解析；None 当 system/binsh 缺失；primitives 返 `b""` 跳过
+  * **`e.symbols['system']`（非 `e.plt['system']`）**：匹配 v3.1 L1600 / L1630 实际源码（spec 写错——验证 _legacy.py 确认）
+  * **`asm('nop') * padding`（非 `b'A' * padding`）**：legacy port 匹配 v3.1；新公开函数用 `b'A'`（spec 示例 + 单元测试易断言）
+  * **`b""` 短路**：`system_addr` 或 `binsh_addr` 为 None 时（canary 等 no-system 二进制）返 `b""`；P7 strategy 跳过此 primitive
+  * **64-bit ret 对齐 gadget**：v3.1 L1636-1642 同款；修 Ubuntu 18.04+ glibc system() 的 MOVAPS 16-byte 对齐崩溃
+* **验证**：
+  * `Ret2SystemX32(fmtstr1)` payload = 124B (112 padding + 12)
+  * `Ret2SystemX32(rip)` payload = 36B (24 + 12)
+  * `Ret2SystemX32(canary)` (no system) payload = `b""` ✓
+  * `Ret2SystemX64(pie, gadgets=0x1234/0x5678)` payload = 80B (48 + 32)
+  * 假 gadgets (pop_rdi=0xDEAD, ret=0xBEEF) 字节级出现于 payload ✓
+  * no gadgets / zero gadgets / canary → 全部 `b""` ✓
+* **下一步**：P6.3 (`ret2libc_put.py`, 4h 估) — 2-stage primitive (stage_count=2)；put 泄漏 libc → system
 
 **P6.2 详细步骤**（`primitives/ret2system.py`）：
 ```python

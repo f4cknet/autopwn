@@ -25,12 +25,17 @@ with concrete payload builders (``Ret2SystemX32`` /
 
 Design notes
 ------------
-* **Pure-function contract**: subclasses of
-  :class:`ExploitPrimitive` MUST NOT spawn processes, open
-  files, or call ``interactive()``.  ``build_payload`` takes
-  a fully populated :class:`ExploitContext` and returns
-  ``bytes``.  P7 strategies handle all I/O (process spawn,
-  payload transmission, response parsing).
+* **Pure-function contract** (no *side effects*): subclasses
+  of :class:`ExploitPrimitive` MUST NOT spawn processes, write
+  files, mutate :class:`ExploitContext`, or call
+  ``interactive()``.  ``build_payload`` takes a fully populated
+  :class:`ExploitContext` and returns ``bytes``.
+
+  Read-only file access (e.g. ``ELF(path).symbols['system']``)
+  is allowed and expected — pwntools' ``ELF`` class is the
+  canonical way to look up symbol addresses inside a binary.
+  P7 strategies handle process spawn, payload transmission,
+  and response parsing.
 * **Single-dependency direction**: primitives may import from
   ``autopwn.context`` (model layer) but **NOT** from
   ``autopwn.exp`` (strategies layer).  Enforced by §6.7

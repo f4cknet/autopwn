@@ -75,7 +75,7 @@
 |---|---|---|---|---|---|
 | **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
-| **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_recon_*` 全绿 | ⏳ |
+| **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
 | **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个二进制 | ⏳ |
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ⏳ |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
@@ -111,7 +111,7 @@
 | `_legacy.py` 减 ~30（搬 fs 工具）| P1.2 |
 | `_legacy.py` 减 ~20（搬 subprocess wrapper 调用点）| P1.5 |
 | `_legacy.py` 写点 -9（桥函数）| **P2.3 + P2.4** ✅ |
-| `_legacy.py` 减 ~1500（搬 recon / detect）| P4 + P5 |
+| `_legacy.py` 减 ~1500（搬 recon / detect）| P4 + P5 (**P4 ✅ + P5 ✅**, 尚未删 _legacy.py 调用点——P8.1 编排时再删) |
 | `_legacy.py` 减 ~1500（搬 primitives / 30+ 策略）| P6 + P7 |
 | `_legacy.py` 减 ~400（搬 main() 决策树）| P8.1 + P8.2 + P8.3 |
 | `_compat.py` 创建 | **P2.3** ✅ |
@@ -198,11 +198,11 @@
 
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
-| P5.1 | `detect/overflow.py`：搬 `test_stack_overflow` + `analyze_vulnerable_functions`；写入 `ctx.padding` | 🔄 | @Minzhi_Zhou | 4h | 0.8h | feature/p5.1-detect-overflow | 4× 二进制烟雾测试 OK：level3_x64 136=136, canary 静态 80, pie 静态 40 动态 48, rip 静态 19 动态 26 |
-| P5.2 | `detect/fmtstr.py`：搬 `detect_format_string_vulnerability` + `find_offset` | 🔄 | @Minzhi_Zhou | 3h | 0.6h | feature/p5.2-detect-fmtstr | 烟雾测试 OK：fmtstr1 vulnerable=True/2 triggers + offset=11；level3_x64 vulnerable=True/6 triggers；legacy ports 字节级 parity |
-| P5.3 | `detect/canary.py`：搬 `leakage_canary_value` + `canary_fuzz`；写入 `ctx.canary` | 🔄 | @Minzhi_Zhou | 3h | 1.0h | feature/p5.3-detect-canary | 烟雾测试 OK：leakage 10 leaks/100 max=100 字节级 parity；canary_fuzz(max_c=3, max_padding=3) returns None（预期，暴力枚举需 ~7min）；legacy port 写 canary.txt 100 行字节级一致 |
-| P5.4 | `detect/binsh.py`：搬 `check_binsh_string` + `check_binsh` | 🔄 | @Minzhi_Zhou | 1h | 0.3h | feature/p5.4-detect-binsh | 烟雾测试 OK：5 二进制 check_binsh 返回正确（canary=F, fmtstr1=T, level3_x64=F, pie=T, rip=T），ctx.binsh_in_binary 同步 |
-| P5.5 | 单元测试：每个 detect 函数对 `Challenge/` 下对应二进制跑一遍 | 🔄 | @Minzhi_Zhou | 4h | 0.8h | feature/p5.5-detect-tests | pytest -m detect 全绿 21/21；涵盖 4 个 detect 模块 × 2-3 个测试 + 5 个 binary 矩阵化 (test_detect_binsh)；v3.1 vs v4.0 96% 一致无回归 |
+| P5.1 | `detect/overflow.py`：搬 `test_stack_overflow` + `analyze_vulnerable_functions`；写入 `ctx.padding` | ✅ | @Minzhi_Zhou | 4h | 0.8h | feature/p5.1-detect-overflow | 4× 二进制烟雾测试 OK：level3_x64 136=136, canary 静态 80, pie 静态 40 动态 48, rip 静态 19 动态 26 |
+| P5.2 | `detect/fmtstr.py`：搬 `detect_format_string_vulnerability` + `find_offset` | ✅ | @Minzhi_Zhou | 3h | 0.6h | feature/p5.2-detect-fmtstr | 烟雾测试 OK：fmtstr1 vulnerable=True/2 triggers + offset=11；level3_x64 vulnerable=True/6 triggers；legacy ports 字节级 parity |
+| P5.3 | `detect/canary.py`：搬 `leakage_canary_value` + `canary_fuzz`；写入 `ctx.canary` | ✅ | @Minzhi_Zhou | 3h | 1.0h | feature/p5.3-detect-canary | 烟雾测试 OK：leakage 10 leaks/100 max=100 字节级 parity；canary_fuzz(max_c=3, max_padding=3) returns None（预期，暴力枚举需 ~7min）；legacy port 写 canary.txt 100 行字节级一致 |
+| P5.4 | `detect/binsh.py`：搬 `check_binsh_string` + `check_binsh` | ✅ | @Minzhi_Zhou | 1h | 0.3h | feature/p5.4-detect-binsh | 烟雾测试 OK：5 二进制 check_binsh 返回正确（canary=F, fmtstr1=T, level3_x64=F, pie=T, rip=T），ctx.binsh_in_binary 同步 |
+| P5.5 | 单元测试：每个 detect 函数对 `Challenge/` 下对应二进制跑一遍 | ✅ | @Minzhi_Zhou | 4h | 0.8h | feature/p5.5-detect-tests | pytest -m detect 全绿 21/21；涵盖 4 个 detect 模块 × 2-3 个测试 + 5 个 binary 矩阵化 (test_detect_binsh)；v3.1 vs v4.0 96% 一致无回归 |
 
 ### 4.7 P6 — Primitives 层
 
@@ -2364,7 +2364,7 @@ grep -n "globals().get(" autopwn.py
 
 ### 6.6 P5 — Detect 层
 
-**🟢 状态**：🔄 In Progress (P5.1 落地, P5.2–P5.5 ⏳) ｜**🟡 优先级**：P1｜**⏱ 预估**：15h
+**🟢 状态**：✅ Done (P5.1–P5.5 全 5 子任务合并至 `feature/p5.*`，待 dev→main merge) ｜**🟡 优先级**：P1｜**⏱ 实际**：3.5h (估 15h, 实际 23% 预算)
 
 **目标**：漏洞检测函数全部入 `detect/`，写入 `ctx` 字段。
 

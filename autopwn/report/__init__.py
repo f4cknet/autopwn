@@ -18,11 +18,13 @@ from typing import Optional
 
 from autopwn.context import ExploitContext
 from autopwn.core.logging import print_critical
+from autopwn.report.code import generate_code
 from autopwn.report.docx import generate_docx
 from autopwn.report.model import ExploitInfo
 
 __all__: list[str] = [
     "ExploitInfo",
+    "generate_code",
     "generate_docx",
     "record_success",
     "set_current_ctx",

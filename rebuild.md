@@ -222,7 +222,7 @@
 
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
-| **P7.1** | `exp/base.py`：`ExploitStrategy` 抽象类（含 `requires_*` 元数据 + `matches`） | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P7.1 | Refs: refactor.md#3.2.2 |
+| **P7.1** | `exp/base.py`：`ExploitStrategy` 抽象类（含 `requires_*` 元数据 + `matches`） | ✅ | @Minzhi_Zhou | 2h | 0.4h | 1f594c5 | Refs: refactor.md#3.2.2 |
 | P7.2 | `exp/registry.py`：`@register` 装饰器 + `candidates(ctx)` 排序 | ⏳ | — | 2h | — | — | |
 | P7.2a | （P7.2 子任务）梳理原 if 顺序 → `priority` 值对照表（见附录 A） | ⏳ | — | 2h | — | — | 需 Owner 拍板 |
 | P7.3 | `exp/strategies/ret2system_x32.py` + `_x64.py`（含本地/远端） | ⏳ | — | 3h | — | — | |
@@ -3016,7 +3016,7 @@ from .canary_execve_syscall import CanaryExecveSyscall
   - 关 6：文档同步 — `rebuild.md` §4.8 + §6.8 P7.1 同步
   - 详见 `logs/comparison/summary.md`（P7.1 重新生成）
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期；与 P6.x 全部 9 个 PR 同源）
-- **commit 引用**：待 commit + push
+- **commit 引用**：`1f594c5`（P7.1）— `d31bfbc` (P6.9) → `1f594c5` (P7.1)
 - **Refs**：`refactor.md §3.2.2`（ExploitStrategy 设计 WHY）；后续 P7.2（registry）/ P7.3-P7.10（具体策略子类）按 §6.8 spec 继续
 
 ---

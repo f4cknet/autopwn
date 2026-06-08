@@ -76,7 +76,7 @@
 | **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
-| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 7/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2+P7.3+P7.4+P7.5+P7.6)；integration 测试 P9.4 待补；`dev` 分支已建立 per B-005，P7.3+ PR target=dev) |
+| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 8/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2+P7.3+P7.4+P7.5+P7.6+P7.7)；integration 测试 P9.4 待补；`dev` 分支已建立 per B-005，P7.3+ PR target=dev) |
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ⏳ |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
@@ -229,7 +229,7 @@
 | **P7.4** | `exp/strategies/ret2libc_put_x32.py` + `_x64.py` | ✅ | @Minzhi_Zhou | 3h | 0.7h | f7a8ba4 | 4 strategies (local+remote × 32+64) `priority=RET2LIBC_PUT=120`；2-stage puts leak；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | **P7.5** | `exp/strategies/ret2libc_write_x32.py` + `_x64.py` | ✅ | @Minzhi_Zhou | 3h | 0.5h | be7e37f | 4 strategies (local+remote × 32+64) `priority=RET2LIBC_WRITE=110`；2-stage write leak；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | **P7.6** | `exp/strategies/rwx_shellcode_x32.py` + `_x64.py` | ✅ | @Minzhi_Zhou | 2h | 0.5h | 03db6d1 | 4 strategies (local+remote × 32+64) `priority=RWX_SHELLCODE=90`；1-stage BSS shellcode 注入；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
-| **P7.7** | `exp/strategies/execve_syscall.py` | 🔄 | @Minzhi_Zhou | 2h | — | — | x32 only；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
+| **P7.7** | `exp/strategies/execve_syscall.py` | ✅ | @Minzhi_Zhou | 2h | 0.4h | 0757779 | 2 strategies (local+remote, **x32 only**) `priority=EXECVE_SYSCALL=80`；1-stage `int 0x80; execve` syscall chain；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | P7.8 | `exp/strategies/fmtstr.py`（含 `fmtstr_print_strings` 旁路） | ⏳ | — | 3h | — | — | |
 | P7.9 | `exp/strategies/pie_backdoor.py` | ⏳ | — | 2h | — | — | |
 | P7.10 | `exp/strategies/canary_*.py`（7 个文件，共用 `CanaryStrategy(ExploitStrategy)` 基类） | ⏳ | — | 6h | — | — | 风险点 |
@@ -3287,6 +3287,59 @@ from .canary_execve_syscall import CanaryExecveSyscall
 - **commit 引用**：`03db6d1`（P7.6）
 - **Refs**：`refactor.md §3.2.2`（strategy 设计 WHY）+ P6.6 primitive contract（1-stage `build_payload`）+ `recon/bss.py` find_bss 集成
 - **流程验证**（per §9.4 B-005）：PR 走 `feature/p7.6-rwx-shellcode` → `dev` (FF) → `main` (FF) 标准链路
+
+---
+
+**P7.7 实施记录（2026-06-08）**：
+
+- **新文件** `autopwn/exp/strategies/execve_syscall.py`（~200 行）：**2 个 concrete strategies**（local+remote，**x32 only**），全部用 `@register` 装饰器自动注册
+  - **ExecveSyscallX32LocalStrategy** + **ExecveSyscallX32RemoteStrategy**
+  - **priority = EXECVE_SYSCALL = 80**（per 附录 A，P7.2 priorities.py 引用；附录 A 备注 "仅 x32"）
+  - **requires = ()**（空 tuple — 策略本身无 PLT/libc 依赖；唯一依赖是 ROP gadgets in `ctx.gadgets_x32` + `/bin/sh` substring，二者由 primitive 在 `build_payload` 时刻检查并以 `b""` 表面 miss → strategy 返 False）
+
+- **P7.7 是 P7 series 第一个只 2 个 strategies 而非 4 个的子模块**（per §4.8 spec 单文件 + 附录 A 备注 "仅 x32"）：
+  - **x64 不提供**：64-bit Linux 用 `syscall` 指令而非 `int 0x80`，kernel ABI 不同（registers: rax/rdi/rsi/rdx vs eax/ebx/ecx/edx）。P7.3-P7.6 的 x64 路径已覆盖（ret2system/ret2libc_put/ret2libc_write/rwx_shellcode），无 x64 syscall 路径的需求。
+  - 未来若需要 x64 syscall 路径，可参考 v3.1 `_legacy.py` L3466+ 模式（`if bit_arch == 32:` 单独分支）添加 `ExecveSyscallX64` 类。
+
+- **架构层**（per refactor.md §3.2.2 + P6.5 primitive contract）：
+  - **1-stage flow wiring**（无 leak / 无 libc）：P6.5 primitive 提供 `build_payload(ctx) -> bytes` 一次性返 ROP chain（auto-select combined vs separate variant based on `pop_ecx`/`pop_ecx_ebx`）；strategy 负责 sendline + record_success + interactive
+  - **combined vs separate 自动分发**：strategy 在 `record_success` 前根据 `ctx.gadgets_x32.pop_ecx == 0` 决定 `exploit_type` 字符串 ("ecx_ebx" vs "separate") 和 `addresses` dict（per v3.1 `handle_exploitation_success` 调用 key 集合）
+  - **不调用 `sys.exit`**：gadgets missing / primitive empty / remote None 均返 False（per §6.8 reviewer checklist）
+
+- **修改**：无 —— P7.7 是纯增量（2 个新 strategy + 0 行 `_legacy.py` 改动）。_legacy.py 的 `execve_syscall` (L1869) + `execve_syscall_remote` (L2139) 函数保留至 P8.5 删除
+
+- **不动**：recon / detect / primitives / cli / orchestrator —— 严格守 §9.2 单层规则
+
+- **P7.7 触发面分析**（新增 vs §2.6 baseline）：
+  - v4.0 baseline 中**没有任何 binary 命中 execve_syscall**（所有命中 binary 都先被 ret2system/ret2libc 抢走）
+  - `logs/v4.0/*.log` 全部无 `execve syscall` 标记
+  - P7.7 策略 candidates 永远在 baseline 排名末尾（priority 80 < 所有更优策略）
+  - 实际触发场景：statically linked / stripped binary（无 `system`/`puts`/`write` PLT，无 `/bin/sh` 内嵌，但仍需 4 个 pop gadgets + `int 0x80`）—— v4.0 baseline 5 个 binary 均不满足此条件
+  - 当未来出现"x32 binary + 无 libc 依赖 + ROP gadgets 存在"场景时，P7.7 即触发
+
+- **测试** `tests/unit/test_exp_execve_syscall.py`（26 单测全过）：
+  - **Priority 3 个**：每个 strategy priority == EXECVE_SYSCALL == 80（2 个独立断言）+ 跨 priority 验证 (RET2LIBC_WRITE > RWX_SHELLCODE > EXECVE_SYSCALL > FMTSTR per 附录 A)
+  - **Metadata 4 个**：arch/remote/requires 2 个组合 + name 非空 + **x32-only 验证**（自动遍历 `__all__` 确保无任何 class has requires_arch=64）
+  - **Matches 6 个**：x32 local 匹配 / x64 ctx 拒绝 / remote 错配 / 空 requires 仍匹配（gadgets 缺失由 primitive 检测）/ remote 匹配 / local 拒绝
+  - **Candidates 3 个**：x32 local 返 local / x32 remote 返 remote / x64 ctx 永不返 execve
+  - **Graceful skip 5 个**：gadgets None / primitive empty / remote None 各覆盖 local + remote
+  - **Module structure 2 个**：__all__ 完整 + class 引用一致 + 不继承 ExploitResult
+  - **End-to-end 3 个**：mock primitive + 1-stage 完整 flow **覆盖 combined + separate 两种 variant**（验证 addresses dict shape per v3.1 parity） + remote variant
+  - **markers**：`pytest.mark.strategy`
+  - **复用 P7.5 修复**：`importlib.reload` autouse fixture
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：**452 passed**（26 新增 + 426 既有，**全绿**；canary fuzz warning 1 条与 P5.3 同源，**预期**）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（130KB，brute force 仍需 ~7min）+ fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（**无回归**——与 P7.1-P7.6 baseline 持平）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.8 + §6.8 P7.7 同步
+  - 详见 `logs/comparison/summary.md`（P7.7 重新生成）
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期；与 P6.x + P7.1-P7.6 同源）
+- **commit 引用**：`0757779`（P7.7）
+- **Refs**：`refactor.md §3.2.2`（strategy 设计 WHY）+ P6.5 primitive contract（1-stage `build_payload` with combined/separate variant auto-select）
+- **流程验证**（per §9.4 B-005）：PR 走 `feature/p7.7-execve-syscall` → `dev` (FF) → `main` (FF) 标准链路
 
 ---
 

@@ -229,7 +229,7 @@
 | **P7.4** | `exp/strategies/ret2libc_put_x32.py` + `_x64.py` | ✅ | @Minzhi_Zhou | 3h | 0.7h | f7a8ba4 | 4 strategies (local+remote × 32+64) `priority=RET2LIBC_PUT=120`；2-stage puts leak；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | **P7.5** | `exp/strategies/ret2libc_write_x32.py` + `_x64.py` | ✅ | @Minzhi_Zhou | 3h | 0.5h | be7e37f | 4 strategies (local+remote × 32+64) `priority=RET2LIBC_WRITE=110`；2-stage write leak；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | **P7.6** | `exp/strategies/rwx_shellcode_x32.py` + `_x64.py` | ✅ | @Minzhi_Zhou | 2h | 0.5h | 03db6d1 | 4 strategies (local+remote × 32+64) `priority=RWX_SHELLCODE=90`；1-stage BSS shellcode 注入；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
-| P7.7 | `exp/strategies/execve_syscall.py` | ⏳ | — | 2h | — | — | |
+| **P7.7** | `exp/strategies/execve_syscall.py` | 🔄 | @Minzhi_Zhou | 2h | — | — | x32 only；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | P7.8 | `exp/strategies/fmtstr.py`（含 `fmtstr_print_strings` 旁路） | ⏳ | — | 3h | — | — | |
 | P7.9 | `exp/strategies/pie_backdoor.py` | ⏳ | — | 2h | — | — | |
 | P7.10 | `exp/strategies/canary_*.py`（7 个文件，共用 `CanaryStrategy(ExploitStrategy)` 基类） | ⏳ | — | 6h | — | — | 风险点 |

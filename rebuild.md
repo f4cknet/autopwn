@@ -76,7 +76,7 @@
 | **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
-| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 ⏳；integration 测试 P9.4 待补) |
+| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 1/12 ✅ 2026-06-08；integration 测试 P9.4 待补) |
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ⏳ |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
@@ -222,7 +222,7 @@
 
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
-| P7.1 | `exp/base.py`：`ExploitStrategy` 抽象类（含 `requires_*` 元数据 + `matches`） | ⏳ | — | 2h | — | — | |
+| **P7.1** | `exp/base.py`：`ExploitStrategy` 抽象类（含 `requires_*` 元数据 + `matches`） | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P7.1 | Refs: refactor.md#3.2.2 |
 | P7.2 | `exp/registry.py`：`@register` 装饰器 + `candidates(ctx)` 排序 | ⏳ | — | 2h | — | — | |
 | P7.2a | （P7.2 子任务）梳理原 if 顺序 → `priority` 值对照表（见附录 A） | ⏳ | — | 2h | — | — | 需 Owner 拍板 |
 | P7.3 | `exp/strategies/ret2system_x32.py` + `_x64.py`（含本地/远端） | ⏳ | — | 3h | — | — | |
@@ -2870,18 +2870,23 @@ def test_ret2system_x64_payload(fake_ctx):
 # autopwn/exp/base.py
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
+
 from autopwn.context import ExploitContext
-from autopwn.primitives.base import ExploitPrimitive
-from pwntools import process, remote  # noqa
+
+if TYPE_CHECKING:
+    from autopwn.primitives.base import ExploitPrimitive
+
 
 class ExploitStrategy(ABC):
     name: str = ""
     priority: int = 0
+
     requires_canary: bool = False
     requires_remote: bool | None = None
     requires_arch: int | None = None
     requires: tuple[str, ...] = ()
-    primitive: type[ExploitPrimitive] | None = None  # 可选
+    primitive: "type[ExploitPrimitive] | None" = None
 
     @abstractmethod
     def run(self, ctx: ExploitContext) -> bool: ...
@@ -2890,7 +2895,8 @@ class ExploitStrategy(ABC):
         if self.requires_arch is not None and ctx.binary.bit != self.requires_arch:
             return False
         if self.requires_remote is not None:
-            if (ctx.mode == "remote") != self.requires_remote:
+            is_remote = ctx.mode == "remote"
+            if self.requires_remote != is_remote:
                 return False
         if self.requires_canary and ctx.canary is None:
             return False
@@ -2984,9 +2990,36 @@ from .canary_execve_syscall import CanaryExecveSyscall
 - 策略类必须显式声明 `requires` 元数据（不允许隐式依赖 ctx 字段）
 - 优先级数值与附录 A 对照表一致
 
----
+**P7.1 实施记录（2026-06-08）**：
 
-### 6.9 P8 — Orchestrator
+- **新文件** `autopwn/exp/base.py`（212 行）：`ExploitStrategy` ABC + 6 个 `requires_*` 元数据 + `matches()` 过滤器 + `__repr__` for log lines + `__all__` 显式导出
+  - **6 个元数据类属性**（与 `refactor.md §3.2.2` 严格对齐）：`name` / `priority` / `requires_canary` / `requires_remote` / `requires_arch` / `requires` tuple
+  - **可选 `primitive` 类属性**：`type[ExploitPrimitive] | None = None`（`TYPE_CHECKING` 块 import，避免 pwntools 循环导入；P7.3-P7.9 策略子类可设 `primitive = Ret2SystemX32` 之类的 link）
+  - **`matches(ctx)` 默认实现**：纯函数过滤器——按 `arch` → `remote` → `canary` → `requires tuple` 顺序短路求值；任一不匹配立即返 `False`，避免后续 `getattr` 抛 `AttributeError`
+  - **`__repr__` 格式**：`<ClassName>(name='<name>', priority=<n>, arch=<n|None>, remote=<T|F|None>)`——4 个核心元数据（verbose 的 `requires` tuple 故意不进 repr，避免日志过宽；需要时 `strat.requires` 单独取）
+- **不动 `_legacy.py`**：P7.1 是纯增量，新增 ABC + 0 调用点，0 行净增/减
+- **不动 `autopwn/exp/__init__.py`**：保持 `__all__: list[str] = []` 占位（避免 imports 触发 P7.1 模块加载，registry P7.2 接管 import 链）
+- **偏差 1 处 spec 微调**：spec 写 `from pwntools import process, remote  # noqa`（typo：pwntools 不是 importable 包名；正确写法 `from pwn import process, remote`，且 base.py 也不需要 IO）—— 删去。base.py 严格不引 pwntools；P7.3+ 策略子模块按需 lazy import
+- **偏差 2 处 spec 微调**：`requires` 类型注解用 string forward-ref 形式 `tuple[str, ...] = ()`（与 `refactor.md §3.2.2` 完全一致；`from __future__ import annotations` 让 runtime 不强制求值）
+- **测试** `tests/unit/test_exp_base.py`（34 单测全过）：
+  - **ABC 契约** 8 个：`test_cannot_instantiate_directly` / `test_subclass_must_implement_run` / `test_subclass_with_run_is_instantiable` / 4 个默认值断言 / `test_primitive_can_be_set_to_a_type`
+  - **`matches` 边界** 17 个：no-requirements（2）/ arch（5）/ remote（5）/ canary（3）/ requires tuple（5，含 `AttributeError` 边界）/ 组合（2，含 short-circuit 验证）/ subclass override composes with `super().matches()`（1）
+  - **`__repr__` 格式** 3 个：name+priority+arch+remote 都在 / 类名出现 / `requires` tuple 不进 repr
+  - **markers**：`pytest.mark.strategy`（与 `pyproject.toml` 已注册的 marker 对齐）
+- **不动 recon/detect/primitives**：P7.1 不动其他层
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：**243 passed**（34 新增 + 209 既有，**全绿**；canary fuzz warning 1 条与 P5.3 同源，**预期**）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（121KB，brute force 仍需 ~7min）+ fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（**无回归**——与 P6.9 baseline 持平）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.8 + §6.8 P7.1 同步
+  - 详见 `logs/comparison/summary.md`（P7.1 重新生成）
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期；与 P6.x 全部 9 个 PR 同源）
+- **commit 引用**：待 commit + push
+- **Refs**：`refactor.md §3.2.2`（ExploitStrategy 设计 WHY）；后续 P7.2（registry）/ P7.3-P7.10（具体策略子类）按 §6.8 spec 继续
+
+---
 
 **🟢 状态**：⏳ Pending｜**🔴 优先级**：P0｜**⏱ 预估**：11.5h
 

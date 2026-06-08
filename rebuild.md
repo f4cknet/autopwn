@@ -76,7 +76,7 @@
 | **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
-| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 1/12 ✅ 2026-06-08；integration 测试 P9.4 待补) |
+| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 2/12 ✅ 2026-06-08 (P7.1+P7.2a)；integration 测试 P9.4 待补) |
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ⏳ |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
@@ -224,7 +224,7 @@
 |---|---|---|---|---|---|---|---|
 | **P7.1** | `exp/base.py`：`ExploitStrategy` 抽象类（含 `requires_*` 元数据 + `matches`） | ✅ | @Minzhi_Zhou | 2h | 0.4h | 1f594c5 | Refs: refactor.md#3.2.2 |
 | P7.2 | `exp/registry.py`：`@register` 装饰器 + `candidates(ctx)` 排序 | ⏳ | — | 2h | — | — | |
-| P7.2a | （P7.2 子任务）梳理原 if 顺序 → `priority` 值对照表（见附录 A） | ⏳ | — | 2h | — | — | 需 Owner 拍板 |
+| **P7.2a** | （P7.2 子任务）梳理原 if 顺序 → `priority` 值对照表（见附录 A） | ✅ | @Minzhi_Zhou | 2h | 0.2h | 7a6b510 | 附录 A 数值 Owner 拍板定稿；B-003 Resolved；P7.2 解除阻塞；Refs: rebuild.md#附录A |
 | P7.3 | `exp/strategies/ret2system_x32.py` + `_x64.py`（含本地/远端） | ⏳ | — | 3h | — | — | |
 | P7.4 | `exp/strategies/ret2libc_put_x32.py` + `_x64.py` | ⏳ | — | 3h | — | — | |
 | P7.5 | `exp/strategies/ret2libc_write_x32.py` + `_x64.py` | ⏳ | — | 3h | — | — | |
@@ -3185,12 +3185,12 @@ python -m venv /tmp/autopwn-test
 | ID | 风险 | 等级 | 缓解措施 | 状态 |
 |---|---|---|---|---|
 | R1 | `globals().` 删除后某处隐式依赖漏改 | 🟡 中 | 保留 P2 桥函数；P4 加 `grep globals() autopwn.py` 为 lint | ⏳ |
-| R2 | 决策树优先级数字与原 if 顺序不一致 | 🟡 中 | P7.2a 必须先做对照表（附录 A） | ⏳ |
+| R2 | 决策树优先级数字与原 if 顺序不一致 | 🟡 中 | P7.2a 必须先做对照表（附录 A） | ✅ Resolved 2026-06-08（P7.2a 拍板定稿；附录 A 作为 P7.2 排序基准 hardcode） |
 | R3 | Canary 14 个变体实现漂移 | 🔴 高 | 共用 `CanaryStrategy` 基类；P7.10 单测覆盖所有变体 | ⏳ |
 | R4 | 临时文件清理破坏某些工具的相对路径 | 🟢 低 | 全部走 `tempfile.TemporaryDirectory` + `os.chdir` | ⏳ |
 | R5 | `python-docx` 依赖在某些环境装不上 | 🟢 低 | try/except 降级为 markdown | ⏳ |
 | R6 | Challenge/ 二进制在不同 commit 间变化 | 🟢 低 | 用 git tag 锁版本 | ⏳ |
-| R7 | 优先级对照表需要 Owner 拍板 | 🟡 中 | Owner 在 P7.2a 前 review 并签字 | ⏳ |
+| R7 | 优先级对照表需要 Owner 拍板 | 🟡 中 | Owner 在 P7.2a 前 review 并签字 | ✅ Resolved 2026-06-08（P7.2a 拍板定稿；B-003） |
 | R8 | `set_function_flags` 的 7 个标志位拆分到 ctx 字段时类型不一致 | 🟢 低 | 全部统一为 `bool`；`eax_ebx_ecx_edx` 合并为单个 bool | ⏳ |
 | **R9** | P0.0 改名过程中遗漏某个文件或字符串引用 | 🟢 低（已降级）| 22 处残留全部是有意历史引用；P0.0 grep + import + 烟雾测试三关通过 | ✅ |
 | **R10** | `python autopwn.py` 命令行参数兼容性 | 🟢 低 | argparse + filename 解耦；P0.0 烟雾测试 `--help` 正常 | ✅ |
@@ -3259,6 +3259,7 @@ Refs: rebuild.md#P4.1
 |---|---|---|---|---|---|
 | ~~**B-001**~~ | ~~P0.0 品牌变更决策（R12）~~ | GitHub=`f4cknet/autopwn` / 团队=`qzdx_soc` / 版本=`4.0.dev0` / 署名=方案 B | Owner | 2026-06-06 | ✅ Resolved 2026-06-06 |
 | **B-002** | 验证方法论规范化（P0.7 / P0.8 临时需求 #2） | Owner 决策：串行 + `logs/` + 关键节点 debug + 2-log 对比 | Owner | 2026-06-07 | ✅ Resolved 2026-06-07 |
+| **B-003** | P7.2 决策树优先级对照表（附录 A）拍板 | Owner 决策：附录 A 数值（200/180/150/120/110/90/80/50）即定为 P7.2 排序基准；非 canary 路径 v3.1 write>put 改为新 spec put>write 是有意改进（PUT PLT 更普遍） | @Minzhi_Zhou | 2026-06-08 | ✅ Resolved 2026-06-08 |
 
 ---
 
@@ -3286,18 +3287,31 @@ Refs: rebuild.md#P4.1
 
 > 来自 `autopwn.py` 原 `main()` 的 if 顺序。新策略的 `priority` 数值应与下表等价或更明确。
 
-| 原 main() 中的顺序 | 对应策略 | 拟 `priority` | 备注 |
+| 原 main() 中的顺序 | 对应策略 | `priority` | 备注 |
 |---|---|---|---|
-| Canary 分支最优先 | canary_* | 200 | canary 保护下唯一路径 |
-| PIE + backdoor | pie_backdoor | 180 | 仅当 PIE=1 且 backdoor 存在 |
-| ret2system（system+bin_sh） | ret2system_{x32,x64} | 150 | 最快路径 |
-| ret2libc_puts | ret2libc_put_{x32,x64} | 120 | |
-| ret2libc_write | ret2libc_write_{x32,x64} | 110 | |
-| rwx_shellcode | rwx_shellcode_{x32,x64} | 90 | |
-| execve_syscall | execve_syscall | 80 | 仅 x32 |
-| fmtstr | fmtstr | 50 | 兜底 |
+| Canary 分支最优先 | canary_* | **200** | canary 保护下唯一路径 |
+| PIE + backdoor | pie_backdoor | **180** | 仅当 PIE=1 且 backdoor 存在 |
+| ret2system（system+bin_sh） | ret2system_{x32,x64} | **150** | 最快路径 |
+| ret2libc_puts | ret2libc_put_{x32,x64} | **120** | |
+| ret2libc_write | ret2libc_write_{x32,x64} | **110** | |
+| rwx_shellcode | rwx_shellcode_{x32,x64} | **90** | |
+| execve_syscall | execve_syscall | **80** | 仅 x32 |
+| fmtstr | fmtstr | **50** | 兜底 |
 
-> 此表**不是文档**——是**配置**。P7.2a 完成后会把数值 hardcode 到 `exp/registry.py` 或独立 `exp/priorities.py`。
+> **Owner 拍板（2026-06-08, @Minzhi_Zhou）**：✅ 上表数值即定为 P7.2 排序的**单一事实来源**。`autopwn/exp/priorities.py`（P7.2 新增）将按本表 hardcode 常量。
+>
+> **拍板依据**：
+> 1. **canary 路径**（`_legacy.py` L3234-3293）顺序 = ret2system → ret2libc_put → ret2libc_write → execve_syscall — 与 `priority` 150 > 120 > 110 > 80 **完全一致**，无回归
+> 2. **非 canary 路径**（`_legacy.py` L3420-3467）v3.1 顺序 = pie_backdoor → ret2system → ret2libc_write → ret2libc_put → rwx_shellcode → execve_syscall — v3.1 写在前 / put 在后；新 spec put(120) > write(110) 是**有意改进**（PUT PLT 比 WRITE PLT 在 glibc 各版本中更普遍；优先 put = 扩大兼容）
+> 3. **5-binary §2.6 baseline 影响面**：4 个 SUCCESS binary 命中的 strategy（canary 200 / fmtstr 50 / pie_backdoor 180 / ret2system 150）都不在 put/write 灰色区（level3_x64/rip 命中 ret2system；fmtstr1 命中 fmtstr；pie 命中 backdoor），**put/write 顺序变化对 baseline 无影响**
+> 4. **fmtstr 兜底**（50）保持 v3.1 行为
+> 5. **R2 风险**（决策树优先级与原 if 顺序不一致）通过本表拍板 + hardcode 解决
+>
+> **变更历史**：
+> - 2026-06-08：✅ P7.2a Owner 拍板（@Minzhi_Zhou）— 数值定稿，本表作为 P7.2-P7.11 全部策略的 `priority` 基准
+> - 2026-06-06：表格初稿（与 refactor.md §3.2.2 决策树同源）— 见 `git log --follow rebuild.md`
+
+> 此表**不是文档**——是**配置**。P7.2 完成后将数值 hardcode 到 `autopwn/exp/priorities.py`，新策略 PR 引用本表行号 + 优先级即可。
 
 ### 附录 B：文件路径速查
 

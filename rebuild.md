@@ -76,7 +76,7 @@
 | **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
-| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 6/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2+P7.3+P7.4+P7.5)；integration 测试 P9.4 待补；`dev` 分支已建立 per B-005，P7.3+ PR target=dev) |
+| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 7/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2+P7.3+P7.4+P7.5+P7.6)；integration 测试 P9.4 待补；`dev` 分支已建立 per B-005，P7.3+ PR target=dev) |
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ⏳ |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
@@ -228,7 +228,7 @@
 | **P7.3** | `exp/strategies/ret2system_x32.py` + `_x64.py`（含本地/远端） | ✅ | @Minzhi_Zhou | 3h | 0.6h | b2774e9 | 4 strategies (local+remote × 32+64) `priority=RET2SYSTEM=150`；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | **P7.4** | `exp/strategies/ret2libc_put_x32.py` + `_x64.py` | ✅ | @Minzhi_Zhou | 3h | 0.7h | f7a8ba4 | 4 strategies (local+remote × 32+64) `priority=RET2LIBC_PUT=120`；2-stage puts leak；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | **P7.5** | `exp/strategies/ret2libc_write_x32.py` + `_x64.py` | ✅ | @Minzhi_Zhou | 3h | 0.5h | be7e37f | 4 strategies (local+remote × 32+64) `priority=RET2LIBC_WRITE=110`；2-stage write leak；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
-| **P7.6** | `exp/strategies/rwx_shellcode_x32.py` + `_x64.py` | 🔄 | @Minzhi_Zhou | 2h | — | — | target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
+| **P7.6** | `exp/strategies/rwx_shellcode_x32.py` + `_x64.py` | ✅ | @Minzhi_Zhou | 2h | 0.5h | 03db6d1 | 4 strategies (local+remote × 32+64) `priority=RWX_SHELLCODE=90`；1-stage BSS shellcode 注入；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | P7.7 | `exp/strategies/execve_syscall.py` | ⏳ | — | 2h | — | — | |
 | P7.8 | `exp/strategies/fmtstr.py`（含 `fmtstr_print_strings` 旁路） | ⏳ | — | 3h | — | — | |
 | P7.9 | `exp/strategies/pie_backdoor.py` | ⏳ | — | 2h | — | — | |
@@ -3233,6 +3233,60 @@ from .canary_execve_syscall import CanaryExecveSyscall
 - **commit 引用**：`be7e37f`（P7.5）
 - **Refs**：`refactor.md §3.2.2`（strategy 设计 WHY）+ P6.4 primitive contract（2-stage `stage_count` + `build_stage2_payload`）；后续 P7.6-P7.10 按相同 pattern 落地
 - **流程验证**（per §9.4 B-005）：PR 走 `feature/p7.5-ret2libc-write` → `dev` (FF) → `main` (FF) 标准链路
+
+---
+
+**P7.6 实施记录（2026-06-08）**：
+
+- **新文件** `autopwn/exp/strategies/rwx_shellcode_x32.py`（~180 行）+ `rwx_shellcode_x64.py`（~150 行）：4 个 concrete strategies（local+remote × 32+64），全部用 `@register` 装饰器自动注册
+  - **RwxShellcodeX32LocalStrategy** + **RwxShellcodeX32RemoteStrategy** (x32 各 1)
+  - **RwxShellcodeX64LocalStrategy** + **RwxShellcodeX64RemoteStrategy** (x64 各 1)
+  - **priority = RWX_SHELLCODE = 90**（per 附录 A，P7.2 priorities.py 引用）
+  - **requires = ("rwx_segments",)**（读自 `ctx.binary.rwx_segments`，per P4.1 checksec）
+
+- **架构层**（per refactor.md §3.2.2 + P6.6 primitive contract）：
+  - **1-stage flow wiring**（无 leak / 无 libc）：P6.6 primitive 提供 `build_payload(ctx) -> bytes` 一次性返 `shellcode + nop-sled + p32/p64(bss_addr)`；strategy 负责 sendline + record_success + interactive
+  - **BSS 查找**：primitive 通过 `recon/bss.py` 的 `find_bss(program, min_size=30)` 找首个 usable BSS symbol（per v3.1 `find_large_bss_symbols` filter）
+  - **shellcode 来源**：`pwn.asm(pwn.shellcraft.sh())` 生成 ~44B (x32) / ~48B (x64) 的 `execve("/bin/sh")`
+  - **不调用 `sys.exit`**：primitive empty 返 False（per §6.8 reviewer checklist）
+
+- **修改**：无 —— P7.6 是纯增量（4 个新 strategy + 0 行 `_legacy.py` 改动）。_legacy.py 的 `rwx_shellcode_x32/x64/_remote` 函数保留至 P8.5 删除
+
+- **不动**：recon / detect / primitives / cli / orchestrator —— 严格守 §9.2 单层规则
+
+- **P7.6 触发面分析**（新增 vs §2.6 baseline）：
+  - v4.0 baseline 中仅 `rip` binary 有 `rwx_segments=True`（per `logs/v4.0/rip.log`），但 `rip` 同时命中 `ret2system-x64` (priority 150) → rwx_shellcode (priority 90) **不会** 在 baseline 触发
+  - 其他 4 个 binary 无 `rwx_segments` → P7.6 策略 candidates 过滤后无匹配 → **不影响 baseline**
+  - 当未来出现新的 "RWX BSS + 无 system/binsh" 二进制时，P7.6 即可触发（例如某些 CTF 比赛中的 misconfiguration 训练题）
+
+- **测试** `tests/unit/test_exp_rwx_shellcode.py`（34 单测全过）：
+  - **Priority 5 个**：每个 strategy priority == RWX_SHELLCODE == 90（4 个独立断言）+ 跨 priority 验证 (RET2LIBC_WRITE > RWX_SHELLCODE > EXECVE_SYSCALL > FMTSTR per 附录 A)
+  - **Metadata 5 个**：arch / remote / requires 4 个组合 + name 非空检查
+  - **Matches 9 个**：每 strategy 各种 filter 行为（arch 错配 / remote 错配 / rwx_segments 缺 / 全部齐全）
+  - **Candidates 5 个**：4 个 ctx 类型各 1 个 + rwx_segments=False 全部排除
+  - **Graceful skip 4 个**：primitive empty / remote None 各 2 个
+  - **Module structure 3 个**：__all__ 完整 + class 引用一致 + 不继承 ExploitResult
+  - **End-to-end 3 个**：mock primitive + 1-stage 完整 flow（payload 发送 + record_success 触发 + addresses 空 dict = RWX 无 libc 依赖）+ record_success **不** 被调用当 primitive empty
+  - **markers**：`pytest.mark.strategy`
+  - **复用 P7.5 修复**：`importlib.reload` autouse fixture
+
+- **1 处关键 spec 偏差**（已在 commit message + 实施记录标注）：
+  - **P7.6 是 P7 series 第一个需要读 `ctx.binary.*` 字段的策略**（`rwx_segments` 住在 BinaryInfo 下，因为它是 binary-level flag 而非 PLT presence flag）。`ExploitStrategy.matches()` 默认实现是 `getattr(ctx, key)`，**不会** descend into `ctx.binary.*`。
+  - **修复**：4 个 P7.6 strategies 全部 override `matches()` 方法，arch/remote 检查走默认路径，**`requires = ("rwx_segments",)` 的检查改为 `bool(ctx.binary.rwx_segments)`**。这保持了"其他 strategies 用 ctx 顶层字段"的约定（§6.8 reviewer checklist），仅 P7.6 localizes 这个特殊 case。
+  - **未来 P7 strategies**（e.g. P7.10 canary 需 `ctx.binary.stack_canary`、P7.7 execve 需 `ctx.binary.bit`）可参考此 pattern。如果未来需要读 `ctx.binary.*` 字段的 strategies 数量增多（>3 个），可考虑 generalize `matches()` 支持 dotted path 解析 —— 但当前仅 P7.6 一个，over-engineering 不值得。
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：**426 passed**（34 新增 + 392 既有，**全绿**；canary fuzz warning 1 条与 P5.3 同源，**预期**）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（130KB，brute force 仍需 ~7min）+ fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（**无回归**——与 P7.1-P7.5 baseline 持平）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.8 + §6.8 P7.6 同步
+  - 详见 `logs/comparison/summary.md`（P7.6 重新生成）
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期；与 P6.x + P7.1-P7.5 同源）
+- **commit 引用**：`03db6d1`（P7.6）
+- **Refs**：`refactor.md §3.2.2`（strategy 设计 WHY）+ P6.6 primitive contract（1-stage `build_payload`）+ `recon/bss.py` find_bss 集成
+- **流程验证**（per §9.4 B-005）：PR 走 `feature/p7.6-rwx-shellcode` → `dev` (FF) → `main` (FF) 标准链路
 
 ---
 

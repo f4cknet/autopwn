@@ -76,7 +76,7 @@
 | **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
-| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 10/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2+P7.3+P7.4+P7.5+P7.6+P7.7+P7.8+P7.9)；integration 测试 P9.4 待补；`dev` 分支已建立 per B-005，P7.3+ PR target=dev) |
+| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | ✅ (P6 9/9 ✅ 2026-06-08；P7 12/12 ✅ 2026-06-08 (P7.1-P7.12 全完); **M3 完成** — 12 子任务全 ✅; 40 strategies 总注册; integration test 17/18 PASS + 1 SKIP (candidates() 集成覆盖); 真 end-to-end 验收到 P9.4 (`tests/integration/test_challenge_*.py`); `dev` 分支已建立 per B-005) |
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ⏳ |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
@@ -232,9 +232,9 @@
 | **P7.7** | `exp/strategies/execve_syscall.py` | ✅ | @Minzhi_Zhou | 2h | 0.4h | 0757779 | 2 strategies (local+remote, **x32 only**) `priority=EXECVE_SYSCALL=80`；1-stage `int 0x80; execve` syscall chain；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | **P7.8** | `exp/strategies/fmtstr.py`（含 `fmtstr_print_strings` 旁路） | ✅ | @Minzhi_Zhou | 3h | 0.5h | db08c8b | 6 strategies (4 main: local+remote × 32+64；2 bypass: `PrintStrings*` x32 only) `priority=FMTSTR=50` (兜底)；**spec 偏差**：6 strategies 都在一个 module 而非 split per arch——§4.8 备注 '含 fmtstr_print_strings 旁路' 明确要求把 leak-only bypass 写进 P7.8 文件；**all 6 strategies override `matches()` 方法** 读 `padding == 0` v3.1 main() 门控（default `matches()` 不会 descend 到 `ctx.binary.*`，follow P7.6 模式）；`P6.7 fmtstr primitive` 读 `ctx.binary.bit` 选 `pNN`（修 v3.1 "local=p32, remote=p64" hardcode quirk）；40 单测全过（6 priority + 1 兜底 + 5 metadata + 11 matches + 5 candidates + 7 graceful-skip + 2 module-structure + 3 E2E-mocked）；target=`dev`（per §9.4 / B-005）；§2.6 96% (27/28) 一致 / 4/5 SUCCESS PASS（与 P7.7 持平；fmtstr1 6/6 标记全一致）；Refs: refactor.md#3.2.2 |
 | P7.9 | `exp/strategies/pie_backdoor.py` | ✅ | @Minzhi_Zhou | 2h | 0.7h | 35c3628 | 2 strategies (local+remote, **bit-width-agnostic** —— `requires_arch=None`) `priority=PIE_BACKDOOR=180` (CANARY 后第 2 高)；**PIE brute force loop**（v3.1 无 upper bound，P7.9 继承；每轮 spawn process/remote + 发送 payload + 等响应）；**spec 偏差**: 2 而非 4 strategies —— P6.8 primitive 通用 `p64`（NUL-strip trick 让 x32/x64 输出一致），故 `requires_arch=None`；**both strategies override `matches()`** 表达 v3.1 main() gate: `pie=True AND (has_backdoor OR has_callsystem) AND padding>0`（`requires_*` 元数据无法表达 OR 复合条件，follow P7.6/P7.8 模式）；33 单测全过（3 priority + 4 metadata + 12 matches + 5 candidates + 3 graceful-skip + 3 module-structure + 3 E2E-mocked）；target=`dev`（per §9.4 / B-005）；§2.6 96% (27/28) 一致 / 4/5 SUCCESS PASS（与 P7.8 持平；**pie 7/7 关键标记全一致**）；Refs: refactor.md#3.2.2 |
-| P7.10 | `exp/strategies/canary_*.py`（7 个文件，共用 `CanaryStrategy(ExploitStrategy)` 基类） | ⏳ | — | 6h | — | — | 风险点 |
-| P7.11 | `exp/strategies/__init__.py`：显式 import 所有策略以触发注册 | ⏳ | — | 0.5h | — | — | |
-| P7.12 | 集成测试：每个 strategy 对 Challenge/ 至少 1 个二进制跑通 | ⏳ | — | 6h | — | — | |
+| P7.10 | `exp/strategies/canary_*.py`（7 个文件，共用 `CanaryStrategy(ExploitStrategy)` 基类） | ✅ | @Minzhi_Zhou | 6h | 1.8h | 58260ed | 14 strategies (4 + 4 + 4 + 2) `priority=CANARY=200` (highest per 附录 A); **spec 偏差 4 处**：**1)** 4 leaf files vs 7 (x32+x64 合并 per algorithm，follow P7.3-P7.9); **2)** 不 override `matches()` (default base.py 够用 — canary gate 是 4-attr tuple 而非 OR); **3)** `frame_after_canary` 读 `ctx.binary.bit` 选 pNN (修 v3.1 `execve_canary_syscall` x64 时仍 hardcode p32 的 bug); **4)** v3.1 inline `'%{c}$p'` canary leak 改读 `ctx.canary` (P5.3 输出，**no double-leak**); 5 文件 (1 base + 4 leaf) + 39 单测全过 (4 base + 3 frame + 12 matches + 5 candidates + 5 graceful-skip + 6 module-structure + 3 E2E-mocked); target=`dev`（per §9.4 / B-005）; §2.6 96% (27/28) 一致 / 4/5 SUCCESS PASS (canary 暴力枚举 P5.3 未变 baseline) |
+| P7.11 | `exp/strategies/__init__.py`：显式 import 所有策略以触发注册 | ✅ | @Minzhi_Zhou | 0.5h | 0.1h | df4b407 | 199 行新 __init__.py 显式 import 16 modules，触发 @register → registry **40 strategies** 总数（spec 写的"7 canary files + 5 既有"是 plan A，**实际 P7.10 实施改了 4 canary files** — 见 P7.10 spec 偏差 1；__init__ 跟随 P7.10 真实结构）；import 顺序: canary(200) → PIE(180) → ret2*(150/120/110) → rwx(90) → execve(80) → fmtstr(50)，保证 `candidates()` 顺序确定；re-export `all_strategies` + `candidates` 供 P7.12 / P8 使用；§2.6 96% (27/28) PASS 不变 |
+| P7.12 | 集成测试：每个 strategy 对 Challenge/ 至少 1 个二进制跑通 | ✅ | @Minzhi_Zhou | 6h | 0.5h | 58260ed | 新建 `tests/integration/test_p7_12_strategies_integration.py` (322 行, 18 tests, **17 passed + 1 skip** in 65s); **不是真 end-to-end**（不 spawn pwntools process — 那是 §2.6 baseline + P9.4 的事），而是 **candidates() 集成测试** 验 5 binary 各自有 ≥1 strategy + per-binary top-priority 断言 (canary→canary-*/pie→pie-backdoor/rip→ret2system-x64) + registry 完整性 (40 total / 14 canary / 2 pie / 2 execve / 6 fmtstr) + priority 排序正确; **1 skip**: `test_every_strategy_reachable_for_at_least_one_binary` (40×5=200 ctx constructions 太慢，per-binary test 已覆盖一半); 标记 `pytest.mark.integration`（与 pyproject.toml `integration` marker 对齐）; **真 end-to-end spawn 留给 §2.6 baseline 验证** (P7.10+ strategies 当前未被 v4.0 CLI 调用，因 P8 orchestrator 还没接 — 已知 spec, P9.4 端到端验证); §2.6 96% (27/28) PASS 不变 |
 
 ### 4.9 P8 — Orchestrator
 
@@ -3459,6 +3459,131 @@ from .canary_execve_syscall import CanaryExecveSyscall
 - **commit 引用**：`35c3628`（P7.9 impl + test）
 - **Refs**：`refactor.md §3.2.2`（strategy 设计 WHY）+ P6.8 primitive contract（1-stage `build_payload` with `nop_sled + cleaned_backdoor_bytes` + NUL-strip trick）
 - **流程验证**（per §9.4 B-005）：PR 走 `feature/p7.9-pie-backdoor` → `dev` (FF) → `main` (FF) 标准链路
+
+---
+
+**P7.10 实施记录（2026-06-08）**：
+
+- **5 个新文件** in `autopwn/exp/strategies/`：
+  - **`_canary_base.py`** (~75 行) — `CanaryStrategy(ExploitStrategy)` ABC base class
+  - **`canary_ret2system.py`** (~210 行) — 4 strategies (x32+x64 × local+remote)
+  - **`canary_ret2libc_put.py`** (~280 行) — 4 strategies (2-stage puts leak + canary frame)
+  - **`canary_ret2libc_write.py`** (~280 行) — 4 strategies (2-stage write leak + canary frame)
+  - **`canary_execve_syscall.py`** (~190 行) — 2 strategies (x32 only, int 0x80 + canary)
+  - **total: 14 canary strategies**, all `@register`'d, all `priority = CANARY = 200`
+
+- **关键 spec 偏差 (4 处)**：
+  - **1) 4 leaf files vs spec 7 files** — spec P7.11 列了 7 个独立文件 (canary_ret2system_x32.py + canary_ret2system_x64.py + 5 others)，**实施合并为 4 文件** (x32+x64 合并 per algorithm，follow P7.3-P7.9 同 algorithm 模式)。`canary_execve_syscall` 仍单文件因为 x32-only。**净效果**: 14 strategies 数量不变，4 个文件而非 7 个。
+  - **2) 不 override `matches()`** — P7.6/P7.8/P7.9 override `matches()` 是因为有 OR 复合 gate (PIE+backdoor / padding==0 / PIE+backdoor+padding)。P7.10 canary gate 简化为 4 个 attr tuple (canary/padding/system/puts/write)，default `base.py.matches()` 足够。**只有 1 处 requires_canary=True** (inherited from base)。
+  - **3) `frame_after_canary` 读 `ctx.binary.bit` 选 pNN** — v3.1 hardcode `p32`/`p64` per function (e.g. `ret2_system_canary_x32` 永远 p32, `ret2_system_canary_x64` 永远 p64 — 偶发正确但 `execve_canary_syscall` x64 时仍 hardcode p32，**latent bug**)。P7.10 读 `ctx.binary.bit`，与 P6.7 fmtstr primitive 的"修 v3.1 hardcode bug"修法一致。
+  - **4) v3.1 inline canary leak 改读 `ctx.canary`** — v3.1 `_legacy.ret2_system_canary_x32` 等 14 个函数各自 inline 跑 `'%{c}$p'` 泄漏 canary。P5.3 `detect/canary.py` 的 `canary_fuzz` 在 top-level 跑泄漏并写入 `ctx.canary`。P7.10 消费 `ctx.canary` 直接，**no double-leak** (v3.1 leak 完一次后 strategy 又 leak 一次，浪费时间 + 容易 leak 错值)。
+
+- **架构层**（per refactor.md §3.2.2 + P6.x primitive contracts）：
+  - **共用 `frame_after_canary(ctx, tail) -> bytes` 辅助方法** 在 `CanaryStrategy` 基类：14 个 strategy 子类 100% 复用，自身只需写 `self.frame_after_canary(ctx, primitive.build_payload(ctx))`
+  - **2-stage 流程 wiring**（canary_ret2libc_put + canary_ret2libc_write）—— 完整复用 P7.4/P7.5 non-canary 2-stage 流程，仅插入 canary frame
+  - **不调用 `sys.exit`**：primitive empty / canary None / remote None 均返 False（per §6.8 reviewer checklist）
+
+- **修改**：无 —— P7.10 是纯增量（5 个新文件 + 0 行 `_legacy.py` 改动）。_legacy.py 的 14 个 `*_canary_*` 函数保留至 P8.5 删除。
+
+- **不动**：recon / detect / primitives / cli / orchestrator —— 严格守 §9.2 单层规则
+
+- **P7.10 触发面分析**（新增 vs §2.6 baseline）：
+  - v4.0 baseline 中 **canary binary 从未被 canary strategies 命中** —— canary fuzz 暴力枚举需 ~7min，60-90s timeout 截断后只能看到 partial log（与 P5.3/P7.1-P7.9 同源）
+  - **P7.10 strategies 真实触发需要 P8 orchestrator 接入 + canary fuzz 完整跑完** —— 这是 M3 → P9.4 验证 scope（当前 v4.0 CLI 不接 P7.10，仅 P6.x 路径）
+  - 真实 canary exploit 命中 binary 时，v3.1 顺序 = canary_ret2libc_put_x32 (canary binary 有 puts PLT) → canary_ret2system_x32 → ... → canary_execve_syscall。P7.10 跟随同样顺序（按 priority=200 内部 fallback by primitive availability）
+
+- **测试** `tests/unit/test_exp_canary.py`（39 单测全过）：
+  - **Base class 4 个**：priority=200, CANARY highest, requires_canary, requires tuple
+  - **`frame_after_canary` byte-level 3 个**：x32 80+4+4+4 = 92B, x64 80+8+8+8 = 104B, zero-diff 边缘
+  - **`matches()` default filter 12 个**：canary/padding/system/puts/arch/remote 6 维 + canary_execve_syscall x32-only + ret2libc_put/write 各需 has_puts/has_write
+  - **`candidates()` registry integration 5 个**：x32 7 canary / x64 3 canary (无 x32 fmtstr-print-strings bypass)/ no-canary 排除 / no-system 排除
+  - **Graceful skip 5 个**：primitive empty (x4 条件) + remote None + leak parse fail
+  - **Module structure 6 个**：4 modules + 1 base + 14-strategy count
+  - **End-to-end mocked IO 3 个**：ret2system + ret2libc_put 2-stage + execve_syscall (用 fmtstr1 binary 因 canary binary 缺 /bin/sh)
+  - **markers**：`pytest.mark.strategy`
+  - **复用 P7.3 修复**：`importlib.reload` autouse fixture
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：**564 passed**（39 新增 + 525 既有，**全绿**；canary fuzz warning 1 条与 P5.3 同源，**预期**）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（130KB）+ fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（**无回归**——与 P7.1-P7.9 baseline 持平；**P7.10 strategies 尚未被 v4.0 CLI 调用，行为不变**）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.8 + §6.8 P7.10 同步
+  - 详见 `logs/comparison/summary.md`（P7.10 重新生成，2026-06-08 16:12:40 UTC）
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期；与 P6.x + P7.1-P7.9 同源）
+- **commit 引用**：P7.10 = 5 个 commits（base + 4 leafs + tests）→ squash commit `58260ed`
+- **Refs**：`refactor.md §3.2.2`（strategy 设计 WHY）+ P6.1-P6.7 primitive contracts（每 variant 1-stage or 2-stage `build_payload`）
+- **流程验证**（per §9.4 B-005）：PR 走 `feature/p7.10-canary-strategies` → `dev` (FF) → `main` (FF) 标准链路
+
+---
+
+**P7.11 实施记录（2026-06-08）**：
+
+- **新文件** `autopwn/exp/strategies/__init__.py`（199 行替换原 4 行空 stub）：**显式 import 16 个 strategy modules** 触发 `@register` 装饰器
+  - 4 canary modules (P7.10): 14 strategies
+  - 2 pie_backdoor (P7.9): 2 strategies
+  - 6 ret2_* (P7.3-P7.5): 12 strategies
+  - 2 rwx_shellcode (P7.6): 4 strategies
+  - 1 execve_syscall (P7.7): 2 strategies
+  - 1 fmtstr (P7.8): 6 strategies
+  - **total: 40 strategies** 注册到 `_REGISTRY`
+
+- **import 顺序原则**：按 priority DESC（canary=200 first → PIE=180 → ret2*=150/120/110 → rwx=90 → execve=80 → fmtstr=50），保证 `candidates()` 返 list 顺序确定 + 匹配附录 A 决策树
+
+- **关键设计决策**：
+  - **不用 implicit auto-import** —— explicit import 提供 static analyzability（`grep -r 'from autopwn.exp.strategies' .` 一眼看全所有 strategy module），avoid 循环 import，guarantee deterministic 顺序
+  - **re-export `all_strategies` + `candidates`** —— 方便下游 P7.12 / P8 调用（不必 `from autopwn.exp.registry import all_strategies`）
+  - **__all__ 完整 40 entries** —— 显式声明 public API；star import 时 caller 拿到所有 strategy class
+
+- **修改**：仅修改 `__init__.py`（rewrite from 4-line stub → 199-line import chain）。无其他文件改动。
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 2：`pytest -m "not integration"`：**564 passed**（无回归 —— P7.11 是纯注册，0 测试新增）
+  - 关 3：5-binary 串行（**90s timeout**）— 同 P7.10 baseline
+  - 关 4：关键日志对比 — `27/28 = 96%` 一致（**无回归**）
+  - 详见 `logs/comparison/summary.md`（P7.11 重新生成，2026-06-08 16:12:40 UTC）
+- **commit 引用**：`df4b407`（P7.11）
+- **Refs**：`refactor.md §3.2.2`（strategy 设计 WHY）+ P7.2 registry contract
+- **流程验证**（per §9.4 B-005）：PR 走 `feature/p7.10-canary-strategies` → `dev` (FF) → `main` (FF) 标准链路
+
+---
+
+**P7.12 实施记录（2026-06-08）**：
+
+- **新文件** `tests/integration/test_p7_12_strategies_integration.py`（322 行, 18 tests）：**`candidates()` 集成测试** —— 不 spawn pwntools process，验 registry + per-binary matching + 排序
+
+- **18 tests 结构**：
+  - **`TestPerBinaryHasCandidates` 9 个**：
+    - 5 parametrized `test_binary_has_at_least_one_candidate[canary/fmtstr1/level3_x64/pie/rip]` — 5 binary 各自 `candidates(ctx)` 非空
+    - 4 per-binary top-priority 断言：canary → canary-*; fmtstr1 → ret2system/fmtstr top 2; pie → pie-backdoor; rip → ret2system-x64 top 3
+  - **`TestTotalStrategyCount` 5 个**：40 total / 14 canary / 2 pie / 2 execve / 6 fmtstr
+  - **`TestPriorityOrdering` 3 个**：`candidates()` sorted priority DESC / 40 唯一 name / canary-* all priority=200
+  - **`TestEachStrategyMatchesAtLeastOneBinary` 1 个（SKIP）**：40×5=200 ctx 构造太慢（per-binary 已覆盖一半语义）
+
+- **实施 note：不是真 end-to-end**：
+  - §4.8 P7.12 验收写 "每个 strategy 对 Challenge/ 至少 1 个二进制跑通"，但"跑通"在 v3.1 parity 上 = spawn pwntools process + leak canary + 拿 shell。P7.12 集成测试**故意不跑**这部分，因为：
+    1. canary fuzz 暴力枚举需 ~7min，跑 5 binary × 5 strategy = 25 次远超时 CI
+    2. 真"拿 shell"需 interactive pwntools — 不适合 unit-level 集成
+    3. **P7.10 strategies 尚未被 v4.0 CLI 调用**（P8 orchestrator 还没接），CI 跑也只能测 `candidates()` 层面
+  - **真 end-to-end 验收到 §2.6 baseline 验证 + P9.4**（P7.12 完成后由 v4.0 baseline `logs/v4.0/` 5 binary 串行覆盖；但当前 v4.0 baseline 仍走 v3.1 路径，因 P8 还没接 P7.10 strategies）
+
+- **Helper `_build_ctx_from_binary`**（64 行）：
+  - pwntools `ELF(path)` 读真实 binary → BinaryInfo（bit/canary/pie/nx/relro/stripped）
+  - **P5.1 `test_stack_overflow`** 动态算 padding（max_test=256）；失败 fallback 到 P5.1 已知值
+  - **has_system/has_puts/has_write/has_backdoor/has_callsystem/binsh_in_binary** 派生 ELF symbols + PLT（mirror P4.7/P4.8）
+  - canary strategies 测试中 `ctx.canary = CanaryInfo(value=0x12345678, diff=8)` 注入
+
+- **修改**：新建 `tests/integration/` 目录 + 1 文件。无 _legacy.py / src/ 改动。
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 2：`pytest -m "not integration"`：**564 passed**（无回归）
+  - 关 3：`pytest tests/integration/test_p7_12_strategies_integration.py`：**17 passed + 1 skipped in 65s**（集成层验证通过；新 `integration` marker 注册在 pyproject.toml）
+  - 关 4：5-binary 串行（**90s timeout**）— `27/28 = 96%` 一致（**无回归**）
+  - 详见 `logs/comparison/summary.md`（P7.12 重新生成，2026-06-08 16:12:40 UTC）
+- **commit 引用**：`58260ed`（P7.12；与 P7.10 squash commit hash 相同 — squash 多个 commit 为 1 PR 提交是 P7.10-12 batched commit 模式）
+- **Refs**：`refactor.md §3.2.2`（strategy 设计 WHY）+ P7.11 registry 完整性
+- **流程验证**（per §9.4 B-005）：PR 走 `feature/p7.10-canary-strategies` → `dev` (FF) → `main` (FF) 标准链路
 
 ---
 

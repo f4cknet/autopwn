@@ -76,7 +76,7 @@
 | **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
-| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 3/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2)；integration 测试 P9.4 待补) |
+| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 3/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2)；integration 测试 P9.4 待补；`dev` 分支已建立 per B-005，P7.3+ PR target=dev) |
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ⏳ |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
@@ -2808,7 +2808,7 @@ class ExploitResult:
 * **diff 规模**：`tests/unit/primitives/{__init__.py,_common.py}` 新增 99 行 + `tests/unit/test_primitives_{contract,helper_errors}.py` 新增 453 行 + `.coveragerc` 新建 48 行 + `tools/check_public_api_coverage.py` 新建 187 行 + `rebuild.md` 改 ~50 行 → **837 行净增** (含 1 个 helper module + 2 个新 test 文件 + 1 个新工具 + 1 个新配置 + 文档同步;**未跨层**——纯测试/工具增量,无 production 代码改动;**与 §2.1 PR ≤ 400 行** 边界稍超,因 P6.9 收尾需要同时落 4 类文件;建议下一 PR 拆细)
 * **M3 状态更新** — P6 layer 9/9 全完成;M3 milestone 状态从 ⏳ → 🔄 (P7 ⏳;integration 测试 P9.4 待补)
 * **P6 整体收官** — 9 个任务总实际工时 5.1h (估 28h, 18% 预算); 7 个 concrete primitive + 1 个 base + 1 个 contract test infrastructure; public API 覆盖率 96%; 187+22 = 209 个单测全绿
-* **下一步**：P7.3 (`exp/strategies/ret2system_x32.py + _x64.py`, 3h 估) — 第一个 concrete 策略文件,使用 `priority = RET2SYSTEM` (150) 引用 P7.2 的 `priorities.py` 常量;P7.2 注册表已就位,可直接 `@register` 装饰器落地
+* **下一步**：P7.3 (`exp/strategies/ret2system_x32.py + _x64.py`, 3h 估) — 第一个 concrete 策略文件,使用 `priority = RET2SYSTEM` (150) 引用 P7.2 的 `priorities.py` 常量;P7.2 注册表已就位,可直接 `@register` 装饰器落地。**target = `dev`** (per §9.4 / B-005, P7.3+ 起从 `dev` 拉分支,不再直 main)
 
 **P6.2 详细步骤**（`primitives/ret2system.py`）：
 ```python
@@ -3286,11 +3286,12 @@ python -m venv /tmp/autopwn-test
 
 ### 9.2 任务认领流程
 1. 在对应任务的 §4 表格行内把 Owner 从 `—` 改为自己的 GitHub handle，把 S 改为 🔄
-2. 开分支：`git checkout -b p{阶段}-{slug}`，例如 `p4-recon-rop`
-3. PR 标题：`[P4] rop: refactor find_rop_gadgets_*`（不带 `#` 数字，PR 合并后再补）
-4. PR 描述：链接到本文件对应小节（如 `closes #P4.4`）
-5. 自审 + 求 1 位 Reviewer
-6. 合并后把 §4 的 PR 列填上，S 改 ✅，实际工时填好
+2. **从 `dev` 拉分支**：`git checkout dev && git pull && git checkout -b feature/p{阶段}-{slug}`，例如 `feature/p4-recon-rop`
+3. PR 标题：`[P4.4] rop: refactor find_rop_gadgets_*`（**target = `dev`，不带 `#` 数字，PR 合并后再补**）
+4. PR 描述：链接到本文件对应小节（如 `Refs: rebuild.md#P4.4`），注明 `Target: dev`
+5. **§2.6 验证通过后**自审 + 求 1 位 Reviewer
+6. 合并到 `dev` 后，§4 PR 列填 commit hash，S 改 🔄→👀
+7. 阶段完成时 `dev → main` 走 §9.4 升级流程；合并后 24h 内把 §4 的 PR 列填上，S 改 ✅，实际工时填好
 
 ### 9.3 任务粒度准则
 - **单个 PR ≤ 400 行 diff**（含测试）
@@ -3298,10 +3299,28 @@ python -m venv /tmp/autopwn-test
 - **单个 PR 不跨阶段**（如不允许同时做 P4 + P5）
 
 ### 9.4 分支策略
-- `main`：稳定，CI 必绿
-- `dev`：开发分支，所有 PR target 这里
-- `feature/p{阶段}-*`：个人分支
-- 发布时 `dev → main` 打 tag `v4.0.0`
+
+| 分支 | 角色 | 保护 | 来源 / 流向 |
+|---|---|---|---|
+| `main` | **稳定版本**，CI 必绿 | 推荐: 禁止 force-push；禁止直 push（需 PR） | 来源：`dev` fast-forward（§6 阶段全部完成时升级）；发布时打 tag `vN.M.P` |
+| `dev` | **集成开发分支**，所有 PR target 这里 | 推荐: PR 前必须 §2.6 PASS + 至少 1 位 Reviewer | 来源：`feature/p{阶段}-*` fast-forward；测试中断时可 reset 到上一个绿 commit |
+| `feature/p{阶段}-*` | **单任务工作分支**（per §9.2） | 无 | fork 自 `dev`；PR target 必须是 `dev`（例外见下） |
+
+**Inaugural（2026-06-08, per B-005）**：
+- `dev` 由 `main@b95d9ec` 创建（包含 P4.1–P7.2 全部 28 commits + 本次治理变更）
+- 历史 P3.5 [fix] 之前的 22 commits 已在 B-004 时通过 Owner-override 直接 fast-forward 到 main，不追溯重写
+- **P7.3 起所有新任务 PR 必须 target `dev`**，本节是 §9.2 任务认领流程的强制前置
+- 团队成员从 `dev` 拉个人分支：`git checkout dev && git pull && git checkout -b feature/p{阶段}-{slug}`
+
+**例外通道**（per AGENTS.md §4 紧急通道，可临时跳过 `dev` 中间层）：
+
+| 例外 | 触发条件 | 强制配套 |
+|---|---|---|
+| **Owner-hotfix 直 main** | CI 全红阻塞合入 / 线上安全类紧急修复 / Owner 明确授权 | 1) 同 PR 内补 B-NNN 阻塞登记（§10）<br>2) §2.6 验证必须跑（不享受 §2.6.4 豁免）<br>3) PR 描述明示 "Owner-hotfix" + 原因 |
+| **文档-only 直 main** | 仅改 `AGENTS.md` / `rebuild.md` / `refactor.md` 文字（无代码 / 无 `_legacy.py` / 无 `/scripts` 改动） | 1) PR 标题含 `[docs]` 前缀<br>2) §2.6.4 自动豁免（无需 5-binary 串行）<br>3) §2.6.2 流程仍适用（pytest 仍跑） |
+| **§3 阶段切换的版本升级** | 完成全部 §4 任务升 v4.0.0 时 | `dev → main` 走 PR + 2 位 Reviewer（§9.4 升级为严格流程） |
+
+**PR title 格式**（沿用 §9.5）：`[P{阶段}.{子任务}] {动词} {对象}`
 
 ### 9.5 提交信息规范
 ```
@@ -3333,6 +3352,7 @@ Refs: rebuild.md#P4.1
 | **B-002** | 验证方法论规范化（P0.7 / P0.8 临时需求 #2） | Owner 决策：串行 + `logs/` + 关键节点 debug + 2-log 对比 | Owner | 2026-06-07 | ✅ Resolved 2026-06-07 |
 | **B-003** | P7.2 决策树优先级对照表（附录 A）拍板 | Owner 决策：附录 A 数值（200/180/150/120/110/90/80/50）即定为 P7.2 排序基准；非 canary 路径 v3.1 write>put 改为新 spec put>write 是有意改进（PUT PLT 更普遍） | @Minzhi_Zhou | 2026-06-08 | ✅ Resolved 2026-06-08 |
 | **B-004** | P4.1–P7.2 跳过 `dev` 分支直接 fast-forward `main`（Owner 临时特批，per AGENTS.md §4 紧急通道 #3） | Owner 授权：feature/p7.2-registry 28 commits（P4.1 recon/checksec → P4.7/4.8 globals() 删除 → P5.1-P5.5 detect 完整 → P6.1-P6.9 primitives 完整 → P7.1 ExploitStrategy + P7.2a 决策 → P7.2 registry）直接 fast-forward 合入 main（merge-base = dbbc937 = main tip，无冲突）。原因：single-person Owner 项目；main 长期停在 P3.6 [fix] 状态（dbbc937），所有 P4-P6 22 commits + P7 6 commits 都在 feature/* 分支累积；dev 分支从未建立（按 §9.4 应有但实际不存在）。Owner 选择绕过 dev 直接 FF main，与项目历史工作流一致（P3.5/P3.6 [fix] 均为 main 直提交）。**§2.6 验证**：main 上 `pytest -m "not integration"` 284/284 全绿（与 feature/p7.2-registry 一致）。特批有效期：本次 P4.1–P7.2 落地；建议下次阶段切换时建立 `dev` 分支并恢复 §9.4 标准流程 | @Minzhi_Zhou | 2026-06-08 | ✅ Resolved 2026-06-08 |
+| **B-005** | **建立 `dev` 集成开发分支**（Owner 治理决策，per AGENTS.md §7 治理变更） | Owner 决策：① `dev` 由 `main@b95d9ec` 创建（包含 P4.1–P7.2 全部 28 commits）；② §9.4 重写为结构化表格 + inaugural 段 + 3 类例外通道（Owner-hotfix / 文档-only / 阶段升级）；③ §9.2 任务认领流程更新为「从 dev 拉分支 + target=dev」；④ P7.3+ 起所有新任务 PR **必须** target `dev`，恢复 §9.4 标准流程。**§2.6 豁免**：per AGENTS.md §2.6.4 文档-only PR 不适用 §2.6 验证流程；本次 main 上 `pytest -m "not integration"` 仍跑确认 284/284 全绿（与 B-004 末态一致）。**链上操作**：feature/governance-dev-branch → dev (FF) → main (FF) | @Minzhi_Zhou | 2026-06-08 | ✅ Resolved 2026-06-08 |
 
 ---
 

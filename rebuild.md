@@ -3332,6 +3332,7 @@ Refs: rebuild.md#P4.1
 | ~~**B-001**~~ | ~~P0.0 品牌变更决策（R12）~~ | GitHub=`f4cknet/autopwn` / 团队=`qzdx_soc` / 版本=`4.0.dev0` / 署名=方案 B | Owner | 2026-06-06 | ✅ Resolved 2026-06-06 |
 | **B-002** | 验证方法论规范化（P0.7 / P0.8 临时需求 #2） | Owner 决策：串行 + `logs/` + 关键节点 debug + 2-log 对比 | Owner | 2026-06-07 | ✅ Resolved 2026-06-07 |
 | **B-003** | P7.2 决策树优先级对照表（附录 A）拍板 | Owner 决策：附录 A 数值（200/180/150/120/110/90/80/50）即定为 P7.2 排序基准；非 canary 路径 v3.1 write>put 改为新 spec put>write 是有意改进（PUT PLT 更普遍） | @Minzhi_Zhou | 2026-06-08 | ✅ Resolved 2026-06-08 |
+| **B-004** | P7.1+P7.2a+P7.2 跳过 `dev` 分支直接 fast-forward `main`（Owner 临时特批，per AGENTS.md §4 紧急通道 #3） | Owner 授权：feature/p7.2-registry 6 commits（1f594c5/aac1b39/9648c89/fa23923/42f86d3/b688011）直接合入 main（fast-forward，merge-base = dbbc937 = main tip，无冲突）。原因：single-person Owner 项目，实际工作流已长期是 feature → main（P3.5/P3.6 [fix] 均为 main 直提交），§9.4 "所有 PR target dev" 是 aspirational 规范；本次为减少中间层（main 已落后 P4-P6 全部工作，dev 不存在），Owner 选择绕过 dev。特批有效期：本次 P7.1+P7.2 落地；下次 P8 启动时若 dev 仍未建立，可续特批 | @Minzhi_Zhou | 2026-06-08 | ✅ Resolved 2026-06-08 |
 
 ---
 

@@ -212,7 +212,7 @@
 | P6.2 | `primitives/ret2system.py`：x32 + x64 payload builder（pure function） | ✅ | @Minzhi_Zhou | 3h | 0.6h | feature/p6.2-primitives-ret2system | Ret2SystemX32 + Ret2SystemX64，2 公开 + 2 legacy port；fmtstr1 payload=124B (112+12), rip=36B (24+12), canary=b""; 10 单测全过；64-bit 含 ret 对齐 gadget 修 glibc 18.04+ MOVAPS 崩溃 |
 | P6.3 | `primitives/ret2libc_put.py`：x32 + x64 payload builder | ✅ | @Minzhi_Zhou | 4h | 0.7h | feature/p6.3-primitives-ret2libc-put | 2-stage 首个 primitive：Ret2LibcPutX32/X64 (stage_count=2)；build_payload 返 stage-1 leak，build_stage2_payload(ctx, leaked_puts_addr) 返 stage-2 system；13 单测全过 (含 stage-1 字节级 + stage-2 用真 libc 算 system/sh)；ret 对齐 gadget 复用 P6.2 |
 | P6.4 | `primitives/ret2libc_write.py`：x32 + x64 payload builder | ✅ | @Minzhi_Zhou | 4h | 0.5h | feature/p6.4-primitives-ret2libc-write | 2-stage write-泄漏 primitive：Ret2LibcWriteX32/X64 (stage_count=2)；build_payload 返 stage-1 (`write(1, write_got, 4)` leak via main)，build_stage2_payload(ctx, leaked_write_addr) 返 stage-2 system；x64 stage-1 加 `pop_rdi+pop_rsi` gadget chain，stage-2 含 `ret` 对齐 gadget（与 P6.3/P6.2 一致）；14 单测全过；§2.6 96% (27/28) 一致 PASS，4/5 SUCCESS |
-| P6.5 | `primitives/execve_syscall.py`：x32 payload builder | ⏳ | — | 2h | — | — | |
+| P6.5 | `primitives/execve_syscall.py`：x32 payload builder | ✅ | @Minzhi_Zhou | 2h | 0.6h | feature/p6.5-primitives-execve-syscall | 1 公开 + 1 legacy port；x32 `int 0x80` syscall chain（独立 primitive，不依赖 libc symbol）；combined 变体 (pop_ecx=0, pop_ecx_ebx!=0) 与 separate 变体 (pop_ecx!=0) 自动选择；17 单测全过（含 fmtstr1 真实 binary 烟雾）；§2.6 96% (27/28) 一致 PASS（行为与 P6.4 持平） |
 | P6.6 | `primitives/shellcode.py`：rwx x32 + x64 payload builder | ⏳ | — | 2h | — | — | |
 | P6.7 | `primitives/fmtstr.py`：fmtstr payload builder | ⏳ | — | 3h | — | — | |
 | P6.8 | `primitives/pie_backdoor.py`：PIE + backdoor payload builder | ⏳ | — | 2h | — | — | |
@@ -2517,7 +2517,7 @@ def test_test_stack_overflow_finds_canary():
 
 ### 6.7 P6 — Primitives 层
 
-**🟢 状态**：🔄 In Progress (P6.1-P6.4 ✅, P6.5-P6.9 ⏳) ｜**🔴 优先级**：P0｜**⏱ 预估**：28h (P6.1 已用 0.4h, P6.2 已用 0.6h, P6.3 已用 0.7h, P6.4 已用 0.5h)
+**🟢 状态**：🔄 In Progress (P6.1-P6.5 ✅, P6.6-P6.9 ⏳) ｜**🔴 优先级**：P0｜**⏱ 预估**：28h (P6.1 已用 0.4h, P6.2 已用 0.6h, P6.3 已用 0.7h, P6.4 已用 0.5h, P6.5 已用 0.6h)
 
 **目标**：30+ 利用函数中"构造 payload"那 5–10 行变成 pure function。
 
@@ -2656,31 +2656,33 @@ class ExploitResult:
   * 烟雾测试：`python3 autopwn.py -l Challenge/level3_x64 -v` → `EXPLOITATION SUCCESSFUL`，strategy = `ret2libc (write) - x64`，write@GOT 泄漏 → system() → /bin/sh
 * **diff 规模**：`autopwn/primitives/ret2libc_write.py` 新增 500 行 + `tests/unit/test_primitives_ret2libc_write.py` 新增 280 行 + `autopwn/primitives/__init__.py` 改 2 行 → 782 行净增（< 400 行/单文件；含 1 个新 primitive 模块 + 1 个 test 文件 + 1 个 import 增量；未跨层）
 * **下一步**：P6.5 (`execve_syscall.py`, 2h 估) — x32 `int 0x80` syscall chain（独立 primitive，不依赖 libc symbol）
+**P6.5 实施记录** (commit on `feature/p6.5-primitives-execve-syscall`，Owner @Minzhi_Zhou, 0.6h)：
 
-**P6.2 详细步骤**（`primitives/ret2system.py`）：
-```python
-from autopwn.primitives.base import ExploitPrimitive
-from pwntools import p32, p64  # 实际从 pwn import *
-
-class Ret2SystemX32(ExploitPrimitive):
-    name = "ret2system-x32"
-
-    def build_payload(self, ctx):
-        e = ELF(str(ctx.binary.path))
-        system_addr = e.symbols['system']
-        binsh_addr = next(e.search(b'/bin/sh'))
-        return b'A' * ctx.padding + p32(system_addr) + p32(0) + p32(binsh_addr)
-
-class Ret2SystemX64(ExploitPrimitive):
-    name = "ret2system-x64"
-
-    def build_payload(self, ctx):
-        e = ELF(str(ctx.binary.path))
-        system_addr = e.symbols['system']
-        binsh_addr = next(e.search(b'/bin/sh'))
-        g = ctx.gadgets_x64
-        return b'A' * ctx.padding + p64(g.pop_rdi) + p64(binsh_addr) + p64(g.ret) + p64(system_addr)
-```
+* **文件**：`autopwn/primitives/execve_syscall.py` (243 行) + `autopwn/primitives/__init__.py` 增量 re-export + `tests/unit/test_primitives_execve_syscall.py` (374 行) 新增
+* **公开 API**：
+  * `ExecveSyscallX32.build_payload(ctx) -> bytes` — x32 唯一；`int 0x80` syscall chain；payload = `b'A' * padding + p32(...) * 8` (combined 变体) 或 `* 9` (separate 变体)
+  * `_lookup_binsh(program) -> Optional[int]` — 共享 helper；ELF 解析 + `e.search(b"/bin/sh")`；None 当字符串缺失
+  * 模块常量 `SYSCALL_EXECVE = 0xB`（kernel ABI 硬编码）
+* **legacy ports**（`OBSOLETE` 前缀，字节级 parity）：
+  * `_legacy_execve_syscall(program, padding, pop_eax_addr, pop_ebx_addr, pop_ecx_addr, pop_edx_addr, pop_ecx_ebx_addr, ret_addr, int_0_80)` — verbatim port of `_legacy.py:1869-1935`（combined + separate 两个分支都保留 IO lifecycle）
+* **关键设计决策**：
+  * **x32 唯一**——64-bit Linux 用 `syscall` 指令 + 不同寄存器约定；不在 P6 范围给 `ExecveSyscallX64`（由 x64 ret2system / ret2libc 覆盖）
+  * **变体自动选择**：`pop_ecx == 0` + `pop_ecx_ebx != 0` → combined branch（7 p32 = 28B 后缀；实际是 8 p32 = 32B——`int_0x80` 漏数）；`pop_ecx != 0` → separate branch（9 p32 = 36B）；镜像 v3.1 L1875 `if pop_ecx_addr == None:` 条件
+  * **`int_0x80` vs `int_0_80` 字段名坑**：v3.1 的 legacy 函数参数名是 `int_0_80`（下划线分隔），但 P2.1 模型的 `RopGadgetsX32` 字段是 `int_0x80`（hex `0x80` 写法）——上一版 P6.5 草稿漏改 `g.int_0_80 == 0` 等 3 处导致 AttributeError；本次修复
+  * **`b"A" * padding`（非 `asm("nop") * padding`）**：与 P6.2 / P6.3 / P6.4 公开 API 一致（spec 示例 + 单元测试易断言）；legacy port 保留 `asm("nop")` 匹配 v3.1
+  * **`b""` 短路**：6 个连续 early-return（x64、gadgets_x32=None、has_eax_ebx_ecx_edx=False、int_0x80=0、combined 缺 pop_ecx_ebx、separate 缺 pop_ebx、/bin/sh 缺失）；P7 strategy 跳过此 primitive
+  * **`binsh` 来自 binary 自身**（不依赖 libc）——区别于 P6.2/P6.3；v3.1 `next(e.search(b'/bin/sh'))` 同款
+* **验证**：
+  * `pytest tests/unit/test_primitives_execve_syscall.py` → **17/17 passed in 0.27s**
+  * `pytest tests/ -m "not integration"` → **85/85 passed**（68 历史 + 17 新增；无回归）
+  * `ExecveSyscallX32.stage_count() == 1` ✓（single-stage，no leak）
+  * `ExecveSyscallX32().build_payload(fmtstr1)` with combined-gadget context → length = 112 = 80 padding + 8 p32
+  * `ExecveSyscallX32().build_payload(fmtstr1)` with separate-gadget context → length = 116 = 80 padding + 9 p32
+  * 字节级验证：`payload[84:88] == 0xB` (SYSCALL_EXECVE)，`payload[96:100]` = `next(ELF.search(b"/bin/sh"))`，`payload[108:112]` = fake `int_0x80` gadget
+  * Edge cases: x64 binary、gadgets_x32=None、has_eax_ebx_ecx_edx=False、int_0x80=0、combined 缺 pop_ecx_ebx、separate 缺 pop_ebx、canary 无 /bin/sh → 全部 `b""` ✓
+  * §2.6 串行验证（5 binary × 60s timeout）→ `logs/v4.0-p65/`，2-log 对比 **96% (27/28) 一致 PASS**（4/5 SUCCESS；canary 60s 截断为 PARTIAL；与 P6.4 持平——ExecveSyscallX32 暂未被 P7 strategy 调用，对 CLI 行为无影响）
+* **diff 规模**：`autopwn/primitives/execve_syscall.py` 新增 243 行 + `tests/unit/test_primitives_execve_syscall.py` 新增 374 行 + `autopwn/primitives/__init__.py` 改 9 行 → 626 行净增（含 1 个新 primitive 模块 + 1 个 test 文件 + 1 个 re-export 增量；未跨层；< 400 行/单文件）
+* **下一步**：P6.6 (`shellcode.py`, 2h 估) — rwx x32 + x64 payload builder（pwntools `shellcraft.sh()` 注入 + BSS 大缓冲 symbol lookup）
 
 **P6.9 单测样例**：
 ```python

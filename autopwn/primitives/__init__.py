@@ -19,6 +19,10 @@ ELF parsing for symbol lookup is allowed and expected):
     :class:`Ret2LibcWriteX64` (2-stage; leak via
     ``write(1, write@GOT, n)`` — useful when ``puts`` is
     absent, e.g. level3_x64).
+  * **P6.5** (``execve_syscall``) — :class:`ExecveSyscallX32`
+    (x32-only; ``int 0x80`` syscall chain — independent of
+    libc symbols, used when libc is stripped / statically
+    linked).
 """
 from __future__ import annotations
 
@@ -38,6 +42,9 @@ from autopwn.primitives.ret2libc_write import (
     Ret2LibcWriteX32 as Ret2LibcWriteX32,
     Ret2LibcWriteX64 as Ret2LibcWriteX64,
 )
+from autopwn.primitives.execve_syscall import (
+    ExecveSyscallX32 as ExecveSyscallX32,
+)
 
 __all__: list[str] = [
     "ExploitPrimitive",
@@ -48,4 +55,5 @@ __all__: list[str] = [
     "Ret2LibcPutX64",
     "Ret2LibcWriteX32",
     "Ret2LibcWriteX64",
+    "ExecveSyscallX32",
 ]

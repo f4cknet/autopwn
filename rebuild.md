@@ -226,7 +226,7 @@
 | **P7.2** | `exp/registry.py`：`@register` 装饰器 + `candidates(ctx)` 排序 | ✅ | @Minzhi_Zhou | 2h | 0.4h | 42f86d3 | Refs: refactor.md#3.2.2 + 附录A（已 Owner 拍板） |
 | **P7.2a** | （P7.2 子任务）梳理原 if 顺序 → `priority` 值对照表（见附录 A） | ✅ | @Minzhi_Zhou | 2h | 0.2h | fa23923 | 附录 A 数值 Owner 拍板定稿；B-003 Resolved；P7.2 解除阻塞；Refs: rebuild.md#附录A |
 | **P7.3** | `exp/strategies/ret2system_x32.py` + `_x64.py`（含本地/远端） | ✅ | @Minzhi_Zhou | 3h | 0.6h | b2774e9 | 4 strategies (local+remote × 32+64) `priority=RET2SYSTEM=150`；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
-| P7.4 | `exp/strategies/ret2libc_put_x32.py` + `_x64.py` | ⏳ | — | 3h | — | — | |
+| **P7.4** | `exp/strategies/ret2libc_put_x32.py` + `_x64.py` | 🔄 | @Minzhi_Zhou | 3h | — | — | target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | P7.5 | `exp/strategies/ret2libc_write_x32.py` + `_x64.py` | ⏳ | — | 3h | — | — | |
 | P7.6 | `exp/strategies/rwx_shellcode_x32.py` + `_x64.py` | ⏳ | — | 2h | — | — | |
 | P7.7 | `exp/strategies/execve_syscall.py` | ⏳ | — | 2h | — | — | |

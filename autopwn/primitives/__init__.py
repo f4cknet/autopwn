@@ -23,6 +23,10 @@ ELF parsing for symbol lookup is allowed and expected):
     (x32-only; ``int 0x80`` syscall chain — independent of
     libc symbols, used when libc is stripped / statically
     linked).
+  * **P6.6** (``shellcode``) — :class:`RwxShellcodeX32` and
+    :class:`RwxShellcodeX64` (single-stage; injects
+    ``pwntools shellcraft.sh()`` into an RWX BSS buffer;
+    only applicable when ``rwx_segments=True``).
 """
 from __future__ import annotations
 
@@ -45,6 +49,10 @@ from autopwn.primitives.ret2libc_write import (
 from autopwn.primitives.execve_syscall import (
     ExecveSyscallX32 as ExecveSyscallX32,
 )
+from autopwn.primitives.shellcode import (
+    RwxShellcodeX32 as RwxShellcodeX32,
+    RwxShellcodeX64 as RwxShellcodeX64,
+)
 
 __all__: list[str] = [
     "ExploitPrimitive",
@@ -56,4 +64,6 @@ __all__: list[str] = [
     "Ret2LibcWriteX32",
     "Ret2LibcWriteX64",
     "ExecveSyscallX32",
+    "RwxShellcodeX32",
+    "RwxShellcodeX64",
 ]

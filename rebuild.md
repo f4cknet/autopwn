@@ -213,7 +213,7 @@
 | P6.3 | `primitives/ret2libc_put.py`：x32 + x64 payload builder | ✅ | @Minzhi_Zhou | 4h | 0.7h | feature/p6.3-primitives-ret2libc-put | 2-stage 首个 primitive：Ret2LibcPutX32/X64 (stage_count=2)；build_payload 返 stage-1 leak，build_stage2_payload(ctx, leaked_puts_addr) 返 stage-2 system；13 单测全过 (含 stage-1 字节级 + stage-2 用真 libc 算 system/sh)；ret 对齐 gadget 复用 P6.2 |
 | P6.4 | `primitives/ret2libc_write.py`：x32 + x64 payload builder | ✅ | @Minzhi_Zhou | 4h | 0.5h | feature/p6.4-primitives-ret2libc-write | 2-stage write-泄漏 primitive：Ret2LibcWriteX32/X64 (stage_count=2)；build_payload 返 stage-1 (`write(1, write_got, 4)` leak via main)，build_stage2_payload(ctx, leaked_write_addr) 返 stage-2 system；x64 stage-1 加 `pop_rdi+pop_rsi` gadget chain，stage-2 含 `ret` 对齐 gadget（与 P6.3/P6.2 一致）；14 单测全过；§2.6 96% (27/28) 一致 PASS，4/5 SUCCESS |
 | P6.5 | `primitives/execve_syscall.py`：x32 payload builder | ✅ | @Minzhi_Zhou | 2h | 0.6h | feature/p6.5-primitives-execve-syscall | 1 公开 + 1 legacy port；x32 `int 0x80` syscall chain（独立 primitive，不依赖 libc symbol）；combined 变体 (pop_ecx=0, pop_ecx_ebx!=0) 与 separate 变体 (pop_ecx!=0) 自动选择；17 单测全过（含 fmtstr1 真实 binary 烟雾）；§2.6 96% (27/28) 一致 PASS（行为与 P6.4 持平） |
-| P6.6 | `primitives/shellcode.py`：rwx x32 + x64 payload builder | ⏳ | — | 2h | — | — | |
+| P6.6 | `primitives/shellcode.py`：rwx x32 + x64 payload builder | ✅ | @Minzhi_Zhou | 2h | 0.5h | feature/p6.6-primitives-shellcode | 2 公开 + 2 legacy port；rwx x32 + x64 `shellcraft.sh()` 注入 BSS；x32 payload = padding + 4B, x64 = padding + 8B；依赖 `ctx.binary.rwx_segments=True` + `_lookup_bss_addr` (min_size=30)；35 单测全过（含 5 binary × 2 架构矩阵化）；§2.6 96% (27/28) 一致 PASS（行为与 P6.5 持平） |
 | P6.7 | `primitives/fmtstr.py`：fmtstr payload builder | ⏳ | — | 3h | — | — | |
 | P6.8 | `primitives/pie_backdoor.py`：PIE + backdoor payload builder | ⏳ | — | 2h | — | — | |
 | P6.9 | 单元测试：每个 primitive 的 `build_payload(ctx) → bytes` 在 fake address 下断言字节序列 | ⏳ | — | 6h | — | — | |
@@ -2517,7 +2517,7 @@ def test_test_stack_overflow_finds_canary():
 
 ### 6.7 P6 — Primitives 层
 
-**🟢 状态**：🔄 In Progress (P6.1-P6.5 ✅, P6.6-P6.9 ⏳) ｜**🔴 优先级**：P0｜**⏱ 预估**：28h (P6.1 已用 0.4h, P6.2 已用 0.6h, P6.3 已用 0.7h, P6.4 已用 0.5h, P6.5 已用 0.6h)
+**🟢 状态**：🔄 In Progress (P6.1-P6.6 ✅, P6.7-P6.9 ⏳) ｜**🔴 优先级**：P0｜**⏱ 预估**：28h (P6.1 已用 0.4h, P6.2 已用 0.6h, P6.3 已用 0.7h, P6.4 已用 0.5h, P6.5 已用 0.6h, P6.6 已用 0.5h)
 
 **目标**：30+ 利用函数中"构造 payload"那 5–10 行变成 pure function。
 
@@ -2656,6 +2656,7 @@ class ExploitResult:
   * 烟雾测试：`python3 autopwn.py -l Challenge/level3_x64 -v` → `EXPLOITATION SUCCESSFUL`，strategy = `ret2libc (write) - x64`，write@GOT 泄漏 → system() → /bin/sh
 * **diff 规模**：`autopwn/primitives/ret2libc_write.py` 新增 500 行 + `tests/unit/test_primitives_ret2libc_write.py` 新增 280 行 + `autopwn/primitives/__init__.py` 改 2 行 → 782 行净增（< 400 行/单文件；含 1 个新 primitive 模块 + 1 个 test 文件 + 1 个 import 增量；未跨层）
 * **下一步**：P6.5 (`execve_syscall.py`, 2h 估) — x32 `int 0x80` syscall chain（独立 primitive，不依赖 libc symbol）
+
 **P6.5 实施记录** (commit on `feature/p6.5-primitives-execve-syscall`，Owner @Minzhi_Zhou, 0.6h)：
 
 * **文件**：`autopwn/primitives/execve_syscall.py` (243 行) + `autopwn/primitives/__init__.py` 增量 re-export + `tests/unit/test_primitives_execve_syscall.py` (374 行) 新增
@@ -2683,6 +2684,60 @@ class ExploitResult:
   * §2.6 串行验证（5 binary × 60s timeout）→ `logs/v4.0-p65/`，2-log 对比 **96% (27/28) 一致 PASS**（4/5 SUCCESS；canary 60s 截断为 PARTIAL；与 P6.4 持平——ExecveSyscallX32 暂未被 P7 strategy 调用，对 CLI 行为无影响）
 * **diff 规模**：`autopwn/primitives/execve_syscall.py` 新增 243 行 + `tests/unit/test_primitives_execve_syscall.py` 新增 374 行 + `autopwn/primitives/__init__.py` 改 9 行 → 626 行净增（含 1 个新 primitive 模块 + 1 个 test 文件 + 1 个 re-export 增量；未跨层；< 400 行/单文件）
 * **下一步**：P6.6 (`shellcode.py`, 2h 估) — rwx x32 + x64 payload builder（pwntools `shellcraft.sh()` 注入 + BSS 大缓冲 symbol lookup）
+
+**P6.6 实施记录** (commit on `feature/p6.6-primitives-shellcode`，Owner @Minzhi_Zhou, 0.5h)：
+
+* **文件**：`autopwn/primitives/shellcode.py` (220 行) + `autopwn/primitives/__init__.py` 增量 re-export + `tests/unit/test_primitives_shellcode.py` (375 行) 新增
+* **公开 API**：
+  * `RwxShellcodeX32.build_payload(ctx) -> bytes` — x32 rwx shellcode；payload = `shellcode.ljust(padding, asm('nop')) + p32(bss_addr)`
+  * `RwxShellcodeX64.build_payload(ctx) -> bytes` — x64 同款，`p64(bss_addr)` 收尾
+  * `_lookup_bss_addr(program) -> Optional[int]` — 共享 helper；委托 `recon.bss.find_bss(min_size=30)` 取首个；None 当无 BSS 符号 / stripped / 文件不可读
+  * 模块常量 `MIN_BSS_SIZE = 30`（v3.1 `find_large_bss_symbols` 的 `st_size > 30` 阈值）
+* **legacy ports**（`OBSOLETE` 前缀，字节级 parity）：
+  * `_legacy_rwx_shellcode_x32(program, buf_addr, padding, function_name, ret_addr)` — verbatim port of `_legacy.py:1933-1952`，含 `process()` IO lifecycle
+  * `_legacy_rwx_shellcode_x64(program, buf_addr, padding, function_name, ret_addr, libc_path)` — verbatim port of `_legacy.py:1954-1975`，含 `process()` IO lifecycle（`libc_path` 保留为未用形参，匹配 v3.1 signature）
+* **关键设计决策**：
+  * **唯一 non-ROP primitive**——payload 头不是 ROP 链而是 raw shellcode (`asm(shellcraft.sh())`，x32 ~44B / x64 ~48B)，后接 nop-sled + BSS 返回地址
+  * **4 个串联 gate**：bit-width 匹配 → `rwx_segments=True` → `padding > 0` → BSS lookup 非空；任一失败即 `b""`
+  * **BSS lookup 内部化**——与 P6.5 `_lookup_binsh` 同款模式：primitive 自己做只读 ELF 解析；避免给 ctx 加新字段（`shellcode_buf`），P7 strategy 也无需关心 BSS 解析
+  * **`asm('nop') * (padding - len(shellcode))`**——v3.1 用 `asm('nop') * padding`，但 `flat([shellcode.ljust(padding, nop), p32(addr)])` 等价于"先把 shellcode pad 到 padding、再 append 4B"；保留 v3.1 风格
+  * **`flat(...)` 而非 `+` 拼接**——pwntools `flat()` 自动处理 list-of-bytes 拼接，与 v3.1 一致；区别于 P6.5 的纯 `+` 拼接（payload 全是 p32 整数）
+  * **x64 不需要 libc 也不需要 ret 对齐 gadget**——shellcode 自洽 + 直接 ret 到 BSS，无 MOVAPS 16-byte 对齐问题；这与 P6.2/P6.3/P6.4 的 `ret` 对齐 gadget 修复**无关**
+* **验证**：
+  * `pytest tests/unit/test_primitives_shellcode.py` → **35/35 passed in 1.42s**（8 metadata + 4 x32 edge + 4 x64 edge + 4 x32 happy + 3 x64 happy + 10 矩阵化 real-binary smoke + 2 RWX-override smoke）
+  * `pytest tests/ -m "not integration"` → **120/120 passed**（85 历史 + 35 新增；无回归）
+  * `RwxShellcodeX32.stage_count() == 1` ✓（single-stage；与 ret2libc P6.3/P6.4 的 2-stage 区分）
+  * Happy path（monkeypatched `_lookup_bss_addr`）：x32 payload = padding + 4 = 116B（112 + 4），x64 = 88B（80 + 8）
+  * 字节级：`payload[:len(asm(shellcraft.sh()))]` == `asm(shellcraft.sh())` ✓；`payload[-4:]` (x32) / `payload[-8:]` (x64) == 假 BSS 地址 ✓；中间全是 `asm('nop')` ✓
+  * Real binary 矩阵化：5 binary × 2 架构 = 10 个测试，全部 `b""`（无 RWX segment 命中）；RWX 强制打开仍 `b""`（无 BSS 符号；fmtstr1/level3_x64 BSS 全 < 30B）
+  * §2.6 串行验证（5 binary × 60s timeout）→ `logs/v4.0-p66/`，2-log 对比 **96% (27/28) 一致 PASS**（4/5 SUCCESS；canary 60s 截断为 PARTIAL；与 P6.5 持平——`RwxShellcodeX32/X64` 暂未被 P7 strategy 调用，对 CLI 行为无影响）
+* **diff 规模**：`autopwn/primitives/shellcode.py` 新增 220 行 + `tests/unit/test_primitives_shellcode.py` 新增 375 行 + `autopwn/primitives/__init__.py` 改 9 行 → 604 行净增（含 1 个新 primitive 模块 + 1 个 test 文件 + 1 个 re-export 增量；未跨层；< 400 行/单文件）
+* **下一步**：P6.7 (`fmtstr.py`, 3h 估) — fmtstr payload builder（`%n` 任意地址写 + 检测到的 offset 注入）
+
+**P6.2 详细步骤**（`primitives/ret2system.py`）：
+```python
+from autopwn.primitives.base import ExploitPrimitive
+from pwntools import p32, p64  # 实际从 pwn import *
+
+class Ret2SystemX32(ExploitPrimitive):
+    name = "ret2system-x32"
+
+    def build_payload(self, ctx):
+        e = ELF(str(ctx.binary.path))
+        system_addr = e.symbols['system']
+        binsh_addr = next(e.search(b'/bin/sh'))
+        return b'A' * ctx.padding + p32(system_addr) + p32(0) + p32(binsh_addr)
+
+class Ret2SystemX64(ExploitPrimitive):
+    name = "ret2system-x64"
+
+    def build_payload(self, ctx):
+        e = ELF(str(ctx.binary.path))
+        system_addr = e.symbols['system']
+        binsh_addr = next(e.search(b'/bin/sh'))
+        g = ctx.gadgets_x64
+        return b'A' * ctx.padding + p64(g.pop_rdi) + p64(binsh_addr) + p64(g.ret) + p64(system_addr)
+```
 
 **P6.9 单测样例**：
 ```python

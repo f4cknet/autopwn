@@ -1,6 +1,6 @@
 # v3.1 vs v4.0 严格对比报告
 
-> **生成时间**: 2026-06-07 14:16:04 UTC
+> **生成时间**: 2026-06-07 22:27:34 UTC
 > **方法论**: 串行 runner（scripts/run_verify.sh）+ 60s/binary timeout
 > **目的**: 验证 P0.0 全局改名（pwnpasi -> autopwn）+ P0.7 验证基础设施 引入的 v4.0 与 v3.1 行为一致性
 > **Owner**: @Minzhi_Zhou

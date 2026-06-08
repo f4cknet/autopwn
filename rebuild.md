@@ -76,7 +76,7 @@
 | **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
-| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 8/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2+P7.3+P7.4+P7.5+P7.6+P7.7)；integration 测试 P9.4 待补；`dev` 分支已建立 per B-005，P7.3+ PR target=dev) |
+| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 9/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2+P7.3+P7.4+P7.5+P7.6+P7.7+P7.8)；integration 测试 P9.4 待补；`dev` 分支已建立 per B-005，P7.3+ PR target=dev) |
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ⏳ |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
@@ -230,7 +230,7 @@
 | **P7.5** | `exp/strategies/ret2libc_write_x32.py` + `_x64.py` | ✅ | @Minzhi_Zhou | 3h | 0.5h | be7e37f | 4 strategies (local+remote × 32+64) `priority=RET2LIBC_WRITE=110`；2-stage write leak；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | **P7.6** | `exp/strategies/rwx_shellcode_x32.py` + `_x64.py` | ✅ | @Minzhi_Zhou | 2h | 0.5h | 03db6d1 | 4 strategies (local+remote × 32+64) `priority=RWX_SHELLCODE=90`；1-stage BSS shellcode 注入；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | **P7.7** | `exp/strategies/execve_syscall.py` | ✅ | @Minzhi_Zhou | 2h | 0.4h | 0757779 | 2 strategies (local+remote, **x32 only**) `priority=EXECVE_SYSCALL=80`；1-stage `int 0x80; execve` syscall chain；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
-| P7.8 | `exp/strategies/fmtstr.py`（含 `fmtstr_print_strings` 旁路） | ⏳ | — | 3h | — | — | |
+| **P7.8** | `exp/strategies/fmtstr.py`（含 `fmtstr_print_strings` 旁路） | ✅ | @Minzhi_Zhou | 3h | 0.5h | db08c8b | 6 strategies (4 main: local+remote × 32+64；2 bypass: `PrintStrings*` x32 only) `priority=FMTSTR=50` (兜底)；**spec 偏差**：6 strategies 都在一个 module 而非 split per arch——§4.8 备注 '含 fmtstr_print_strings 旁路' 明确要求把 leak-only bypass 写进 P7.8 文件；**all 6 strategies override `matches()` 方法** 读 `padding == 0` v3.1 main() 门控（default `matches()` 不会 descend 到 `ctx.binary.*`，follow P7.6 模式）；`P6.7 fmtstr primitive` 读 `ctx.binary.bit` 选 `pNN`（修 v3.1 "local=p32, remote=p64" hardcode quirk）；40 单测全过（6 priority + 1 兜底 + 5 metadata + 11 matches + 5 candidates + 7 graceful-skip + 2 module-structure + 3 E2E-mocked）；target=`dev`（per §9.4 / B-005）；§2.6 96% (27/28) 一致 / 4/5 SUCCESS PASS（与 P7.7 持平；fmtstr1 6/6 标记全一致）；Refs: refactor.md#3.2.2 |
 | P7.9 | `exp/strategies/pie_backdoor.py` | ⏳ | — | 2h | — | — | |
 | P7.10 | `exp/strategies/canary_*.py`（7 个文件，共用 `CanaryStrategy(ExploitStrategy)` 基类） | ⏳ | — | 6h | — | — | 风险点 |
 | P7.11 | `exp/strategies/__init__.py`：显式 import 所有策略以触发注册 | ⏳ | — | 0.5h | — | — | |
@@ -3340,6 +3340,67 @@ from .canary_execve_syscall import CanaryExecveSyscall
 - **commit 引用**：`0757779`（P7.7）
 - **Refs**：`refactor.md §3.2.2`（strategy 设计 WHY）+ P6.5 primitive contract（1-stage `build_payload` with combined/separate variant auto-select）
 - **流程验证**（per §9.4 B-005）：PR 走 `feature/p7.7-execve-syscall` → `dev` (FF) → `main` (FF) 标准链路
+
+---
+
+**P7.8 实施记录（2026-06-08）**：
+
+- **新文件** `autopwn/exp/strategies/fmtstr.py`（~370 行）：**6 个 concrete strategies**，全部用 `@register` 装饰器自动注册
+  - **4 个 main path**（local+remote × 32+64）：
+    - **FmtstrX32LocalStrategy** — `priority=FMTSTR=50`, `arch=32`, `remote=False`
+    - **FmtstrX64LocalStrategy** — `priority=FMTSTR=50`, `arch=64`, `remote=False`
+    - **FmtstrX32RemoteStrategy** — `priority=FMTSTR=50`, `arch=32`, `remote=True`
+    - **FmtstrX64RemoteStrategy** — `priority=FMTSTR=50`, `arch=64`, `remote=True`
+  - **2 个 leak-only bypass**（`PrintStrings*`，x32 only per §4.8 备注）：
+    - **FmtstrPrintStringsX32LocalStrategy** — `priority=FMTSTR=50`, `arch=32`, `remote=False`
+    - **FmtstrPrintStringsX32RemoteStrategy** — `priority=FMTSTR=50`, `arch=32`, `remote=True`
+
+- **spec 偏差（已 commit message 标注）**：6 strategies 全部位于一个 module 而非按 arch 拆分。原因：§4.8 备注 "含 `fmtstr_print_strings` 旁路" 明确要求把 leak-only bypass 写进 P7.8 模块；为了一致性 + 共享 `matches()` override 代码（见下），全部 6 个 class 一起写在 `fmtstr.py`。
+
+- **关键架构决策 — 全部 6 strategies override `matches()` 方法**（follow P7.6 `rwx_shellcode` 模式）：
+  - **原因**：v3.1 main() 的 fmtstr 分支只在 `padding == 0`（无 BOF）时进入。`P7.1 ExploitStrategy.matches()` default 用 `getattr(ctx, key)` 检查 `requires_*` 元数据，**不会 descend 到 `ctx.binary.*`**（如 `ctx.binary.rwx_segments`），所以 `requires = ()`（空 tuple — fmtstr 没有 BOF 相关的硬性元数据门控）无法表达 "padding == 0" 这条 v3.1 main() 内部条件。
+  - **实现**：6 strategies 全部 override `matches(ctx)`，**先**用 `super().matches(ctx)` 检查 arch/remote 元数据，**再**返 `ctx.padding == 0`（gate on the v3.1 main() condition）。这样 `requires_*` 元数据保持简洁（arch/remote 一目了然），同时保留了 v3.1 行为。
+
+- **v3.1 quirk 修正**（`P6.7 fmtstr primitive`）：v3.1 local variant hardcode `p32`，remote variant hardcode `p64`（**与 bit-width 无关** —— 是 v3.1 bug）。P6.7 primitive 修复为读 `ctx.binary.bit` 选正确 `pNN`；P7.8 strategy 跟随，**不**改 P6.7 primitive 行为。
+
+- **架构层**（per refactor.md §3.2.2 + P6.7 primitive contract）：
+  - **1-stage flow wiring**（无 leak / 无 libc）：P6.7 primitive 提供 `build_payload(ctx) -> bytes` 一次性返 `pNN(buf_addr) + b'%' + str(offset).encode() + b'$n'`；strategy 负责 sendline + record_success + interactive
+  - **bypass 路径不调用 `record_success`**：`PrintStrings*` 策略在 100-iteration leak loop 中不命中 win condition 时永远返 False（orchestrator moves to next candidate）
+  - **不调用 `sys.exit`**：`fmtstr_buf`/`fmtstr_offset` 缺失 / remote None 均返 False（per §6.8 reviewer checklist）
+
+- **修改**：无 —— P7.8 是纯增量（6 个新 strategy + 0 行 `_legacy.py` 改动）。_legacy.py 的 `fmtstr` (L1960) + `fmtstr_remote` (L2200) + `fmtstr_print_strings` (L2230) 函数保留至 P8.5 删除。
+
+- **不动**：recon / detect / primitives / cli / orchestrator —— 严格守 §9.2 单层规则
+
+- **P7.8 触发面分析**（新增 vs §2.6 baseline）：
+  - v4.0 baseline 中 `fmtstr1` 命中 `Format String - Local`（per `logs/v4.0/fmtstr1.log` —— 这是 v3.1 main() 实际跑的路径）
+  - `logs/v4.0/fmtstr1.log` 全部 6 个 fmtstr 关键标记 100% 一致 vs v3.1 baseline
+  - P7.8 strategy 触发后行为与 P6.7 primitive 的 v4.0 baseline 一致（fmtstr1 SUCCESS）
+  - **注**：v4.0 baseline 的 fmtstr1 走的是 v3.1 main() 中 `padding == 0` → `fmtstr` 分支的 legacy path。P7.8 strategy 完整重写后，行为应与 v3.1 完全一致；§2.6 验证已确认 6/6 fmtstr1 markers 一致。
+
+- **测试** `tests/unit/test_exp_fmtstr.py`（40 单测全过）：
+  - **Priority 7 个**：6 个 strategy 各 priority == FMTSTR == 50 + 跨 priority 验证（FMTSTR 是 8 个 priority 兜底）
+  - **Metadata 5 个**：arch/remote/requires 4 个组合 + name 包含 "fmtstr"
+  - **Matches 11 个**：custom `padding == 0` gate（5 个 — padding=0 匹配 / padding!=0 拒绝 / 跨 ctx 错配 / x64/x32 ctx 错配 / local/remote 错配）+ bypass 路径单独测试（2 个）
+  - **Candidates 5 个**：registry 集成（local x32/x64 + remote x32/x64 + padding != 0 排除所有 fmtstr）
+  - **Graceful skip 7 个**：`fmtstr_buf` missing / `fmtstr_offset` missing / `fmtstr_offset == 0` / remote None / `fmtstr_buf` missing (remote) / bypass leak loop 不命中 win / bypass remote None
+  - **Module structure 2 个**：__all__ 完整 6 个 class + 不继承 ExploitResult
+  - **End-to-end 3 个**：mock primitive + 1-stage 完整 flow（x32 local / x64 local / no-record-on-empty）
+  - **markers**：`pytest.mark.strategy`
+  - **复用 P7.3 修复**：`importlib.reload` autouse fixture
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：**492 passed**（40 新增 + 452 既有，**全绿**；canary fuzz warning 1 条与 P5.3 同源，**预期**）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（130KB，brute force 仍需 ~7min）+ fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（**无回归**——与 P7.1-P7.7 baseline 持平；fmtstr1 6/6 关键标记全一致）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.8 + §6.8 P7.8 同步
+  - 详见 `logs/comparison/summary.md`（P7.8 重新生成，2026-06-08 14:49:11 UTC）
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期；与 P6.x + P7.1-P7.7 同源）
+- **commit 引用**：`db08c8b`（P7.8 impl + test）
+- **Refs**：`refactor.md §3.2.2`（strategy 设计 WHY）+ P6.7 primitive contract（1-stage `build_payload` with `pNN(buf_addr) + b'%' + str(offset).encode() + b'$n'`）
+- **流程验证**（per §9.4 B-005）：PR 走 `feature/p7.8-fmtstr` → `dev` (FF) → `main` (FF) 标准链路
 
 ---
 

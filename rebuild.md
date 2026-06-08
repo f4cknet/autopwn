@@ -76,7 +76,7 @@
 | **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
-| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 5/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2+P7.3+P7.4)；integration 测试 P9.4 待补；`dev` 分支已建立 per B-005，P7.3+ PR target=dev) |
+| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 6/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2+P7.3+P7.4+P7.5)；integration 测试 P9.4 待补；`dev` 分支已建立 per B-005，P7.3+ PR target=dev) |
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ⏳ |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
@@ -227,7 +227,7 @@
 | **P7.2a** | （P7.2 子任务）梳理原 if 顺序 → `priority` 值对照表（见附录 A） | ✅ | @Minzhi_Zhou | 2h | 0.2h | fa23923 | 附录 A 数值 Owner 拍板定稿；B-003 Resolved；P7.2 解除阻塞；Refs: rebuild.md#附录A |
 | **P7.3** | `exp/strategies/ret2system_x32.py` + `_x64.py`（含本地/远端） | ✅ | @Minzhi_Zhou | 3h | 0.6h | b2774e9 | 4 strategies (local+remote × 32+64) `priority=RET2SYSTEM=150`；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | **P7.4** | `exp/strategies/ret2libc_put_x32.py` + `_x64.py` | ✅ | @Minzhi_Zhou | 3h | 0.7h | f7a8ba4 | 4 strategies (local+remote × 32+64) `priority=RET2LIBC_PUT=120`；2-stage puts leak；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
-| **P7.5** | `exp/strategies/ret2libc_write_x32.py` + `_x64.py` | 🔄 | @Minzhi_Zhou | 3h | — | — | target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
+| **P7.5** | `exp/strategies/ret2libc_write_x32.py` + `_x64.py` | ✅ | @Minzhi_Zhou | 3h | 0.5h | be7e37f | 4 strategies (local+remote × 32+64) `priority=RET2LIBC_WRITE=110`；2-stage write leak；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | P7.6 | `exp/strategies/rwx_shellcode_x32.py` + `_x64.py` | ⏳ | — | 2h | — | — | |
 | P7.7 | `exp/strategies/execve_syscall.py` | ⏳ | — | 2h | — | — | |
 | P7.8 | `exp/strategies/fmtstr.py`（含 `fmtstr_print_strings` 旁路） | ⏳ | — | 3h | — | — | |
@@ -3180,6 +3180,59 @@ from .canary_execve_syscall import CanaryExecveSyscall
 - **commit 引用**：`f7a8ba4`（P7.4）
 - **Refs**：`refactor.md §3.2.2`（strategy 设计 WHY）+ P6.3 primitive contract（2-stage `stage_count` + `build_stage2_payload`）；后续 P7.5-P7.10 按相同 pattern 落地
 - **流程验证**（per §9.4 B-005）：PR 走 `feature/p7.4-ret2libc-put` → `dev` (FF) → `main` (FF) 标准链路
+
+---
+
+**P7.5 实施记录（2026-06-08）**：
+
+- **新文件** `autopwn/exp/strategies/ret2libc_write_x32.py`（~200 行）+ `ret2libc_write_x64.py`（~200 行）：4 个 concrete strategies（local+remote × 32+64），全部用 `@register` 装饰器自动注册
+  - **Ret2LibcWriteX32LocalStrategy** + **Ret2LibcWriteX32RemoteStrategy** (x32 各 1)
+  - **Ret2LibcWriteX64LocalStrategy** + **Ret2LibcWriteX64RemoteStrategy** (x64 各 1)
+  - **priority = RET2LIBC_WRITE = 110**（per 附录 A，P7.2 priorities.py 引用）
+  - **requires = ("has_write",)**（仅需 `write` in PLT — 当 binary 无 `puts` 但有 `write` 时启用，例如 `level3_x64`）
+
+- **架构层**（per refactor.md §3.2.2 + P6.4 primitive contract）：
+  - **2-stage flow wiring**：P6.4 primitive 提供 `build_payload(ctx)` (stage 1 `write(1, write@GOT, n)` leak) + `build_stage2_payload(ctx, leak)` (stage 2 `system('/bin/sh')`)
+  - **x32 leak parse**：`u32(io.recv(4))`（4 字节 raw read，size-known）
+  - **x64 leak parse**：`u64(io.recv(8))`（8 字节 raw read，size-known）
+  - **libc 注入点**：stage 2 读 `ctx.libc.elf` 或 `ctx.libc.path`（per P4.2 recon 阶段填充）
+  - **x64 ret 对齐 gadget**：P6.4 primitive 已包含 `ret` 对齐 gadget（修 v3.1 缺失 — Ubuntu 18.04+ glibc MOVAPS SIGSEGV）
+  - **不调用 `sys.exit`**：leak parse 失败 / primitive empty / gadgets 缺失均返 False（per §6.8 reviewer checklist）
+
+- **修改**：无 —— P7.5 是纯增量（4 个新 strategy + 0 行 `_legacy.py` 改动）。_legacy.py 的 `ret2libc_write_x32/x64/_remote` 函数保留至 P8.5 删除
+
+- **不动**：recon / detect / primitives / cli / orchestrator —— 严格守 §9.2 单层规则
+
+- **P7.5 触发面分析**（新增 vs §2.6 baseline）：
+  - v4.0 baseline 中 `level3_x64` 命中 `ret2libc (write) - x64`（v3.1 同命中 —— P7.5 部署后仍命中，因 P6.4 行为与 v3.1 一致）
+  - 4 个其他 binary 无 `write@plt` → P7.5 策略 candidates 过滤后无匹配 → 不影响其他 baseline
+  - **put vs write 优先级**：当 binary 同时有 `has_puts=True` 和 `has_write=True`（理论情况），`ret2libc_put` (120) 优先于 `ret2libc_write` (110) per 附录 A
+
+- **测试** `tests/unit/test_exp_ret2libc_write.py`（38 单测全过）：
+  - **Priority 5 个**：每个 strategy priority == RET2LIBC_WRITE == 110（4 个独立断言）+ 跨 priority 验证 (RET2SYSTEM > RET2LIBC_PUT > RET2LIBC_WRITE per 附录 A)
+  - **Metadata 5 个**：arch / remote / requires 4 个组合 + name 非空检查
+  - **Matches 9 个**：每 strategy 各种 filter 行为
+  - **Candidates 6 个**：4 个 ctx 类型各 1 个 + has_write=False 全部排除 + **put > write 优先级**（关键 cross-strategy 验证）
+  - **Graceful skip 7 个**：primitive empty / remote None / gadgets None / pop_rsi=0 / pop_rdi=0
+  - **Module structure 3 个**：__all__ 完整 + class 引用一致 + 不继承 ExploitResult
+  - **End-to-end 3 个**：mock `pwn.process` + `record_success` + 2-stage 完整 flow + leak parse 失败时 record_success **不** 被调用
+  - **markers**：`pytest.mark.strategy`
+  - **复用 P7.3 + P7.4 修复**：`importlib.reload` autouse fixture（击败 `sys.modules` cache）+ End-to-end 测试需 `ctx.libc = LibcInfo(path=...)` 注入
+  - **P7.5 新增修复**：autouse fixture 还需 reload P7.3 + P7.4 策略模块（cross-strategy 优先级测试依赖 P7.4 的 `ret2libc_put` 候选）
+  - **P7.5 关键设计决策**：End-to-end 测试用 `MagicMock` patch primitive 而非依赖真实 binary —— 原因：**v4.0 baseline 中无任何 x32 binary 有 `write@plt`**（仅 `level3_x64` 有 x64 write@plt），所以 primitive 在真实 x32 binary 上必然返空。Mock 隔离了"primitive 内部逻辑"vs"strategy-level IO wiring"，让测试聚焦后者
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：**392 passed**（38 新增 + 354 既有，**全绿**；canary fuzz warning 1 条与 P5.3 同源，**预期**）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（154KB，brute force 仍需 ~7min）+ fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（**无回归**——与 P7.1-P7.4 baseline 持平）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.8 + §6.8 P7.5 同步
+  - 详见 `logs/comparison/summary.md`（P7.5 重新生成）
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期；与 P6.x + P7.1-P7.4 同源）
+- **commit 引用**：`be7e37f`（P7.5）
+- **Refs**：`refactor.md §3.2.2`（strategy 设计 WHY）+ P6.4 primitive contract（2-stage `stage_count` + `build_stage2_payload`）；后续 P7.6-P7.10 按相同 pattern 落地
+- **流程验证**（per §9.4 B-005）：PR 走 `feature/p7.5-ret2libc-write` → `dev` (FF) → `main` (FF) 标准链路
 
 ---
 

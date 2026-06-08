@@ -215,7 +215,7 @@
 | P6.5 | `primitives/execve_syscall.py`：x32 payload builder | ✅ | @Minzhi_Zhou | 2h | 0.6h | feature/p6.5-primitives-execve-syscall | 1 公开 + 1 legacy port；x32 `int 0x80` syscall chain（独立 primitive，不依赖 libc symbol）；combined 变体 (pop_ecx=0, pop_ecx_ebx!=0) 与 separate 变体 (pop_ecx!=0) 自动选择；17 单测全过（含 fmtstr1 真实 binary 烟雾）；§2.6 96% (27/28) 一致 PASS（行为与 P6.4 持平） |
 | P6.6 | `primitives/shellcode.py`：rwx x32 + x64 payload builder | ✅ | @Minzhi_Zhou | 2h | 0.5h | feature/p6.6-primitives-shellcode | 2 公开 + 2 legacy port；rwx x32 + x64 `shellcraft.sh()` 注入 BSS；x32 payload = padding + 4B, x64 = padding + 8B；依赖 `ctx.binary.rwx_segments=True` + `_lookup_bss_addr` (min_size=30)；35 单测全过（含 5 binary × 2 架构矩阵化）；§2.6 96% (27/28) 一致 PASS（行为与 P6.5 持平） |
 | P6.7 | `primitives/fmtstr.py`：fmtstr payload builder | ✅ | @Minzhi_Zhou | 3h | 0.6h | feature/p6.7-primitives-fmtstr | 2 公开 + 4 legacy port；x32/x64 `%N$n` 任意地址写 primitive；payload = `pNN(buf_addr) + b'%' + str(offset).encode() + b'$n'`；读 `ctx.fmtstr_offset` + `ctx.fmtstr_buf`（P5.2 + P4.5 喂入）；修复 v3.1 "local=p32, remote=p64" 把 bit 与 runtime 混为一谈的 bug；41 单测全过（8 metadata + 5 X32 edge + 5 X64 edge + 1 X32 3-digit offset + 1 helper + 15 矩阵化 real-binary smoke + 6 happy-path 字节级）；§2.6 96% (27/28) 一致 PASS（与 P6.6 持平；fmtstr1 6/6 标记全一致） |
-| P6.8 | `primitives/pie_backdoor.py`：PIE + backdoor payload builder | ⏳ | — | 2h | — | — | |
+| P6.8 | `primitives/pie_backdoor.py`：PIE + backdoor payload builder | ✅ | @Minzhi_Zhou | 2h | 0.5h | feature/p6.8-primitives-pie-backdoor | 1 公开 + 2 legacy port；PIE + backdoor brute-force primitive；payload = `asm('nop') * padding + p64(symbol + 0x04).replace(b'\x00', b'')[:n]`；NUL-strip trick 让 payload 适配 C 字符串读入；p64 通用（x32 PIE 经 NUL-strip 与 p32 等价，故无 X32/X64 split）；依赖 `ctx.binary.pie=True` + (has_backdoor ∨ has_callsystem) + padding>0；26 单测全过（5 metadata + 7 payload edge + 4 _lookup helper + 10 矩阵化 real-binary）；§2.6 96% (27/28) 一致 PASS（与 P6.7 持平；pie 7/7 关键标记全一致） |
 | P6.9 | 单元测试：每个 primitive 的 `build_payload(ctx) → bytes` 在 fake address 下断言字节序列 | ⏳ | — | 6h | — | — | |
 
 ### 4.8 P7 — Strategies 层
@@ -2517,7 +2517,7 @@ def test_test_stack_overflow_finds_canary():
 
 ### 6.7 P6 — Primitives 层
 
-**🟢 状态**：🔄 In Progress (P6.1-P6.7 ✅, P6.8-P6.9 ⏳) ｜**🔴 优先级**：P0｜**⏱ 预估**：28h (P6.1 已用 0.4h, P6.2 已用 0.6h, P6.3 已用 0.7h, P6.4 已用 0.5h, P6.5 已用 0.6h, P6.6 已用 0.5h, P6.7 已用 0.6h)
+**🟢 状态**：🔄 In Progress (P6.1-P6.8 ✅, P6.9 ⏳) ｜**🔴 优先级**：P0｜**⏱ 预估**：28h (P6.1 已用 0.4h, P6.2 已用 0.6h, P6.3 已用 0.7h, P6.4 已用 0.5h, P6.5 已用 0.6h, P6.6 已用 0.5h, P6.7 已用 0.6h, P6.8 已用 0.5h)
 
 **目标**：30+ 利用函数中"构造 payload"那 5–10 行变成 pure function。
 
@@ -2745,6 +2745,34 @@ class ExploitResult:
   * §2.6 串行验证（5 binary × 90s timeout）→ `logs/v4.0-p67/` → 已同步到 `logs/v4.0/`，2-log 对比 **96% (27/28) 一致 PASS**（4/5 SUCCESS；canary 90s 截断为 PARTIAL；与 P6.5/P6.6 持平；fmtstr1 6/6 关键标记全一致——`EXPLOITATION: Format String - Local` 路径未受 primitive 拆分影响）
 * **diff 规模**：`autopwn/primitives/fmtstr.py` 新增 354 行 + `tests/unit/test_primitives_fmtstr.py` 新增 356 行 + `autopwn/primitives/__init__.py` 改 11 行 → 721 行净增（含 1 个新 primitive 模块 + 1 个 test 文件 + 1 个 re-export 增量；未跨层；与 P6.2-P6.6 同等量级）
 * **下一步**：P6.8 (`pie_backdoor.py`, 2h 估) — PIE + backdoor payload builder（`_legacy.py:1746-1815` 区域）
+
+**P6.8 实施记录** (commit on `feature/p6.8-primitives-pie-backdoor`，Owner @Minzhi_Zhou, 0.5h)：
+
+* **文件**：`autopwn/primitives/pie_backdoor.py` (339 行) + `autopwn/primitives/__init__.py` 增量 re-export + `tests/unit/test_primitives_pie_backdoor.py` (278 行) 新增
+* **公开 API**：
+  * `PieBackdoor.build_payload(ctx) -> bytes` — PIE + backdoor 单 primitive；payload = `asm("nop") * padding + p64(backdoor_addr).replace(b'\\x00', b'')[:n]`；82 字节（pie 真实 binary, padding=80, backdoor=0x9c5 → tail `b'\\xc5\\x09'` 2 字节）
+  * `_lookup_backdoor_addr(ctx) -> Optional[int]` — 共享 helper；按 `has_callsystem` > `has_backdoor` 优先级从 ELF 符号表读 `symbol + BACKDOOR_PROLOGUE_SKIP (0x04)`；binary 缺失符号 → `None`
+  * 模块常量 `BACKDOOR_PROLOGUE_SKIP = 0x04`（v3.1 L1450/L1452 手调值；跳过 `push rbp; mov rbp, rsp` 4 字节 prologue）
+* **legacy ports**（`OBSOLETE` 前缀，字节级 parity）：
+  * `_legacy_pie_backdoor_exploit(program, padding, backdoor, libc_path, libc, callsystem) -> None` — verbatim port of `_legacy.py:1442-1475`，含 `while True` 暴力循环 + `process()` IO lifecycle + 完整 print_* 输出
+  * `_legacy_pie_backdoor_exploit_remote(program, padding, backdoor, libc_path, libc, url, port, callsystem) -> None` — verbatim port of `_legacy.py:1477-1511`，同上但用 `remote()` + URL:port banner
+* **关键设计决策**：
+  * **单 class 而非 X32/X64 split** — v3.1 L1453/L1489 用 `p64` 通用（x32 PIE 地址经 `replace(b'\\x00', b'')` 后与 `p32` 等价）；算法本质 bit-agnostic，遵循 P6.5 单 class 范式
+  * **NUL-strip trick 必需** — `pie` 程序读入是 C 字符串（`gets`），NUL 字节会截断写入；`replace(b'\\x00', b'')` + `[:n]` 让 payload 保持 2 字节（0xc5, 0x09），无 NUL，可被 C 字符串完整读入
+  * **`+ 0x04` 跳 prologue** — x86-64 函数开头 `push rbp; mov rbp, rsp` 占 4 字节；backdoor symbol `0x9c1` + 0x04 = `0x9c5` 落在有用指令（`system("/bin/sh")`）
+  * **暴力循环不属于 primitive** — PIE 每次 exec 随机化 load base，但 backdoor 的低 12-bit 不变（page offset），nul-strip 后 payload 只含这 12-bit。`while True` 循环属 strategy (P7) 责任；P6.8 只返单条 payload
+  * **无 canary 变体** — v3.1 main() L3373-3377 表明 PIE backdoor 仅在 canary 之外的 BOF 分支进入；canary 分支由 P7.10 处理，与 P6.8 互斥
+  * **`has_callsystem` 胜 `has_backdoor`** — v3.1 L1451-1452 第二个 `if` 覆盖第一个；这是 v3.1 实现，legacy port 保留 1:1；`_lookup_backdoor_addr` 也镜像该优先级
+* **验证**：
+  * `pytest tests/unit/test_primitives_pie_backdoor.py` → **26/26 passed in 0.73s**（5 metadata + 7 payload edge cases + 4 _lookup helper + 5 矩阵化 real-binary default + 5 矩阵化 real-binary with_callsystem）
+  * `pytest tests/ -m "not integration"` → **187/187 passed**（161 历史 + 26 新增；无回归）
+  * `PieBackdoor.stage_count() == 1` ✓（single-stage；strategy 单独处理暴力循环）
+  * Happy path 字节级：`PieBackdoor(pie, padding=80, has_backdoor=True)` → 82 字节，前 80 字节是 `0x90`，后 2 字节是 `b'\\xc5\\x09'` (0x9c5 + NUL-strip) ✓
+  * Edge cases: 非 PIE binary、PIE 但 has_backdoor=False∧has_callsystem=False、padding=0、padding<0、padding=2/200 → 全部行为正确 ✓
+  * Real binary 矩阵化：5 binary × 2 has_* 状态 = 10 个测试；**仅 `pie + has_backdoor=True` 返非空 payload**（其他 9 个全部 `b""`，因其他 4 个 binary 非 PIE，pie 缺 callsystem 符号）
+  * §2.6 串行验证（5 binary × 90s timeout）→ `logs/v4.0-p68/` → 已同步到 `logs/v4.0/`，2-log 对比 **96% (27/28) 一致 PASS**（4/5 SUCCESS；canary 90s 截断为 PARTIAL；与 P6.5/P6.6/P6.7 持平；**pie 7/7 关键标记全一致**——`PIE Backdoor` 暴力策略未受 primitive 拆分影响）
+* **diff 规模**：`autopwn/primitives/pie_backdoor.py` 新增 339 行 + `tests/unit/test_primitives_pie_backdoor.py` 新增 278 行 + `autopwn/primitives/__init__.py` 改 7 行 → 624 行净增（含 1 个新 primitive 模块 + 1 个 test 文件 + 1 个 re-export 增量；未跨层；与 P6.2-P6.7 同等量级）
+* **下一步**：P6.9 (单元测试: `每个 primitive 的 build_payload(ctx) → bytes 在 fake address 下断言字节序列`, 6h 估) — primitive 层单测收尾（实际上 P6.2-P6.8 已各自附带完整单测，P6.9 主要工作是：① 跨 primitive 的统一 helper/fixture 优化 ② 覆盖率门槛验证 ③ 与 §6.7 验收 "primitive ≥ 80%" 对齐）
 
 **P6.2 详细步骤**（`primitives/ret2system.py`）：
 ```python

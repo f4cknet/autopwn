@@ -31,6 +31,10 @@ ELF parsing for symbol lookup is allowed and expected):
     :class:`FmtstrX64` (single-stage; ``%N$n`` arbitrary-address
     write using a detected format-string offset + a BSS write
     target).
+  * **P6.8** (``pie_backdoor``) — :class:`PieBackdoor`
+    (single-stage; ``nop_sled + cleaned_backdoor_bytes`` payload
+    for PIE + backdoor brute-force exploitation; the strategy
+    handles the brute-force loop).
 """
 from __future__ import annotations
 
@@ -61,6 +65,9 @@ from autopwn.primitives.fmtstr import (
     FmtstrX32 as FmtstrX32,
     FmtstrX64 as FmtstrX64,
 )
+from autopwn.primitives.pie_backdoor import (
+    PieBackdoor as PieBackdoor,
+)
 
 __all__: list[str] = [
     "ExploitPrimitive",
@@ -76,4 +83,5 @@ __all__: list[str] = [
     "RwxShellcodeX64",
     "FmtstrX32",
     "FmtstrX64",
+    "PieBackdoor",
 ]

@@ -2808,7 +2808,7 @@ class ExploitResult:
 * **diff 规模**：`tests/unit/primitives/{__init__.py,_common.py}` 新增 99 行 + `tests/unit/test_primitives_{contract,helper_errors}.py` 新增 453 行 + `.coveragerc` 新建 48 行 + `tools/check_public_api_coverage.py` 新建 187 行 + `rebuild.md` 改 ~50 行 → **837 行净增** (含 1 个 helper module + 2 个新 test 文件 + 1 个新工具 + 1 个新配置 + 文档同步;**未跨层**——纯测试/工具增量,无 production 代码改动;**与 §2.1 PR ≤ 400 行** 边界稍超,因 P6.9 收尾需要同时落 4 类文件;建议下一 PR 拆细)
 * **M3 状态更新** — P6 layer 9/9 全完成;M3 milestone 状态从 ⏳ → 🔄 (P7 ⏳;integration 测试 P9.4 待补)
 * **P6 整体收官** — 9 个任务总实际工时 5.1h (估 28h, 18% 预算); 7 个 concrete primitive + 1 个 base + 1 个 contract test infrastructure; public API 覆盖率 96%; 187+22 = 209 个单测全绿
-* **下一步**：P7.1 (`exp/base.py: ExploitStrategy 抽象类`, 2h 估) — strategies 层开篇,引入 `requires_*` 元数据 + `matches` 谓词
+* **下一步**：P7.2 (`exp/registry.py: @register 装饰器 + candidates(ctx) 排序`, 2h 估) — 接收 P7.1 的 `ExploitStrategy` 注册入口,**需 Owner 先拍板 P7.2a 优先级对照表**（R7 风险）；P7.2 完成后 P7.3-P7.9 策略子模块可批量落地
 
 **P6.2 详细步骤**（`primitives/ret2system.py`）：
 ```python

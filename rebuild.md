@@ -76,7 +76,7 @@
 | **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
-| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 3/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2)；integration 测试 P9.4 待补；`dev` 分支已建立 per B-005，P7.3+ PR target=dev) |
+| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 4/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2+P7.3)；integration 测试 P9.4 待补；`dev` 分支已建立 per B-005，P7.3+ PR target=dev) |
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ⏳ |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
@@ -225,7 +225,7 @@
 | **P7.1** | `exp/base.py`：`ExploitStrategy` 抽象类（含 `requires_*` 元数据 + `matches`） | ✅ | @Minzhi_Zhou | 2h | 0.4h | 1f594c5 | Refs: refactor.md#3.2.2 |
 | **P7.2** | `exp/registry.py`：`@register` 装饰器 + `candidates(ctx)` 排序 | ✅ | @Minzhi_Zhou | 2h | 0.4h | 42f86d3 | Refs: refactor.md#3.2.2 + 附录A（已 Owner 拍板） |
 | **P7.2a** | （P7.2 子任务）梳理原 if 顺序 → `priority` 值对照表（见附录 A） | ✅ | @Minzhi_Zhou | 2h | 0.2h | fa23923 | 附录 A 数值 Owner 拍板定稿；B-003 Resolved；P7.2 解除阻塞；Refs: rebuild.md#附录A |
-| **P7.3** | `exp/strategies/ret2system_x32.py` + `_x64.py`（含本地/远端） | 🔄 | @Minzhi_Zhou | 3h | — | — | target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
+| **P7.3** | `exp/strategies/ret2system_x32.py` + `_x64.py`（含本地/远端） | ✅ | @Minzhi_Zhou | 3h | 0.6h | b2774e9 | 4 strategies (local+remote × 32+64) `priority=RET2SYSTEM=150`；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | P7.4 | `exp/strategies/ret2libc_put_x32.py` + `_x64.py` | ⏳ | — | 3h | — | — | |
 | P7.5 | `exp/strategies/ret2libc_write_x32.py` + `_x64.py` | ⏳ | — | 3h | — | — | |
 | P7.6 | `exp/strategies/rwx_shellcode_x32.py` + `_x64.py` | ⏳ | — | 2h | — | — | |
@@ -3090,6 +3090,50 @@ from .canary_execve_syscall import CanaryExecveSyscall
 - **commit 引用**：`fa23923`（P7.2a）
 
 ---
+
+**P7.3 实施记录（2026-06-08）**：
+
+- **新文件** `autopwn/exp/strategies/ret2system_x32.py`（~180 行）+ `ret2system_x64.py`（~170 行）：4 个 concrete strategies（local+remote × 32+64），全部用 `@register` 装饰器自动注册
+  - **Ret2SystemX32LocalStrategy** + **Ret2SystemX32RemoteStrategy** (x32 各一个)
+  - **Ret2SystemX64LocalStrategy** + **Ret2SystemX64RemoteStrategy** (x64 各一个)
+  - **priority = RET2SYSTEM = 150**（per 附录 A，P7.2 priorities.py 引用）
+  - **requires = ("has_system", "binsh_in_binary")**（PLT 扫描 + binsh 字符串都就位才能 exploit）
+  - **requires_arch / requires_remote** 元数据分别设 32/64 和 True/False，candidates 自动分流
+
+- **架构层**（per refactor.md §3.2.2）：
+  - **策略层职责**：open IO（`pwn.process` / `pwn.remote`）+ `sendline` + `record_success` + `io.interactive()` —— 全部走 ctx 注入
+  - **primitive 层职责**（P6.2 已完成）：pure payload 构造，无 IO 无 globals 写入
+  - **report 层契约**：每个 strategy `run()` 成功路径构造 8 字段 `ExploitInfo`（含 4 个 addresses dict for x64）并 `record_success(info)` → docx/md 生成
+  - **不调用 `sys.exit`**：return `bool`，P8 orchestrator 决定进程退出码（per §6.8 reviewer checklist）
+  - **不直接 `print_*`**：仅 `print_section_header` / `print_payload` / `print_info` 通过 `core.logging`（保留 v3.1 baseline 视觉输出 for §2.6 96% 一致）
+
+- **修改**：无 —— P7.3 是纯增量（4 个新 strategy + 0 行 `_legacy.py` 改动）。_legacy.py 的 `ret2_system_x32/x64/_remote` 函数保留至 P8.5 删除（per §3.1 横切关注点表）
+
+- **不动**：recon / detect / primitives / cli / orchestrator —— 严格守 §9.2 单层规则
+
+- **测试** `tests/unit/test_exp_ret2system.py`（34 单测全过）：
+  - **Priority 4 个**：每个 strategy priority == RET2SYSTEM == 150（4 个独立断言）
+  - **Metadata 5 个**：arch / remote / requires 4 个组合 + name 非空检查
+  - **Matches 10 个**：每 strategy 各种 filter 行为（arch 错配 / remote 错配 / has_system 缺 / binsh 缺 / 全部齐全）
+  - **Candidates 5 个**：end-to-end 验证 candidates 正确分流（4 个 ctx 类型各 1 个 + 1 个 has_system=False 全部排除）
+  - **Graceful skip 5 个**：run() 在 primitive empty / remote None / gadgets None 等场景返回 False（不 raise）
+  - **Module structure 3 个**：__all__ 完整 + class 引用一致 + 不继承 ExploitResult
+  - **End-to-end 2 个**：mock `pwn.process` + `record_success` 验证 run() 真的构造 ExploitInfo 并 dispatch 到 P3.4 record_success
+  - **markers**：`pytest.mark.strategy`
+  - **关键 fixture 修复**（commit 含）：autouse `_clean_registry` 用 `importlib.reload` 而非 `import` —— Python `sys.modules` cache 不会让二次 import 重新触发 `@register`，必须 reload 才能在每个 test 间重置策略列表
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：**318 passed**（34 新增 + 284 既有，**全绿**；canary fuzz warning 1 条与 P5.3 同源，**预期**）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（121KB，brute force 仍需 ~7min）+ fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（**无回归**——与 P7.1/P7.2 baseline 持平）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.8 + §6.8 P7.3 同步
+  - 详见 `logs/comparison/summary.md`（P7.3 重新生成）
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期；与 P6.x + P7.1 + P7.2 同源）
+- **commit 引用**：`b2774e9`（P7.3）
+- **Refs**：`refactor.md §3.2.2`（strategy 设计 WHY）；后续 P7.4-P7.10 按相同 pattern 落地
+- **流程验证**（per §9.4 inaugural B-005）：PR 走 `feature/p7.3-ret2system` → `dev` (FF) → `main` (FF) 标准链路，不再直 main
 
 ---
 

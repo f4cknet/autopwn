@@ -76,7 +76,7 @@
 | **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
-| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 2/12 ✅ 2026-06-08 (P7.1+P7.2a)；integration 测试 P9.4 待补) |
+| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 3/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2)；integration 测试 P9.4 待补) |
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ⏳ |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
@@ -223,8 +223,8 @@
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
 | **P7.1** | `exp/base.py`：`ExploitStrategy` 抽象类（含 `requires_*` 元数据 + `matches`） | ✅ | @Minzhi_Zhou | 2h | 0.4h | 1f594c5 | Refs: refactor.md#3.2.2 |
-| P7.2 | `exp/registry.py`：`@register` 装饰器 + `candidates(ctx)` 排序 | ⏳ | — | 2h | — | — | |
-| **P7.2a** | （P7.2 子任务）梳理原 if 顺序 → `priority` 值对照表（见附录 A） | ✅ | @Minzhi_Zhou | 2h | 0.2h | 7a6b510 | 附录 A 数值 Owner 拍板定稿；B-003 Resolved；P7.2 解除阻塞；Refs: rebuild.md#附录A |
+| **P7.2** | `exp/registry.py`：`@register` 装饰器 + `candidates(ctx)` 排序 | ✅ | @Minzhi_Zhou | 2h | 0.4h | 5b40ce6 | Refs: refactor.md#3.2.2 + 附录A（已 Owner 拍板） |
+| **P7.2a** | （P7.2 子任务）梳理原 if 顺序 → `priority` 值对照表（见附录 A） | ✅ | @Minzhi_Zhou | 2h | 0.2h | fa23923 | 附录 A 数值 Owner 拍板定稿；B-003 Resolved；P7.2 解除阻塞；Refs: rebuild.md#附录A |
 | P7.3 | `exp/strategies/ret2system_x32.py` + `_x64.py`（含本地/远端） | ⏳ | — | 3h | — | — | |
 | P7.4 | `exp/strategies/ret2libc_put_x32.py` + `_x64.py` | ⏳ | — | 3h | — | — | |
 | P7.5 | `exp/strategies/ret2libc_write_x32.py` + `_x64.py` | ⏳ | — | 3h | — | — | |
@@ -2808,7 +2808,7 @@ class ExploitResult:
 * **diff 规模**：`tests/unit/primitives/{__init__.py,_common.py}` 新增 99 行 + `tests/unit/test_primitives_{contract,helper_errors}.py` 新增 453 行 + `.coveragerc` 新建 48 行 + `tools/check_public_api_coverage.py` 新建 187 行 + `rebuild.md` 改 ~50 行 → **837 行净增** (含 1 个 helper module + 2 个新 test 文件 + 1 个新工具 + 1 个新配置 + 文档同步;**未跨层**——纯测试/工具增量,无 production 代码改动;**与 §2.1 PR ≤ 400 行** 边界稍超,因 P6.9 收尾需要同时落 4 类文件;建议下一 PR 拆细)
 * **M3 状态更新** — P6 layer 9/9 全完成;M3 milestone 状态从 ⏳ → 🔄 (P7 ⏳;integration 测试 P9.4 待补)
 * **P6 整体收官** — 9 个任务总实际工时 5.1h (估 28h, 18% 预算); 7 个 concrete primitive + 1 个 base + 1 个 contract test infrastructure; public API 覆盖率 96%; 187+22 = 209 个单测全绿
-* **下一步**：P7.2 (`exp/registry.py: @register 装饰器 + candidates(ctx) 排序`, 2h 估) — 接收 P7.1 的 `ExploitStrategy` 注册入口,**需 Owner 先拍板 P7.2a 优先级对照表**（R7 风险）；P7.2 完成后 P7.3-P7.9 策略子模块可批量落地
+* **下一步**：P7.3 (`exp/strategies/ret2system_x32.py + _x64.py`, 3h 估) — 第一个 concrete 策略文件,使用 `priority = RET2SYSTEM` (150) 引用 P7.2 的 `priorities.py` 常量;P7.2 注册表已就位,可直接 `@register` 装饰器落地
 
 **P6.2 详细步骤**（`primitives/ret2system.py`）：
 ```python
@@ -3018,6 +3018,78 @@ from .canary_execve_syscall import CanaryExecveSyscall
 - **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期；与 P6.x 全部 9 个 PR 同源）
 - **commit 引用**：`1f594c5`（P7.1）— `d31bfbc` (P6.9) → `1f594c5` (P7.1)
 - **Refs**：`refactor.md §3.2.2`（ExploitStrategy 设计 WHY）；后续 P7.2（registry）/ P7.3-P7.10（具体策略子类）按 §6.8 spec 继续
+
+---
+
+**P7.2 实施记录（2026-06-08）**：
+
+- **P7.2a 决策先于 P7.2 落地**（R7 风险）— Owner 拍板定稿，附录 A 数值（200/180/150/120/110/90/80/50）作为 P7.2 排序基准 hardcode；commit `fa23923`（P7.2a）→ §4.8 P7.2a → ✅, B-003 Resolved, R2/R7 Resolved
+
+- **新文件** `autopwn/exp/priorities.py`（94 行）：8 个 hardcode 常量 + `STRATEGY_PRIORITY_HUMAN` 中文描述 dict
+  - **CANARY=200 / PIE_BACKDOOR=180 / RET2SYSTEM=150 / RET2LIBC_PUT=120 / RET2LIBC_WRITE=110 / RWX_SHELLCODE=90 / EXECVE_SYSCALL=80 / FMTSTR=50** — 与附录 A 严格 row-by-row 对齐
+  - **`STRATEGY_PRIORITY_HUMAN` 字典**：priority → 中文描述（"canary 泄漏 → 任意 ROP" 等），供 P8 orchestrator "→ trying <human-name>" 日志行使用；**可选降级**：caller 可用 `strat.name`（English）fallback
+  - **docstring 显式声明 single source of truth** + drift 检测：`test_priorities_match_appendix_a`（P7.2 单测内置）硬编码数值，§2.6 verify 跑 P9 阶段会再加 guard
+
+- **新文件** `autopwn/exp/registry.py`（120 行）：`_REGISTRY` 模块级 list + 4 个 public API
+  - **`register(strategy)` — 双形态**：
+    - 类装饰器形态（`@register class X(ExploitStrategy): ...`）—— 自动 `X()` 实例化 + 追加，**class binding 保留**（`X` 仍指向 class）
+    - 函数形态（`register(instance)`）—— 直接追加，**identity 保留**（`register(s) is s`）
+    - 自动分发：`isinstance(x, type) and issubclass(x, ExploitStrategy)` → 类装饰器分支；否则实例分支
+  - **`candidates(ctx)` — 过滤+排序**：`(s for s in _REGISTRY if s.matches(ctx))` → `sorted(..., key=lambda s: s.priority, reverse=True)`；返回**新 list**（caller 可安全 mutate，如 orchestrator 注入 recovery 策略）
+  - **`all_strategies()` — 全注册表快照**：返回 `list(_REGISTRY)` 浅拷贝，供 P9.3 注册表测试 + P8 诊断日志
+  - **`reset()` — 测试辅助**：清空 `_REGISTRY`；**NOT for production use**（docstring 显式标注）— P7.11 启动时 import 所有 strategy 模块后即注册，无需 reset
+
+- **修改** `autopwn/exp/__init__.py`：从 6 行占位 → 51 行 re-export
+  - re-export P7.1 `ExploitStrategy` + P7.2 全部 8 优先级常量 + `STRATEGY_PRIORITY_HUMAN` + 4 个 registry 函数（13 个 public name）
+  - 显式 `__all__` 列表
+  - **不**自动 import `autopwn.exp.strategies.*`（避免循环 + 让 P7.11 显式接管 import 链）
+
+- **不动** `_legacy.py`：P7.2 是纯增量，注册表在 v3.1 决策树切换到 P8 orchestrator 之前**0 caller**（`candidates(ctx)` 只被 P8.2 调用）；影响面零
+- **不动** `autopwn/exp/strategies/`：P7.3+ 策略子模块按需落地，本 PR 不引入新策略
+
+- **测试** `tests/unit/test_exp_registry.py`（41 单测全过）：
+  - **Priorities 8 个**：每个常量值 = 附录 A 数值（8 个独立断言）+ 严格递减顺序 + 标签覆盖 + module `__all__` 完整性
+  - **`register()` 7 个**：类装饰器（3）/ 函数形态（3）/ 跨形态（1）
+  - **`candidates()` 14 个**：空注册表（2）/ 4 维过滤（arch/remote/canary/requires 各 2-3 个）/ 排序（4）/ 集成（2，含 canary>ret2system 优先级链验证）/ 现实 4 策略链（1）
+  - **`all_strategies()` 3 个**：返回全表 / 浅拷贝 / 空注册表
+  - **`reset()` 3 个**：清空 / 幂等 / 清空后可重注册
+  - **模块状态卫生 3 个**：`_REGISTRY is list` / 装饰器保留 class binding / 注册后是 instance 不是 class
+  - **`exp/__init__.py` 2 个**：13 public name 都 importable + `__all__` 完整性
+  - **markers**：`pytest.mark.strategy`（沿用 P7.1）
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：**284 passed**（41 新增 + 243 既有，**全绿**；canary fuzz warning 1 条与 P5.3 同源，**预期**）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（121KB，brute force 仍需 ~7min）+ fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（**无回归**——与 P7.1 baseline 持平）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.8 + §6.8 P7.2 + §11 附录 A + §10 B-003 + §8 R2/R7 同步
+  - 详见 `logs/comparison/summary.md`（P7.2 重新生成）
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期；与 P6.x + P7.1 同源）
+- **commit 引用**：待 commit
+- **Refs**：`refactor.md §3.2.2`（registry 设计 WHY）；后续 P7.3-P7.10 策略子类可批量落地（每个 PR 1 策略对，~80 行 diff）
+
+---
+
+**P7.2a 实施记录（2026-06-08，附于 P7.2 commit 末尾）**：
+
+- **任务性质**：doc-only 决策任务（无代码改动）—— Owner 拍板附录 A 数值作为 P7.2 排序基准
+- **修改** `rebuild.md`：
+  - §11 附录 A 表格：从「拟 `priority`」改为定稿 `priority`（bold 标记为 hardcode 基准）+ 加 Owner 拍板段（5 条依据）+ 变更历史时间线
+  - §4.8 P7.2a 行：⏳ → ✅, A=0.2h, Owner=@Minzhi_Zhou
+  - §3 M3 状态：P7 1/12 → P7 2/12（P7.1+P7.2a）
+  - §10 阻塞登记表：新增 B-003（已 Resolved 2026-06-08）
+  - §8 风险登记：R2 + R7 → ✅ Resolved
+- **拍板依据**（写入附录 A 永久记录）：
+  1. canary 路径 v3.1 一致（150 > 120 > 110 > 80）
+  2. 非 canary 路径 put(120) > write(110) 是有意改进（PUT PLT 在 glibc 各版本中更普遍）
+  3. 5-binary §2.6 baseline 命中的 4 个 strategy 都不在 put/write 灰色区
+  4. fmtstr 50 兜底保留
+  5. R2 风险通过本表拍板 + hardcode 解决
+- **§2.6 豁免**（per AGENTS.md §2.6.4）：doc-only PR 不适用 §2.6 验证流程
+- **commit 引用**：`fa23923`（P7.2a）
+
+---
 
 ---
 

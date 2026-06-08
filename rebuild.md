@@ -76,7 +76,7 @@
 | **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
-| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 9/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2+P7.3+P7.4+P7.5+P7.6+P7.7+P7.8)；integration 测试 P9.4 待补；`dev` 分支已建立 per B-005，P7.3+ PR target=dev) |
+| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 10/12 ✅ 2026-06-08 (P7.1+P7.2a+P7.2+P7.3+P7.4+P7.5+P7.6+P7.7+P7.8+P7.9)；integration 测试 P9.4 待补；`dev` 分支已建立 per B-005，P7.3+ PR target=dev) |
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ⏳ |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
@@ -231,7 +231,7 @@
 | **P7.6** | `exp/strategies/rwx_shellcode_x32.py` + `_x64.py` | ✅ | @Minzhi_Zhou | 2h | 0.5h | 03db6d1 | 4 strategies (local+remote × 32+64) `priority=RWX_SHELLCODE=90`；1-stage BSS shellcode 注入；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | **P7.7** | `exp/strategies/execve_syscall.py` | ✅ | @Minzhi_Zhou | 2h | 0.4h | 0757779 | 2 strategies (local+remote, **x32 only**) `priority=EXECVE_SYSCALL=80`；1-stage `int 0x80; execve` syscall chain；target=`dev`（per §9.4 / B-005）；Refs: refactor.md#3.2.2 |
 | **P7.8** | `exp/strategies/fmtstr.py`（含 `fmtstr_print_strings` 旁路） | ✅ | @Minzhi_Zhou | 3h | 0.5h | db08c8b | 6 strategies (4 main: local+remote × 32+64；2 bypass: `PrintStrings*` x32 only) `priority=FMTSTR=50` (兜底)；**spec 偏差**：6 strategies 都在一个 module 而非 split per arch——§4.8 备注 '含 fmtstr_print_strings 旁路' 明确要求把 leak-only bypass 写进 P7.8 文件；**all 6 strategies override `matches()` 方法** 读 `padding == 0` v3.1 main() 门控（default `matches()` 不会 descend 到 `ctx.binary.*`，follow P7.6 模式）；`P6.7 fmtstr primitive` 读 `ctx.binary.bit` 选 `pNN`（修 v3.1 "local=p32, remote=p64" hardcode quirk）；40 单测全过（6 priority + 1 兜底 + 5 metadata + 11 matches + 5 candidates + 7 graceful-skip + 2 module-structure + 3 E2E-mocked）；target=`dev`（per §9.4 / B-005）；§2.6 96% (27/28) 一致 / 4/5 SUCCESS PASS（与 P7.7 持平；fmtstr1 6/6 标记全一致）；Refs: refactor.md#3.2.2 |
-| P7.9 | `exp/strategies/pie_backdoor.py` | ⏳ | — | 2h | — | — | |
+| P7.9 | `exp/strategies/pie_backdoor.py` | ✅ | @Minzhi_Zhou | 2h | 0.7h | 35c3628 | 2 strategies (local+remote, **bit-width-agnostic** —— `requires_arch=None`) `priority=PIE_BACKDOOR=180` (CANARY 后第 2 高)；**PIE brute force loop**（v3.1 无 upper bound，P7.9 继承；每轮 spawn process/remote + 发送 payload + 等响应）；**spec 偏差**: 2 而非 4 strategies —— P6.8 primitive 通用 `p64`（NUL-strip trick 让 x32/x64 输出一致），故 `requires_arch=None`；**both strategies override `matches()`** 表达 v3.1 main() gate: `pie=True AND (has_backdoor OR has_callsystem) AND padding>0`（`requires_*` 元数据无法表达 OR 复合条件，follow P7.6/P7.8 模式）；33 单测全过（3 priority + 4 metadata + 12 matches + 5 candidates + 3 graceful-skip + 3 module-structure + 3 E2E-mocked）；target=`dev`（per §9.4 / B-005）；§2.6 96% (27/28) 一致 / 4/5 SUCCESS PASS（与 P7.8 持平；**pie 7/7 关键标记全一致**）；Refs: refactor.md#3.2.2 |
 | P7.10 | `exp/strategies/canary_*.py`（7 个文件，共用 `CanaryStrategy(ExploitStrategy)` 基类） | ⏳ | — | 6h | — | — | 风险点 |
 | P7.11 | `exp/strategies/__init__.py`：显式 import 所有策略以触发注册 | ⏳ | — | 0.5h | — | — | |
 | P7.12 | 集成测试：每个 strategy 对 Challenge/ 至少 1 个二进制跑通 | ⏳ | — | 6h | — | — | |
@@ -3401,6 +3401,64 @@ from .canary_execve_syscall import CanaryExecveSyscall
 - **commit 引用**：`db08c8b`（P7.8 impl + test）
 - **Refs**：`refactor.md §3.2.2`（strategy 设计 WHY）+ P6.7 primitive contract（1-stage `build_payload` with `pNN(buf_addr) + b'%' + str(offset).encode() + b'$n'`）
 - **流程验证**（per §9.4 B-005）：PR 走 `feature/p7.8-fmtstr` → `dev` (FF) → `main` (FF) 标准链路
+
+---
+
+**P7.9 实施记录（2026-06-08）**：
+
+- **新文件** `autopwn/exp/strategies/pie_backdoor.py`（~270 行）：**2 个 concrete strategies**（local+remote，**bit-width-agnostic**），全部用 `@register` 装饰器自动注册
+  - **PieBackdoorLocalStrategy** — `priority=PIE_BACKDOOR=180`, `arch=None`, `remote=False`
+  - **PieBackdoorRemoteStrategy** — `priority=PIE_BACKDOOR=180`, `arch=None`, `remote=True`
+
+- **关键 spec 偏差 — 2 而非 4 strategies**：P6.8 `PieBackdoor.build_payload` 永远用 `p64(...)`（NUL-strip trick）；x32 PIE 情况下，`p64` 把 4-byte address 打包为 8 bytes + 4 leading NULs，NUL-strip 后**与 `p32`-strip 完全等价**。故 `requires_arch=None`（rare — almost all other strategies are x32-only or x64-only）。这一设计与 v3.1 行为一致：v3.1 `pie_backdoor_exploit[_remote]` 也是 bit-width-agnostic（无 x32/x64 split）。
+
+- **PIE brute force loop**（v3.1 parity）：
+  - v3.1 `pie_backdoor_exploit[_remote]` 都有 `while True` 无限循环——无 upper bound
+  - P7.9 继承 v3.1 行为：`while True` 循环，每轮 `process()/remote()` + `send(payload)` + `recv(timeout=10)`，成功 → `record_success` + `interactive()`；失败 → close + continue
+  - v4.0 baseline 中 pie binary 第 2 次 attempt 即 SUCCESS（v3.1 也 2 次；PIE base 是 4KB-aligned，低 12 bits 固定，NUL-strip 后只需猜 1 byte → 平均 ~1-100 attempts）
+
+- **关键架构决策 — both strategies override `matches()` 方法**（follow P7.6/P7.8 模式）：
+  - **原因**：v3.1 main() pie_backdoor gate = `PIE=1 AND (backdoor OR callsystem) AND padding>0`。这**不能**用 `requires_*` 元数据表达（`requires` 是 ctx-attr 名 tuple，**不是**任意 expression；OR 复合条件无法表达）。故 override `matches(ctx)`，**先**用 `super().matches(ctx)` 检查 arch/remote 元数据，**再**检查 v3.1 gate。
+  - 实现：2 strategies 全部 override；`super().matches(ctx)` 保证 `requires_arch=None` + `requires_remote` filter 仍然生效（rare in P7 series，但 P7.9 是其一）。
+
+- **架构层**（per refactor.md §3.2.2 + P6.8 primitive contract）：
+  - **PIE brute-force loop 抽出到 `_run_brute_force(ctx, use_remote: bool)` 公共 helper**：与 P7.5/P7.7 不同，v3.1 `_legacy.pie_backdoor_exploit` + `_legacy.pie_backdoor_exploit_remote` 共享相同的 4 步流程（build payload → brute force loop → success handler），仅 IO factory（`process` vs `remote`）不同。P7.9 把这个共性显式抽出到 helper。
+  - **1-stage primitive call**：`PieBackdoor.build_payload(ctx)` 一次性返 `nop_sled + cleaned_backdoor_bytes`（P6.8 spec）。Loop 复用同一 payload（P6.8 每次返同一结果因为 backdoor symbol address 是 ELF 元数据，PIE 加载时只重 base 不重 symbol offset）。
+  - **不调用 `sys.exit`**：primitive empty / remote None 均返 False（per §6.8 reviewer checklist）。
+
+- **修改**：无 —— P7.9 是纯增量（2 个新 strategy + 0 行 `_legacy.py` 改动）。_legacy.py 的 `pie_backdoor_exploit` (L1442) + `pie_backdoor_exploit_remote` (L1477) 函数保留至 P8.5 删除。
+
+- **不动**：recon / detect / primitives / cli / orchestrator —— 严格守 §9.2 单层规则
+
+- **P7.9 触发面分析**（新增 vs §2.6 baseline）：
+  - v4.0 baseline 中 `pie` 命中 `PIE Backdoor - Local`（per `logs/v4.0/pie.log` —— 这是 v3.1 main() 实际跑的路径）
+  - `logs/v4.0/pie.log` 全部 7 个 pie 关键标记 100% 一致 vs v3.1 baseline（Dropping to shell / EXPLOITATION SUCCESSFUL / EXPLOITATION type / PIE brute force / Padding=48 / backdoor found / libc path）
+  - P7.9 strategy 触发后行为与 P6.8 primitive 的 v4.0 baseline 一致（pie SUCCESS，2 attempts）
+  - 远程 binary 触发场景：CTF 平台部署的 PIE binary + 有 `backdoor`/`callsystem` symbol + BOF padding>0 —— v4.0 baseline 5 个 binary 均不满足（都是 local-only）
+
+- **测试** `tests/unit/test_exp_pie_backdoor.py`（33 单测全过）：
+  - **Priority 3 个**：每个 strategy priority == PIE_BACKDOOR == 180 + 跨 priority 验证（CANARY > PIE_BACKDOOR > 其余 6 个）
+  - **Metadata 4 个**：arch/remote/name 2 个组合 + name 格式
+  - **Matches 12 个**：v3.1 gate 5 维度测试（PIE+backdoor+padding>0 / PIE+callsystem+padding>0 / x64 ctx / non-PIE 拒绝 / 无 backdoor+callsystem 拒绝 / padding=0 拒绝 / padding<0 拒绝 / remote 错配）+ remote 变体 4 维度（remote+pier+backdoor 匹配 / local 拒绝 / remote=None 拒绝 / non-PIE 拒绝）
+  - **Candidates 5 个**：registry 集成（local pie → local / remote pie → remote / non-PIE 排除 / 无 backdoor 排除 / padding=0 排除）
+  - **Graceful skip 3 个**：primitive empty（PIE=False）/ remote None / 无响应 loop（mock）
+  - **Module structure 3 个**：__all__ 完整 2 个 class + bit-width-agnostic 验证（无 x32/x64 split）+ 不继承 ExploitResult
+  - **End-to-end 3 个**：mock primitive + brute force loop 完整 flow（x32 local / x64 local / remote）—— 注意 v3.1 无限 loop 在 test 中靠 `recv.side_effect` 第一次返 banner、第二次返 shell# 模拟成功信号
+  - **markers**：`pytest.mark.strategy`
+  - **复用 P7.3 修复**：`importlib.reload` autouse fixture
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 1：合并 main（待 commit + push）
+  - 关 2：`pytest -m "not integration"`：**525 passed**（33 新增 + 492 既有，**全绿**；canary fuzz warning 1 条与 P5.3 同源，**预期**）
+  - 关 3：5-binary 串行（**90s timeout**）— canary PARTIAL（130KB，brute force 仍需 ~7min）+ fmtstr1/level3_x64/pie/rip 全部 PASS
+  - 关 4：关键日志对比 vs v3.1 baseline — `27/28 = 96%` 一致，SUCCESS `4/5 = 4/5`（**无回归**——与 P7.1-P7.8 baseline 持平；**pie 7/7 关键标记全一致**）
+  - 关 5：Reviewer — Owner 自审（§2.2）
+  - 关 6：文档同步 — `rebuild.md` §4.8 + §6.8 P7.9 同步
+  - 详见 `logs/comparison/summary.md`（P7.9 重新生成，2026-06-08 15:34 UTC）
+- **未匹配的唯一标记**：canary `Padding (dynamic)` 时序差异（fuzzing 噪声，预期；与 P6.x + P7.1-P7.8 同源）
+- **commit 引用**：`35c3628`（P7.9 impl + test）
+- **Refs**：`refactor.md §3.2.2`（strategy 设计 WHY）+ P6.8 primitive contract（1-stage `build_payload` with `nop_sled + cleaned_backdoor_bytes` + NUL-strip trick）
+- **流程验证**（per §9.4 B-005）：PR 走 `feature/p7.9-pie-backdoor` → `dev` (FF) → `main` (FF) 标准链路
 
 ---
 

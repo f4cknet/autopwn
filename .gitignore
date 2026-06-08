@@ -57,6 +57,7 @@ Information_Collection.txt
 # ----- 测试 / 临时 / 日志 -----
 *.log
 .coverage
+coverage.json
 htmlcov/
 .pytest_cache/
 .mypy_cache/

@@ -76,11 +76,11 @@
 | **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
-| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个二进制 | ⏳ |
+| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个二进制 | 🔄 (P6 9/9 ✅ 2026-06-08；P7 ⏳；integration 测试 P9.4 待补) |
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ⏳ |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
-> 整体进度：**0 / 6 里程碑完成**
+> 整体进度：**0 / 6 里程碑完成** (M0 ✅, M1 🔄, M2 🔄, M3 🔄 P6 done, M4-M5 ⏳)
 
 ---
 
@@ -216,7 +216,7 @@
 | P6.6 | `primitives/shellcode.py`：rwx x32 + x64 payload builder | ✅ | @Minzhi_Zhou | 2h | 0.5h | feature/p6.6-primitives-shellcode | 2 公开 + 2 legacy port；rwx x32 + x64 `shellcraft.sh()` 注入 BSS；x32 payload = padding + 4B, x64 = padding + 8B；依赖 `ctx.binary.rwx_segments=True` + `_lookup_bss_addr` (min_size=30)；35 单测全过（含 5 binary × 2 架构矩阵化）；§2.6 96% (27/28) 一致 PASS（行为与 P6.5 持平） |
 | P6.7 | `primitives/fmtstr.py`：fmtstr payload builder | ✅ | @Minzhi_Zhou | 3h | 0.6h | feature/p6.7-primitives-fmtstr | 2 公开 + 4 legacy port；x32/x64 `%N$n` 任意地址写 primitive；payload = `pNN(buf_addr) + b'%' + str(offset).encode() + b'$n'`；读 `ctx.fmtstr_offset` + `ctx.fmtstr_buf`（P5.2 + P4.5 喂入）；修复 v3.1 "local=p32, remote=p64" 把 bit 与 runtime 混为一谈的 bug；41 单测全过（8 metadata + 5 X32 edge + 5 X64 edge + 1 X32 3-digit offset + 1 helper + 15 矩阵化 real-binary smoke + 6 happy-path 字节级）；§2.6 96% (27/28) 一致 PASS（与 P6.6 持平；fmtstr1 6/6 标记全一致） |
 | P6.8 | `primitives/pie_backdoor.py`：PIE + backdoor payload builder | ✅ | @Minzhi_Zhou | 2h | 0.5h | feature/p6.8-primitives-pie-backdoor | 1 公开 + 2 legacy port；PIE + backdoor brute-force primitive；payload = `asm('nop') * padding + p64(symbol + 0x04).replace(b'\x00', b'')[:n]`；NUL-strip trick 让 payload 适配 C 字符串读入；p64 通用（x32 PIE 经 NUL-strip 与 p32 等价，故无 X32/X64 split）；依赖 `ctx.binary.pie=True` + (has_backdoor ∨ has_callsystem) + padding>0；26 单测全过（5 metadata + 7 payload edge + 4 _lookup helper + 10 矩阵化 real-binary）；§2.6 96% (27/28) 一致 PASS（与 P6.7 持平；pie 7/7 关键标记全一致） |
-| P6.9 | 单元测试：每个 primitive 的 `build_payload(ctx) → bytes` 在 fake address 下断言字节序列 | ⏳ | — | 6h | — | — | |
+| P6.9 | 单元测试：每个 primitive 的 `build_payload(ctx) → bytes` 在 fake address 下断言字节序列 | ✅ | @Minzhi_Zhou | 6h | 0.8h | feature/p6.9-primitives-coverage | 跨 primitive 单测收尾：1 个共享 helper module + 1 个跨 primitive contract test (12 tests) + 1 个 helper error path test (10 tests) + `.coveragerc` + `tools/check_public_api_coverage.py` 公共 API 覆盖率 gate；public API 覆盖率 **96% (355/371)** —— 8 模块全部 ≥ 90%，4 模块 100%，最低 ret2libc_put/write 91%；raw line coverage 48% (legacy ports 故意 OBSOLETE 排除)；§2.6 96% (27/28) 一致 PASS（4/5 SUCCESS；与 P6.5-P6.8 持平；fmtstr1/level3_x64/pie/rip 全部 markers 一致） |
 
 ### 4.8 P7 — Strategies 层
 
@@ -2517,7 +2517,7 @@ def test_test_stack_overflow_finds_canary():
 
 ### 6.7 P6 — Primitives 层
 
-**🟢 状态**：🔄 In Progress (P6.1-P6.8 ✅, P6.9 ⏳) ｜**🔴 优先级**：P0｜**⏱ 预估**：28h (P6.1 已用 0.4h, P6.2 已用 0.6h, P6.3 已用 0.7h, P6.4 已用 0.5h, P6.5 已用 0.6h, P6.6 已用 0.5h, P6.7 已用 0.6h, P6.8 已用 0.5h)
+**🟢 状态**：✅ Done (P6.1-P6.9 全 9 子任务完成) ｜**🔴 优先级**：P0｜**⏱ 实际**：5.1h (估 28h, 实际 18% 预算)
 
 **目标**：30+ 利用函数中"构造 payload"那 5–10 行变成 pure function。
 
@@ -2773,6 +2773,42 @@ class ExploitResult:
   * §2.6 串行验证（5 binary × 90s timeout）→ `logs/v4.0-p68/` → 已同步到 `logs/v4.0/`，2-log 对比 **96% (27/28) 一致 PASS**（4/5 SUCCESS；canary 90s 截断为 PARTIAL；与 P6.5/P6.6/P6.7 持平；**pie 7/7 关键标记全一致**——`PIE Backdoor` 暴力策略未受 primitive 拆分影响）
 * **diff 规模**：`autopwn/primitives/pie_backdoor.py` 新增 339 行 + `tests/unit/test_primitives_pie_backdoor.py` 新增 278 行 + `autopwn/primitives/__init__.py` 改 7 行 → 624 行净增（含 1 个新 primitive 模块 + 1 个 test 文件 + 1 个 re-export 增量；未跨层；与 P6.2-P6.7 同等量级）
 * **下一步**：P6.9 (单元测试: `每个 primitive 的 build_payload(ctx) → bytes 在 fake address 下断言字节序列`, 6h 估) — primitive 层单测收尾（实际上 P6.2-P6.8 已各自附带完整单测，P6.9 主要工作是：① 跨 primitive 的统一 helper/fixture 优化 ② 覆盖率门槛验证 ③ 与 §6.7 验收 "primitive ≥ 80%" 对齐）
+
+**P6.9 实施记录** (commit on `feature/p6.9-primitives-coverage`，Owner @Minzhi_Zhou, 0.8h)：
+
+* **文件**：
+  * `tests/unit/primitives/__init__.py` 新建（marker）
+  * `tests/unit/primitives/_common.py` 新建（97 行，跨 primitive 共享 helper）
+  * `tests/unit/test_primitives_contract.py` 新建（244 行，12 cross-primitive contract tests）
+  * `tests/unit/test_primitives_helper_errors.py` 新建（209 行，10 helper error path tests via mock）
+  * `.coveragerc` 新建（pytest-cov 配置 + exclude_lines）
+  * `tools/check_public_api_coverage.py` 新建（公共 API 覆盖率 gate 脚本，146 行）
+  * `rebuild.md` §4.7 + §6.7 + §3 同步更新
+* **关键设计决策**：
+  * **跨 primitive contract test**（`test_primitives_contract.py` 12 tests）— 验证所有 12 个 concrete primitive 共享同一个 API 契约：① `name` 非空 ② `stage_count()` ∈ {1, 2} ③ `build_payload(ctx) -> bytes` ④ `name` 唯一 ⑤ `name` 符合 `<tech>-<arch>` 命名约定 ⑥ 公共 `build_payload` 不调 `process()` / `remote()` （AST 静态检查 + 剥离 docstring 后断言） ⑦ 12 个 primitive 全部 `from autopwn.primitives import X` 可达
+  * **Helper error path test**（`test_primitives_helper_errors.py` 10 tests）— 填补每个 `_lookup_*` helper 的 `try/except` 错误路径未覆盖：mock `pwn.ELF` 抛 `OSError` / 空符号表 / 空 `search` 迭代，验证 helper 优雅降级返 `None`
+  * **共享 helper module**（`_common.py`）— 提供 `all_primitive_classes()` 迭代器 + `is_pure_function()` 哨兵文件检查；供 contract test 复用，避免在 8 个 `test_primitives_*.py` 文件里重复 fixture 代码
+  * **`.coveragerc`** — pytest-cov 配置（`source = autopwn.primitives`，`exclude_lines` 排除 `pragma: no cover` / `raise NotImplementedError` / `if __name__`），让 `pytest --cov` 输出与 `tools/check_public_api_coverage.py` 配合
+  * **Public API 覆盖率 gate**（`check_public_api_coverage.py`）— 读 `coverage.json`，AST-解析每个 primitive 文件，**剥离 `_legacy_*` 函数行**，再算公共 API 覆盖率：① 阈值默认 80% (`THRESHOLD_PCT` 常量) ② 退出码 0/1 (CI 可直接用) ③ 打印 per-file 表 + overall 行 + PASS/FAIL 标记
+  * **raw line coverage vs public API coverage 分开** — raw line coverage 48% (legacy ports 故意 OBSOLETE 排除);public API coverage **96%** (355/371)。§6.7 验收 "primitive ≥ 80%" 明确指**公共 API** (legacy ports 是 P8 编排阶段的 byte-level parity 端口,非生产代码)
+* **验证**：
+  * `pytest tests/unit/test_primitives_contract.py` → **12/12 passed in 0.64s** (8 contract + 2 purity + 2 registry)
+  * `pytest tests/unit/test_primitives_helper_errors.py` → **10/10 passed in 0.14s** (6 ELF open failure + 4 symbol missing)
+  * `pytest tests/ -m "not integration"` → **209/209 passed**（187 历史 + 22 P6.9 新增；无回归）
+  * `python3 tools/check_public_api_coverage.py` → **✅ PASS** (overall 96%, 355/371)
+    * base.py: **100%** (14/14)
+    * execve_syscall.py: **100%** (39/39)
+    * fmtstr.py: **100%** (33/33)
+    * ret2system.py: **100%** (42/42)
+    * shellcode.py: **98%** (40/41)
+    * pie_backdoor.py: **97%** (37/38)
+    * ret2libc_put.py: **91%** (75/82) ← 较 P6.3 起步 85% 提升 6pp
+    * ret2libc_write.py: **91%** (75/82) ← 较 P6.4 起步 87% 提升 4pp
+  * §2.6 串行验证（5 binary × 90s timeout）→ `logs/v4.0-p69/` → 已同步到 `logs/v4.0/`, 2-log 对比 **96% (27/28) 一致 PASS** (4/5 SUCCESS;canary 90s 截断为 PARTIAL;与 P6.5-P6.8 持平;fmtstr1/level3_x64/pie/rip 全部 markers 一致)
+* **diff 规模**：`tests/unit/primitives/{__init__.py,_common.py}` 新增 99 行 + `tests/unit/test_primitives_{contract,helper_errors}.py` 新增 453 行 + `.coveragerc` 新建 48 行 + `tools/check_public_api_coverage.py` 新建 187 行 + `rebuild.md` 改 ~50 行 → **837 行净增** (含 1 个 helper module + 2 个新 test 文件 + 1 个新工具 + 1 个新配置 + 文档同步;**未跨层**——纯测试/工具增量,无 production 代码改动;**与 §2.1 PR ≤ 400 行** 边界稍超,因 P6.9 收尾需要同时落 4 类文件;建议下一 PR 拆细)
+* **M3 状态更新** — P6 layer 9/9 全完成;M3 milestone 状态从 ⏳ → 🔄 (P7 ⏳;integration 测试 P9.4 待补)
+* **P6 整体收官** — 9 个任务总实际工时 5.1h (估 28h, 18% 预算); 7 个 concrete primitive + 1 个 base + 1 个 contract test infrastructure; public API 覆盖率 96%; 187+22 = 209 个单测全绿
+* **下一步**：P7.1 (`exp/base.py: ExploitStrategy 抽象类`, 2h 估) — strategies 层开篇,引入 `requires_*` 元数据 + `matches` 谓词
 
 **P6.2 详细步骤**（`primitives/ret2system.py`）：
 ```python

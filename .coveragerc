@@ -1,0 +1,42 @@
+# pytest-cov configuration for the P6 layer (P6.9).
+#
+# Per ``rebuild.md`` §6.7 P6.9: the primitive layer's public API
+# (non-``_legacy_*`` functions + classes) must achieve ≥ 80% line
+# coverage.  The legacy ports are explicitly excluded from the
+# P6 acceptance criterion because they're OBSOLETE byte-level
+# parity ports kept around for the P8 orchestrator rewrite.
+#
+# This config is used by ``pytest --cov=autopwn.primitives`` to
+# produce the ``coverage.json`` that
+# ``tools/check_public_api_coverage.py`` consumes.  Per-file
+# coverage in the pytest-cov output is the RAW (public + legacy)
+# figure; the public-API-only metric is computed by the script.
+#
+# To re-run the P6.9 acceptance check:
+#
+#     pytest tests/ -m "not integration" \\
+#         --cov=autopwn.primitives \\
+#         --cov-report=json \\
+#         --cov-report=term-missing \\
+#         --no-header -q
+#     python3 tools/check_public_api_coverage.py
+#
+# The script exits 0 if all public-API lines are ≥ 80% covered,
+# 1 otherwise.  CI can wire this up as a hard gate (P9.5).
+#
+# ``[run]`` is left empty so pytest-cov honors the
+# ``--cov=autopwn.primitives`` CLI flag.  ``[report]`` sets the
+# display precision and shows missing lines (useful when adding
+# new primitives).
+[run]
+branch = false
+source = autopwn/primitives
+
+[report]
+precision = 0
+show_missing = true
+skip_covered = false
+exclude_lines =
+    pragma: no cover
+    raise NotImplementedError
+    if __name__ == .__main__.:

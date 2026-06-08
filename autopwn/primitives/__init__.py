@@ -27,6 +27,10 @@ ELF parsing for symbol lookup is allowed and expected):
     :class:`RwxShellcodeX64` (single-stage; injects
     ``pwntools shellcraft.sh()`` into an RWX BSS buffer;
     only applicable when ``rwx_segments=True``).
+  * **P6.7** (``fmtstr``) — :class:`FmtstrX32` and
+    :class:`FmtstrX64` (single-stage; ``%N$n`` arbitrary-address
+    write using a detected format-string offset + a BSS write
+    target).
 """
 from __future__ import annotations
 
@@ -53,6 +57,10 @@ from autopwn.primitives.shellcode import (
     RwxShellcodeX32 as RwxShellcodeX32,
     RwxShellcodeX64 as RwxShellcodeX64,
 )
+from autopwn.primitives.fmtstr import (
+    FmtstrX32 as FmtstrX32,
+    FmtstrX64 as FmtstrX64,
+)
 
 __all__: list[str] = [
     "ExploitPrimitive",
@@ -66,4 +74,6 @@ __all__: list[str] = [
     "ExecveSyscallX32",
     "RwxShellcodeX32",
     "RwxShellcodeX64",
+    "FmtstrX32",
+    "FmtstrX64",
 ]

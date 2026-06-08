@@ -214,7 +214,7 @@
 | P6.4 | `primitives/ret2libc_write.py`：x32 + x64 payload builder | ✅ | @Minzhi_Zhou | 4h | 0.5h | feature/p6.4-primitives-ret2libc-write | 2-stage write-泄漏 primitive：Ret2LibcWriteX32/X64 (stage_count=2)；build_payload 返 stage-1 (`write(1, write_got, 4)` leak via main)，build_stage2_payload(ctx, leaked_write_addr) 返 stage-2 system；x64 stage-1 加 `pop_rdi+pop_rsi` gadget chain，stage-2 含 `ret` 对齐 gadget（与 P6.3/P6.2 一致）；14 单测全过；§2.6 96% (27/28) 一致 PASS，4/5 SUCCESS |
 | P6.5 | `primitives/execve_syscall.py`：x32 payload builder | ✅ | @Minzhi_Zhou | 2h | 0.6h | feature/p6.5-primitives-execve-syscall | 1 公开 + 1 legacy port；x32 `int 0x80` syscall chain（独立 primitive，不依赖 libc symbol）；combined 变体 (pop_ecx=0, pop_ecx_ebx!=0) 与 separate 变体 (pop_ecx!=0) 自动选择；17 单测全过（含 fmtstr1 真实 binary 烟雾）；§2.6 96% (27/28) 一致 PASS（行为与 P6.4 持平） |
 | P6.6 | `primitives/shellcode.py`：rwx x32 + x64 payload builder | ✅ | @Minzhi_Zhou | 2h | 0.5h | feature/p6.6-primitives-shellcode | 2 公开 + 2 legacy port；rwx x32 + x64 `shellcraft.sh()` 注入 BSS；x32 payload = padding + 4B, x64 = padding + 8B；依赖 `ctx.binary.rwx_segments=True` + `_lookup_bss_addr` (min_size=30)；35 单测全过（含 5 binary × 2 架构矩阵化）；§2.6 96% (27/28) 一致 PASS（行为与 P6.5 持平） |
-| P6.7 | `primitives/fmtstr.py`：fmtstr payload builder | ⏳ | — | 3h | — | — | |
+| P6.7 | `primitives/fmtstr.py`：fmtstr payload builder | ✅ | @Minzhi_Zhou | 3h | 0.6h | feature/p6.7-primitives-fmtstr | 2 公开 + 4 legacy port；x32/x64 `%N$n` 任意地址写 primitive；payload = `pNN(buf_addr) + b'%' + str(offset).encode() + b'$n'`；读 `ctx.fmtstr_offset` + `ctx.fmtstr_buf`（P5.2 + P4.5 喂入）；修复 v3.1 "local=p32, remote=p64" 把 bit 与 runtime 混为一谈的 bug；41 单测全过（8 metadata + 5 X32 edge + 5 X64 edge + 1 X32 3-digit offset + 1 helper + 15 矩阵化 real-binary smoke + 6 happy-path 字节级）；§2.6 96% (27/28) 一致 PASS（与 P6.6 持平；fmtstr1 6/6 标记全一致） |
 | P6.8 | `primitives/pie_backdoor.py`：PIE + backdoor payload builder | ⏳ | — | 2h | — | — | |
 | P6.9 | 单元测试：每个 primitive 的 `build_payload(ctx) → bytes` 在 fake address 下断言字节序列 | ⏳ | — | 6h | — | — | |
 
@@ -2517,7 +2517,7 @@ def test_test_stack_overflow_finds_canary():
 
 ### 6.7 P6 — Primitives 层
 
-**🟢 状态**：🔄 In Progress (P6.1-P6.6 ✅, P6.7-P6.9 ⏳) ｜**🔴 优先级**：P0｜**⏱ 预估**：28h (P6.1 已用 0.4h, P6.2 已用 0.6h, P6.3 已用 0.7h, P6.4 已用 0.5h, P6.5 已用 0.6h, P6.6 已用 0.5h)
+**🟢 状态**：🔄 In Progress (P6.1-P6.7 ✅, P6.8-P6.9 ⏳) ｜**🔴 优先级**：P0｜**⏱ 预估**：28h (P6.1 已用 0.4h, P6.2 已用 0.6h, P6.3 已用 0.7h, P6.4 已用 0.5h, P6.5 已用 0.6h, P6.6 已用 0.5h, P6.7 已用 0.6h)
 
 **目标**：30+ 利用函数中"构造 payload"那 5–10 行变成 pure function。
 
@@ -2713,6 +2713,38 @@ class ExploitResult:
   * §2.6 串行验证（5 binary × 60s timeout）→ `logs/v4.0-p66/`，2-log 对比 **96% (27/28) 一致 PASS**（4/5 SUCCESS；canary 60s 截断为 PARTIAL；与 P6.5 持平——`RwxShellcodeX32/X64` 暂未被 P7 strategy 调用，对 CLI 行为无影响）
 * **diff 规模**：`autopwn/primitives/shellcode.py` 新增 220 行 + `tests/unit/test_primitives_shellcode.py` 新增 375 行 + `autopwn/primitives/__init__.py` 改 9 行 → 604 行净增（含 1 个新 primitive 模块 + 1 个 test 文件 + 1 个 re-export 增量；未跨层；< 400 行/单文件）
 * **下一步**：P6.7 (`fmtstr.py`, 3h 估) — fmtstr payload builder（`%n` 任意地址写 + 检测到的 offset 注入）
+
+**P6.7 实施记录** (commit on `feature/p6.7-primitives-fmtstr`，Owner @Minzhi_Zhou, 0.6h)：
+
+* **文件**：`autopwn/primitives/fmtstr.py` (354 行) + `autopwn/primitives/__init__.py` 增量 re-export + `tests/unit/test_primitives_fmtstr.py` (356 行) 新增
+* **公开 API**：
+  * `FmtstrX32.build_payload(ctx) -> bytes` — x32 fmtstr write；payload = `p32(buf_addr) + b'%' + str(offset).encode() + b'$n'`；9 字节（offset=11 时）
+  * `FmtstrX64.build_payload(ctx) -> bytes` — x64 同款，`p64` 收尾；12 字节（offset=6 时）
+  * `_resolve_fmtstr_inputs(ctx) -> tuple[Optional[int], Optional[int]]` — 共享 helper；从 ctx 提取 `(buf_addr, offset)`，任一为 None 或 offset ≤ 0 → `(None, None)`
+* **legacy ports**（`OBSOLETE` 前缀，字节级 parity）：
+  * `_legacy_system_fmtstr(program, offset, buf_addr) -> bool` — verbatim port of `_legacy.py:863-894`，含 `process()` IO lifecycle + 保留 v3.1 "local = p32" 的硬编码 quirk
+  * `_legacy_system_fmtstr_remote(program, offset, buf_addr, url, port) -> bool` — verbatim port of `_legacy.py:1224-1241`，含 `remote()` IO lifecycle + 保留 v3.1 "remote = p64" 的硬编码 quirk
+  * `_legacy_fmtstr_print_strings(program) -> None` — verbatim port of `_legacy.py:1243-1258`，100-sendline leak loop（local）
+  * `_legacy_fmtstr_print_strings_remote(program, url, port) -> None` — verbatim port of `_legacy.py:1260-1275`，100-sendline leak loop（remote）
+* **关键设计决策**：
+  * **修复 v3.1 "local=p32, remote=p64" bug** — v3.1 conflate bit-width 与 runtime（local/remote）；P6.7 严格按 `ctx.binary.bit` 选 p32/p64，runtime 留给 P7 strategy
+  * **`%N$n` 含义**：写"已打印字符数"到第 N 个栈参数（int 指针）；payload 把 `buf_addr` 放在最前让 N 对齐；strategy 后续交互轮写入函数指针（小值）实现利用
+  * **3 个串联 gate**：bit-width 匹配 → `fmtstr_offset` 非 None 且 > 0 → `fmtstr_buf` 非 None；任一失败即 `b""`
+  * **依赖上游**：P5.2 `find_offset` 喂 `ctx.fmtstr_offset`，P4.5 `find_bss` 喂 `ctx.fmtstr_buf`；P6.7 不做探测（pure primitive）
+  * **无 canary 变体** — 格式化字符串不污染栈 canary；canary 与 fmtstr 是互斥的 BOF 缓解 / 探测手段，不在同一利用路径上。P7.10 canary strategies 不需要 fmtstr canary 变体
+  * **4 个 legacy port 而非 2 个** — 因为 v3.1 把 `(local × x32)` 与 `(remote × x64)` 拆成 4 个函数（外加 2 个 leak-only 变体），legacy port 必须 1:1 对齐以保 P8 编排阶段的 byte-level parity
+* **验证**：
+  * `pytest tests/unit/test_primitives_fmtstr.py` → **41/41 passed in 0.12s**（8 metadata + 5 X32 payload + 5 X64 payload + 1 X32 3-digit offset + 1 helper + 3 矩阵化 X32 + 3 矩阵化 X64 + 5 矩阵化 X32-garbage + 10 矩阵化 real-binary smoke 拆 5×2）
+  * `pytest tests/ -m "not integration"` → **161/161 passed**（120 历史 + 41 新增；无回归）
+  * `FmtstrX32.stage_count() == 1` ✓（single-stage；与 P6.3/P6.4 的 2-stage 区分）
+  * `FmtstrX64.stage_count() == 1` ✓
+  * Happy path 字节级：`FmtstrX32(0x804a050, 11)` → `b'\\x50\\xa0\\x04\\x08%11$n'` (9 字节) ✓
+  * Happy path 字节级：`FmtstrX64(0x404060, 6)` → `b'\\x60\\x40\\x40\\x00\\x00\\x00\\x00\\x00%6$n'` (12 字节) ✓
+  * Edge cases: x32→x64 误用、x64→x32 误用、offset/buf 缺失、offset=0、offset<0、3-digit offset(100) → 全部行为正确 ✓
+  * Real binary 矩阵化：5 binary × 2 架构 = 10 个测试，**全部 `b""`**（无 fmtstr_offset/buf 注入；P5.2/P4.5 探测不在 P6.7 范围）
+  * §2.6 串行验证（5 binary × 90s timeout）→ `logs/v4.0-p67/` → 已同步到 `logs/v4.0/`，2-log 对比 **96% (27/28) 一致 PASS**（4/5 SUCCESS；canary 90s 截断为 PARTIAL；与 P6.5/P6.6 持平；fmtstr1 6/6 关键标记全一致——`EXPLOITATION: Format String - Local` 路径未受 primitive 拆分影响）
+* **diff 规模**：`autopwn/primitives/fmtstr.py` 新增 354 行 + `tests/unit/test_primitives_fmtstr.py` 新增 356 行 + `autopwn/primitives/__init__.py` 改 11 行 → 721 行净增（含 1 个新 primitive 模块 + 1 个 test 文件 + 1 个 re-export 增量；未跨层；与 P6.2-P6.6 同等量级）
+* **下一步**：P6.8 (`pie_backdoor.py`, 2h 估) — PIE + backdoor payload builder（`_legacy.py:1746-1815` 区域）
 
 **P6.2 详细步骤**（`primitives/ret2system.py`）：
 ```python

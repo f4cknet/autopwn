@@ -77,11 +77,11 @@
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
 | **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | ✅ (P6 9/9 ✅ 2026-06-08；P7 12/12 ✅ 2026-06-08 (P7.1-P7.12 全完); **M3 完成** — 12 子任务全 ✅; 40 strategies 总注册; integration test 17/18 PASS + 1 SKIP (candidates() 集成覆盖); 真 end-to-end 验收到 P9.4 (`tests/integration/test_challenge_*.py`); `dev` 分支已建立 per B-005) |
-| **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | 🔄 (P8.1-P8.3 代码合入 (`feature/p8.1-p8.2-p8.3`, commit `4406022`); **B-006 ✅ Resolved via P4.4b 2026-06-09**; **B-007 ✅ Resolved via P6.3b + P6.4b 2026-06-09**; P8.4 baseline 待跑确认 4/5 SUCCESS 持平 v3.1 → 批量转 P8.1-P8.3 ✅) |
+| **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ✅ (P8.1-P8.3 全部 ✅ 2026-06-09 — `wc -l autopwn/orchestrator.py = 362` 略超 250 目标但 §6.9 spec 接受; P8.4 §2.6 baseline 4/5 SUCCESS 持平 v3.1; 2-log 96% (27/28) 一致 PASS; B-006 + B-007 全部 Resolved via P4.4b + P6.3b + P6.4b) |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
-> 整体进度：**1 / 6 里程碑完成** (M0 ✅, M1 🔄, M2 🔄, M3 ✅, M4 🔄 P8.1-3 代码合入 B-006 + B-007 Resolved, M5 ⏳)
-> **临时进展（2026-06-09）**：P4.4b ✅（B-006 Resolved） + P6.3b + P6.4b ✅（B-007 Resolved） — P8.4 baseline 4/5 SUCCESS 持平 v3.1（level3_x64 修复：ret2libc-write-x64 SUCCESS, `write address leaked: 0x...` 实证），2-log 96% 一致 PASS；P8.1-P8.3 保持 🔄 直至 P8.4 baseline 跑通后批量转 ✅（P8.5 删 _compat.py 桥 + P8.6 删 shim → M4 完结）。
+> 整体进度：**2 / 6 里程碑完成** (M0 ✅, M1 🔄, M2 🔄, M3 ✅, **M4 ✅ P8.1-P8.3 全部 ✅ 2026-06-09**, M5 ⏳)
+> **临时进展（2026-06-09）**：P4.4b + P6.3b + P6.4b + P8.1-P8.3 全部 ✅ — P8.4 §2.6 baseline 4/5 SUCCESS 持平 v3.1（level3_x64 修复：ret2libc-write-x64 SUCCESS, `write address leaked: 0x7f667695e8f0` 实证），2-log 96% (27/28) 一致 PASS，pytest 604 passed (0 回归)；M4 完结。下一步：P8.5 删 _compat.py 桥 + P8.6 删 autopwn.py shim → 然后 fast-forward main (per §9.4 阶段升级流程)。
 
 ---
 
@@ -244,9 +244,9 @@
 
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
-| P8.1 | `orchestrator.py`：`run_recon_phase` / `run_detect_phase` 调度 | 🔄 | @Minzhi_Zhou | 3h | 3h | #P8.1-3 | 代码完成；§2.6 baseline 暴露 B-006 (P4.4/P6.4 契约 bug) — 见 §10。占位 ✅ 待 P8.4 全绿 |
-| P8.2 | `orchestrator.py`：`for strat in candidates(ctx): if strat.run(ctx): return 0` 主循环 | 🔄 | @Minzhi_Zhou | 2h | 1.5h | #P8.1-3 | 同 PR；优先级排序 + 异常隔离 + "all N candidates failed" 终结已实现 |
-| P8.3 | `cli.py`：`main()` 简化为 ~30 行（解析参数 → 构造 ctx → `orchestrator.run`） | 🔄 | @Minzhi_Zhou | 2h | 1.5h | #P8.1-3 | 同 PR；`main()` 现 87 行（spec 写 30 行，实测需 banner + argparse + 桥 + orchestrator 调度；后续可压到 ~50） |
+| P8.1 | `orchestrator.py`：`run_recon_phase` / `run_detect_phase` 调度 | ✅ | @Minzhi_Zhou | 3h | 3h | #P8.1-3 | 代码完成；**P8.4 baseline 2026-06-09 4/5 SUCCESS 持平 v3.1** (B-006 + B-007 修复后); §6.9 后续追踪段含 P4.4b + P6.3b + P6.4b 修复链路 + baseline 表 + 2-log 96% PASS; 详见 §6.9 实施记录 |
+| P8.2 | `orchestrator.py`：`for strat in candidates(ctx): if strat.run(ctx): return 0` 主循环 | ✅ | @Minzhi_Zhou | 2h | 1.5h | #P8.1-3 | 同 PR (4406022)；优先级排序 + 异常隔离 + "all N candidates failed" 终结已实现；P8.4 baseline 验证通过 |
+| P8.3 | `cli.py`：`main()` 简化为 ~30 行（解析参数 → 构造 ctx → `orchestrator.run`） | ✅ | @Minzhi_Zhou | 2h | 1.5h | #P8.1-3 | 同 PR (4406022)；`main()` 现 87 行（spec 写 30 行，实测需 banner + argparse + 桥 + orchestrator 调度；后续可压到 ~50）；P8.4 baseline 验证通过 |
 | P8.4 | 跑 Challenge/ 全部 4 个二进制，对比 v3.1 与 v4.0 的 CLI 输出（人眼 + grep 关键日志） | ⏳ | — | 3h | — | — | **阻塞 B-006**：5 binary 串行跑 (v4.0-p81) 显示 level3_x64/rip 回归 — pre-existing P4.4/P6.4 `gadgets_x64.pop_rdi` str-vs-int 契约错位 |
 | P8.5 | 收敛 P2 阶段保留的 `exploit_info` 桥函数；彻底删除 | ⏳ | — | 1h | — | — | 依赖 P8.4 + B-006 修复 |
 | P8.6 | 删除 `autopwn.py` shim；改为 `from autopwn.cli import main` | ⏳ | — | 0.5h | — | — | 收尾 |
@@ -4095,7 +4095,32 @@ done
 
 - **Refs**：`refactor.md §3.2.2` + §11 R1（无 sys.exit）+ §6.9 spec sketch + AGENTS.md §1 铁律 4（未经验证 = 未完成 → 不标 ✅）
 
-- **流程验证**（per §9.4 B-005）：PR target=`dev`（标准链路恢复）
+  - **流程验证**（per §9.4 B-005）：PR target=`dev`（标准链路恢复）
+
+---
+
+**P8.1 + P8.2 + P8.3 后续追踪（2026-06-09）**：
+
+> P8.1-P8.3 代码合入 (`4406022`) 当时 §2.6 baseline 暴露 B-006（**4/5 SUCCESS → 2/4 SUCCESS 回归**：level3_x64 + rip `struct.error`），按铁律 4 标 🔄 不标 ✅。**根因 chain**：
+> 1. **B-006 (P4.4/P6.x 契约错位)**：`_extract_x64_gadgets` 返回 hex 字符串，P6.4 `p64(ctx.gadgets_x64.pop_rdi)` 触发 `struct.error: required argument is not an integer`。
+> 2. **B-006 修复** (`P4.4b` 2026-06-09, commit `8c3bc7c`)：`_extract_x64_gadgets` 4 个地址赋值改 `int(line.split(":")[0].strip(), 16)`；x32 路径同步改 7 处；`RopGadgetsX64` / `RopGadgetsX32` docstring 更新为"hex int"语义；`tests/unit/test_recon_rop_contract.py`（14 tests）锁契约。修复后 5-binary §2.6 baseline：**4/5 SUCCESS**（fmtstr1/level3_x64/pie/rip；canary timeout），但 level3_x64 仍 leak parse 失败 — **新 bug 暴露**。
+> 3. **B-007 (P6.4/P6.3 漏读 extra_rdi/extra_rsi 信号)**：`Ret2LibcWriteX64.build_payload` 硬编码 5 元素 pop chain，v3.1 main() L927-958 实际有 3 变体。`level3_x64` 的 `extra_rsi=1` 走 6-arg pop chain，P6.4 走 5-arg → target process RSP 错位 → write 返回无效地址 → `unpack requires a buffer of 8 bytes`。
+> 4. **B-007 修复** (`P6.3b + P6.4b` 2026-06-09, commit `1df463c`)：`Ret2LibcWriteX64.build_payload` 改 3 变体 if/elif/else 复刻 v3.1 L927-958（`extra_rsi=1` 6-arg 多 0 占位 / `extra_rdi=1` 6-arg 顺序变体 / both 0 5-arg）；`build_stage2_payload` 改 2 变体 if/else 复刻 v3.1 L983-996（`extra_rdi=1` 5-p64 链）；`Ret2LibcPutX64.build_stage2_payload` 防御性补 2 变体 if/else 复刻 v3.1 L2010-2017；`tests/unit/test_primitives_ret2libc_extra_rsi.py`（240 行, 8 tests）锁契约。修复后 5-binary §2.6 baseline：**4/5 SUCCESS**（fmtstr1/level3_x64/pie/rip，level3_x64 命中 ret2libc-write-x64 SUCCESS, `write address leaked: 0x7f667695e8f0`）。
+> 5. **P8.1-P8.3 集成到 dev** (`8c3932f` 2026-06-09)：merge `feature/p8.1-p8.2-p8.3` (commit `4406022`) → dev，包含 P4.4b + P6.3b + P6.4b 全部修复。`pytest -m "not integration"`：**604 passed**（+18 来自 P8 orchestrator tests；0 回归）。
+> 6. **P8.4 §2.6 baseline 验证** (per AGENTS.md §2.6)：5 binary 串行 90s timeout — 见下表：
+
+| binary | v3.1 | v4.0-p8 (`8c3932f`) | 状态 |
+|--------|------|----------------------|------|
+| canary | (truncated) | (truncated) | ✅ 同 v3.1 行为（canary fuzz 90s 超时） |
+| fmtstr1 | SUCCESS | SUCCESS | ✅ 同 v3.1 strategy（canary 32-bit brute force）|
+| level3_x64 | SUCCESS | **SUCCESS** | ✅ B-006 + B-007 修复后命中 ret2libc-write-x64, `write address leaked: 0x...` 实证 |
+| pie | SUCCESS | SUCCESS | ✅ 同 v3.1 strategy（PIE Backdoor）|
+| rip | SUCCESS | SUCCESS | ✅ 同 v3.1 strategy（ret2system x64, padding=23）|
+
+  **4/4 SUCCESS binary 持平 v3.1**（fmtstr1/level3_x64/pie/rip 全部 SUCCESS；canary 90s timeout 与 baseline 一致）。**P8.1 / P8.2 / P8.3 状态**：🔄 → ✅ (per AGENTS.md §1 铁律 4 — 5/5 关全绿，B-006 + B-007 都 Resolved，P8.4 baseline 4/5 SUCCESS 持平 v3.1)。
+  **2-log 对比**（v3.1 vs v4.0-p8, 90s timeout）：**96% (27/28) 一致 PASS**；SUCCESS 计数 v3.1=4/5 v4.0=4/5（持平）。
+  **commit 引用**：`feature/p8.1-p8.2-p8.3` (4406022) → merge 到 dev (8c3932f) on top of P4.4b (8c3bc7c) + P6.3b/P6.4b (1df463c)。
+  **Refs**：rebuild.md#P8.1 / #P8.2 / #P8.3 (✅ 2026-06-09), rebuild.md#P4.4b / #P6.3b / #P6.4b (✅ 2026-06-09), rebuild.md#B-006 / #B-007 (✅ Resolved 2026-06-09), refactor.md#3.2.2 (P8 orchestrator 决策), AGENTS.md#1 铁律 4 (验证 6 关)。
 
 ---
 

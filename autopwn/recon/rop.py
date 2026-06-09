@@ -103,42 +103,53 @@ def _extract_x64_gadgets(ropper_combined: str) -> Dict[str, object]:
     * ``<addr>: ret``             → ``ret`` addr
 
     The ``<addr>:`` prefix is the hex address of the gadget.  We
-    extract via ``line.split(":")[0].strip()`` (v3.1 L438).
+    extract via ``line.split(":")[0].strip()`` (v3.1 L438) and
+    **convert to int at parse time** (P4.4b B-006 fix): downstream
+    primitives (``p64(ctx.gadgets_x64.pop_rdi)``) require an int
+    and used to crash with ``struct.error``.  v3.1 main() L3159
+    did this conversion in-place; P4.4 return-dataclass move omitted
+    it; P4.4b restored it at the source.
 
     Args:
         ropper_combined: concatenated output of 3 ``run_ropper`` calls.
 
     Returns:
         ``{pop_rdi, pop_rsi, ret, extra_rdi, extra_rsi}`` — all values
-        ``None`` / ``0`` when not found.
+        ``0`` (int) when not found.  Address fields are int, never str.
     """
     out: Dict[str, object] = {
-        "pop_rdi": None, "pop_rsi": None, "ret": None,
+        "pop_rdi": 0, "pop_rsi": 0, "ret": 0,
         "extra_rdi": 0, "extra_rsi": 0,
     }
 
     for line in _parse_ropper_lines(ropper_combined):
         if "pop rdi;" in line and "pop rdi; pop" in line:
-            out["pop_rdi"] = line.split(":")[0].strip()
+            out["pop_rdi"] = int(line.split(":")[0].strip(), 16)
             out["extra_rdi"] = 1
         elif "pop rdi; ret;" in line:
-            out["pop_rdi"] = line.split(":")[0].strip()
+            out["pop_rdi"] = int(line.split(":")[0].strip(), 16)
             out["extra_rdi"] = 0
         elif "pop rsi;" in line and "pop rsi; pop" in line:
-            out["pop_rsi"] = line.split(":")[0].strip()
+            out["pop_rsi"] = int(line.split(":")[0].strip(), 16)
             out["extra_rsi"] = 1
         elif "pop rsi; ret;" in line:
-            out["pop_rsi"] = line.split(":")[0].strip()
+            out["pop_rsi"] = int(line.split(":")[0].strip(), 16)
             out["extra_rsi"] = 0
         elif "ret" in line and "ret " not in line:
             # v3.1 L457: only match "<addr>: ret" exactly, not lines
             # like "pop rdi; ret" (which we already handled above)
-            out["ret"] = line.split(":")[0].strip()
+            out["ret"] = int(line.split(":")[0].strip(), 16)
     return out
 
 
 def _extract_x32_gadgets(ropper_outputs: Dict[str, str]) -> Dict[str, object]:
     """Parse ropper output (4 register searches + ret + int 0x80) for x32 gadgets.
+
+    Address fields (``pop_eax``/``pop_ebx``/``pop_ecx``/``pop_edx``/
+    ``pop_ecx_ebx``/``ret``/``int_0x80``) are converted to int at
+    parse time (P4.4b B-006 fix — symmetric to x64).  This is
+    contractually guaranteed by ``RopGadgetsX32`` docstring; x32
+    primitives (``P6.5 execve_syscall``) read these as int.
 
     Args:
         ropper_outputs: ``{search_term: ropper_output}`` for
@@ -147,13 +158,14 @@ def _extract_x32_gadgets(ropper_outputs: Dict[str, str]) -> Dict[str, object]:
 
     Returns:
         ``{pop_eax, pop_ebx, pop_ecx, pop_edx, pop_ecx_ebx, ret,
-        int_0x80, has_eax_ebx_ecx_edx}`` — all values ``None`` / ``False``
-        when not found.  The trailing ``has_eax_ebx_ecx_edx`` is
-        ``True`` iff all four ``pop reg; ret`` gadgets were found.
+        int_0x80, has_eax_ebx_ecx_edx}`` — all values ``0`` (int) /
+        ``False`` (bool) when not found.  The trailing
+        ``has_eax_ebx_ecx_edx`` is ``True`` iff all four
+        ``pop reg; ret`` gadgets were found.
     """
     out: Dict[str, object] = {
-        "pop_eax": None, "pop_ebx": None, "pop_ecx": None, "pop_edx": None,
-        "pop_ecx_ebx": None, "ret": None, "int_0x80": None,
+        "pop_eax": 0, "pop_ebx": 0, "pop_ecx": 0, "pop_edx": 0,
+        "pop_ecx_ebx": 0, "ret": 0, "int_0x80": 0,
         "has_eax_ebx_ecx_edx": False,
     }
 
@@ -163,23 +175,23 @@ def _extract_x32_gadgets(ropper_outputs: Dict[str, str]) -> Dict[str, object]:
     for reg in register_searches:
         for line in _parse_ropper_lines(ropper_outputs.get(f"pop {reg};", "")):
             if f"pop {reg}; ret;" in line:
-                out[f"pop_{reg}"] = line.split(":")[0].strip()
+                out[f"pop_{reg}"] = int(line.split(":")[0].strip(), 16)
                 found[reg] = True
                 break
             elif f"pop {reg}" in line and "pop ebx" in line and reg == "ecx":
                 # v3.1 L503-507: catch "pop ecx; pop ebx; ret" combo
-                out["pop_ecx_ebx"] = line.split(":")[0].strip()
+                out["pop_ecx_ebx"] = int(line.split(":")[0].strip(), 16)
                 found[reg] = True
                 break
 
     for line in _parse_ropper_lines(ropper_outputs.get("ret;", "")):
         if "ret" in line and "ret " not in line:
-            out["ret"] = line.split(":")[0].strip()
+            out["ret"] = int(line.split(":")[0].strip(), 16)
             break
 
     for line in _parse_ropper_lines(ropper_outputs.get("int 0x80;", "")):
         if "int 0x80" in line:
-            out["int_0x80"] = line.split(":")[0].strip()
+            out["int_0x80"] = int(line.split(":")[0].strip(), 16)
             break
 
     # R8 mitigation: collapse 4 bools into 1 (v3.1 only ever
@@ -217,11 +229,11 @@ def find_x64(ctx, program: Path) -> RopGadgetsX64:
         combined += run_ropper(program, search)
     parsed = _extract_x64_gadgets(combined)
     return RopGadgetsX64(
-        pop_rdi=parsed["pop_rdi"],  # type: ignore[arg-type]
-        pop_rsi=parsed["pop_rsi"],  # type: ignore[arg-type]
-        ret=parsed["ret"],          # type: ignore[arg-type]
-        extra_rdi=parsed["extra_rdi"],  # type: ignore[arg-type]
-        extra_rsi=parsed["extra_rsi"],  # type: ignore[arg-type]
+        pop_rdi=parsed["pop_rdi"],
+        pop_rsi=parsed["pop_rsi"],
+        ret=parsed["ret"],
+        extra_rdi=parsed["extra_rdi"],
+        extra_rsi=parsed["extra_rsi"],
     )
 
 
@@ -249,14 +261,14 @@ def find_x32(ctx, program: Path) -> RopGadgetsX32:
     )}
     parsed = _extract_x32_gadgets(ropper_outputs)
     return RopGadgetsX32(
-        pop_eax=parsed["pop_eax"],          # type: ignore[arg-type]
-        pop_ebx=parsed["pop_ebx"],          # type: ignore[arg-type]
-        pop_ecx=parsed["pop_ecx"],          # type: ignore[arg-type]
-        pop_edx=parsed["pop_edx"],          # type: ignore[arg-type]
-        pop_ecx_ebx=parsed["pop_ecx_ebx"],  # type: ignore[arg-type]
-        ret=parsed["ret"],                  # type: ignore[arg-type]
-        int_0x80=parsed["int_0x80"],        # type: ignore[arg-type]
-        has_eax_ebx_ecx_edx=parsed["has_eax_ebx_ecx_edx"],  # type: ignore[arg-type]
+        pop_eax=parsed["pop_eax"],
+        pop_ebx=parsed["pop_ebx"],
+        pop_ecx=parsed["pop_ecx"],
+        pop_edx=parsed["pop_edx"],
+        pop_ecx_ebx=parsed["pop_ecx_ebx"],
+        ret=parsed["ret"],
+        int_0x80=parsed["int_0x80"],
+        has_eax_ebx_ecx_edx=parsed["has_eax_ebx_ecx_edx"],
     )
 
 

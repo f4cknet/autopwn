@@ -75,6 +75,17 @@ class LibcInfo:
 class RopGadgetsX64:
     """x86_64 ROP gadget addresses resolved by ``recon/rop.py`` (P4.4).
 
+    All address fields (``pop_rdi`` / ``pop_rsi`` / ``ret``) are **hex int**
+    (e.g. ``0x4011fb``), parseable by pwntools ``p64()`` directly.
+    Missing gadgets default to ``0`` (sentinel), not ``None`` — chosen
+    so downstream primitives don't need None-checks before calling
+    ``p64(ctx.gadgets_x64.pop_rdi)``.  **Contract enforced by P4.4b**
+    (B-006 resolution): ``recon.rop._extract_x64_gadgets`` converts
+    ropper's hex string output to ``int(..., 16)`` at parse time, so
+    every caller is guaranteed an int.  P6.x primitives therefore
+    must NOT re-apply ``int(..., 16)`` (that was the buggy drift
+    fixed by P4.4b).
+
     ``extra_rdi`` / ``extra_rsi`` non-zero means the gadget also pops a trailing
     register (``pop rdi ; ret`` vs ``pop rdi ; pop r15 ; ret``), used by some
     glibc versions.
@@ -90,6 +101,12 @@ class RopGadgetsX64:
 @dataclass(slots=True)
 class RopGadgetsX32:
     """x86 ROP gadget addresses for ``int 0x80`` syscall chains (P4.4 / P6.5).
+
+    All address fields (``pop_eax`` / ``pop_ebx`` / ``pop_ecx`` / ``pop_edx`` /
+    ``pop_ecx_ebx`` / ``ret`` / ``int_0x80``) are **hex int** (e.g. ``0x080490f6``)
+    per P4.4b B-006 fix.  Missing gadgets default to ``0`` (sentinel), not
+    ``None``.  ``has_eax_ebx_ecx_edx`` is the R8-collapsed bool: ``True`` iff
+    all four ``pop <reg>; ret`` gadgets were found.
 
     ``has_eax_ebx_ecx_edx`` collapses the four independent bools
     ``eax``/``ebx``/``ecx``/``edx`` that ``set_function_flags`` used to

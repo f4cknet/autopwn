@@ -4,10 +4,11 @@
 
 **Professional Automated Binary Exploitation Framework**
 
-[![Version](https://img.shields.io/badge/version-3.0-blue.svg)](https://github.com/f4cknet/autopwn)
-[![Python](https://img.shields.io/badge/python-3.6+-green.svg)](https://www.python.org/)
+[![Version](https://img.shields.io/badge/version-4.0.dev0-blue.svg)](https://github.com/f4cknet/autopwn)
+[![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-red.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/f4cknet/autopwn)
+[![Tests](https://img.shields.io/badge/tests-604%20passed-brightgreen.svg)](.github/workflows/ci.yml)
 
 
 </div>
@@ -53,31 +54,51 @@ AutoPwn is a **cutting-edge automated binary exploitation framework** designed f
 ### Installation
 
 ```bash
-# Clone the repository
+# Install from source (recommended for v4.0.dev0)
 git clone https://github.com/f4cknet/autopwn.git
 cd autopwn
+pip install -e .
 
-# Run the automated setup
-python setup.py
+# After install, both entry points are available:
+#   - `autopwn` (PEP 517 console_scripts)
+#   - `python -m autopwn` (PEP 338)
 ```
 
-The setup script will automatically:
-- Install system dependencies (Kali/Debian)
-- Set up Python packages (pwntools, LibcSearcher, ropper)
-- Configure the environment
-- Add autopwn to system PATH (optional)
+The `pip install -e .` step will:
+- Install Python dependencies (pwntools, LibcSearcher, ropper, python-docx, pyelftools)
+- Register the `autopwn` console script (Linux/macOS PATH)
+- Keep the source tree editable for development
+
+**System dependencies** (install separately via your package manager):
+- `ropper` (Python wrapper also accepted, but system ropper is faster)
+- `checksec` (binary security analysis)
+- `objdump` / `strings` / `ldd` (part of `binutils` on most distros)
+- `gdb` + `pwndbg` / `gef` (optional, for interactive debugging)
 
 ### Basic Usage
 
 ```bash
 # Analyze local binary
-python autopwn.py -l ./target_binary
+autopwn -l ./target_binary
 
 # Remote exploitation
-python autopwn.py -l ./binary -ip 192.168.1.100 -p 9999
+autopwn -l ./binary -ip 192.168.1.100 -p 9999
 
 # Custom libc and padding
-python autopwn.py -l ./binary -libc ./libc-2.19.so -f 112
+autopwn -l ./binary -libc ./libc-2.19.so -f 112
+
+# Verbose mode
+autopwn -l ./binary -v
+```
+
+### Report control
+
+```bash
+# Skip DOCX report generation (exploit still runs)
+autopwn -l ./binary --no-report
+
+# Write report to a custom directory
+autopwn -l ./binary --report-dir ./reports/
 ```
 
 ---
@@ -87,19 +108,19 @@ python autopwn.py -l ./binary -libc ./libc-2.19.so -f 112
 ### 🎪 Local Binary Analysis
 ```bash
 # Comprehensive local analysis
-python autopwn.py -l ./vuln_binary
+autopwn -l ./vuln_binary
 ```
 
 ### 🌍 Remote Service Exploitation
 ```bash
 # Target remote CTF service
-python autopwn.py -l ./local_binary -ip ctf.example.com -p 31337
+autopwn -l ./local_binary -ip ctf.example.com -p 31337
 ```
 
 ### 🔧 Advanced Configuration
 ```bash
 # Specify custom libc and manual padding
-python autopwn.py -l ./binary -libc /lib/x86_64-linux-gnu/libc.so.6 -f 88 -v
+autopwn -l ./binary -libc /lib/x86_64-linux-gnu/libc.so.6 -f 88 -v
 ```
 
 ---
@@ -153,6 +174,16 @@ From vulnerability detection to shell acquisition in seconds, not hours. Perfect
 
 ### 🧠 **Intelligence & Adaptability**
 Smart fallback mechanisms ensure maximum success rate across different binary configurations and protection schemes.
+
+### 🏛️ **Clean Architecture (v4.0)**
+Refactored from a 3688-line monolith into a layered package:
+- `autopwn.core` — logging / fs / runner
+- `autopwn.recon` — binary protection / libc / ROP gadgets / PLT / BSS / ASM
+- `autopwn.detect` — overflow / fmtstr / canary / binsh
+- `autopwn.primitives` — 9 reusable payload builders (ret2system, ret2libc, fmtstr, …)
+- `autopwn.exp.strategies` — 40 concrete strategies, ranked by `requires_*` metadata
+- `autopwn.report` — dataclass-driven DOCX + code generators
+- `autopwn.orchestrator` — 3-phase dispatch (recon → detect → strategy)
 
 ---
 

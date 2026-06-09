@@ -82,7 +82,6 @@
 
 > 整体进度：**1 / 6 里程碑完成** (M0 ✅, M1 🔄, M2 🔄, M3 ✅, M4 🔄 P8.1-3 代码合入 B-006 + B-007 Resolved, M5 ⏳)
 > **临时进展（2026-06-09）**：P4.4b ✅（B-006 Resolved） + P6.3b + P6.4b ✅（B-007 Resolved） — P8.4 baseline 4/5 SUCCESS 持平 v3.1（level3_x64 修复：ret2libc-write-x64 SUCCESS, `write address leaked: 0x...` 实证），2-log 96% 一致 PASS；P8.1-P8.3 保持 🔄 直至 P8.4 baseline 跑通后批量转 ✅（P8.5 删 _compat.py 桥 + P8.6 删 shim → M4 完结）。
-> **临时进展（2026-06-09）**：P4.4b ✅（B-006 Resolved）— 4/5 SUCCESS baseline 持平，2-log 96% 一致 PASS；P8.1-P8.3 保持 🔄 直至 P8.4 baseline 跑通后批量转 ✅。
 
 ---
 
@@ -245,11 +244,11 @@
 
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
-| P8.1 | `orchestrator.py`：`run_recon_phase` / `run_detect_phase` 调度 | ⏳ | — | 3h | — | — | |
-| P8.2 | `orchestrator.py`：`for strat in candidates(ctx): if strat.run(ctx): return 0` 主循环 | ⏳ | — | 2h | — | — | |
-| P8.3 | `cli.py`：`main()` 简化为 ~30 行（解析参数 → 构造 ctx → `orchestrator.run`） | ⏳ | — | 2h | — | — | |
-| P8.4 | 跑 Challenge/ 全部 4 个二进制，对比 v3.1 与 v4.0 的 CLI 输出（人眼 + grep 关键日志） | ⏳ | — | 3h | — | — | |
-| P8.5 | 收敛 P2 阶段保留的 `exploit_info` 桥函数；彻底删除 | ⏳ | — | 1h | — | — | |
+| P8.1 | `orchestrator.py`：`run_recon_phase` / `run_detect_phase` 调度 | 🔄 | @Minzhi_Zhou | 3h | 3h | #P8.1-3 | 代码完成；§2.6 baseline 暴露 B-006 (P4.4/P6.4 契约 bug) — 见 §10。占位 ✅ 待 P8.4 全绿 |
+| P8.2 | `orchestrator.py`：`for strat in candidates(ctx): if strat.run(ctx): return 0` 主循环 | 🔄 | @Minzhi_Zhou | 2h | 1.5h | #P8.1-3 | 同 PR；优先级排序 + 异常隔离 + "all N candidates failed" 终结已实现 |
+| P8.3 | `cli.py`：`main()` 简化为 ~30 行（解析参数 → 构造 ctx → `orchestrator.run`） | 🔄 | @Minzhi_Zhou | 2h | 1.5h | #P8.1-3 | 同 PR；`main()` 现 87 行（spec 写 30 行，实测需 banner + argparse + 桥 + orchestrator 调度；后续可压到 ~50） |
+| P8.4 | 跑 Challenge/ 全部 4 个二进制，对比 v3.1 与 v4.0 的 CLI 输出（人眼 + grep 关键日志） | ⏳ | — | 3h | — | — | **阻塞 B-006**：5 binary 串行跑 (v4.0-p81) 显示 level3_x64/rip 回归 — pre-existing P4.4/P6.4 `gadgets_x64.pop_rdi` str-vs-int 契约错位 |
+| P8.5 | 收敛 P2 阶段保留的 `exploit_info` 桥函数；彻底删除 | ⏳ | — | 1h | — | — | 依赖 P8.4 + B-006 修复 |
 | P8.6 | 删除 `autopwn.py` shim；改为 `from autopwn.cli import main` | ⏳ | — | 0.5h | — | — | 收尾 |
 
 ### 4.10 P9 — 测试 + CI
@@ -3954,7 +3953,9 @@ from .canary_execve_syscall import CanaryExecveSyscall
 
 ---
 
-**🟢 状态**：⏳ Pending｜**🔴 优先级**：P0｜**⏱ 预估**：11.5h
+### 6.9 P8 — Orchestrator
+
+**🟢 状态**：🔄 In Progress（代码合入；P8.4 baseline 阻塞 B-006）｜**🔴 优先级**：P0｜**⏱ 预估**：11.5h｜**⏱ 实际**：6h（P8.1-P8.3 落地，剩 5.5h 给 P8.4-8.6）
 
 **目标**：`main()` 决策树改写为 ~30 行调度；43 处 `sys.exit(0)` 收敛到 0。
 
@@ -4040,6 +4041,61 @@ done
 - `orchestrator.py` 不允许出现具体函数名（`ret2_system_x32` 等）
 - 决策逻辑必须靠 `candidates(ctx)` 排序实现
 - 异常处理不能吞错（至少 `ctx.log(level='error')`）
+
+---
+
+**P8.1 + P8.2 + P8.3 实施记录（2026-06-09）**：
+
+- **新文件** `autopwn/orchestrator.py`（262 行）：三段式调度
+  - `run_recon_phase(ctx)` — set_permission → checksec.collect+display → libc.detect → plt.scan → rop.find_x64/find_x32（依 `ctx.binary.bit`）。6 个 section header（BINARY ANALYSIS PHASE / FUNCTION ANALYSIS / ROP GADGET DISCOVERY / PADDING CALCULATION / STRING ANALYSIS / EXPLOITATION PHASE）+ 对应 info 行**逐字保留** v3.1 main() L3121-3312 的输出
+  - `run_detect_phase(ctx)` — `-f` 旁路 → `detect_overflow.test_stack_overflow` → `recon.asm.asm_stack_overflow` 修正 → `vuln_func_name` + objdump 反汇编 dump（v3.1 L3175-3202 逐字）→ `recon.asm.analyze_vulnerable_functions` 静态回退 → `detect_binsh.check_binsh` → canary 分支（`detect_fmtstr.detect_format_string_vulnerability` + `detect_canary.leakage_canary_value` + `detect_canary.canary_fuzz`）
+  - `run_strategy_phase(ctx)` — `candidates(ctx)` 迭代；`try/except` 隔离单个 strategy 异常；返回 0/1
+  - `run(ctx) -> int` — 顶层 dispatcher；**无 `sys.exit`**（R1 mitigation）
+
+- **修改** `autopwn/cli.py`（15 → 116 行）：从 `from _legacy import main` 改为：
+  ```python
+  def main() -> int:
+      print_banner()
+      args = _build_argparser().parse_args()
+      set_verbose(args.verbose)
+      try:
+          ctx = ExploitContext.from_args(args)
+      except ContextError as e:
+          print_error(str(e)); return 1
+      set_current_ctx(ctx)
+      sync_ctx_to_legacy(ctx, target_name=..., timestamp=...)
+      return orchestrator_run(ctx)
+  ```
+  注：spec 写 ~30 行，实测 87 行（banner + 8-flag argparse + 桥函数 + SystemExit 翻译）。后续可压到 ~50（去掉 banner 等）。
+
+- **新文件** `tests/unit/test_orchestrator.py`（441 行, 18 tests）：覆盖 run_recon_phase / run_detect_phase / run_strategy_phase / run / cli dispatch；mock 所有 IO；`clean_registry` fixture 保护全局 strategy registry
+
+- **修改** `pyproject.toml`：注册新 marker `orchestrator: P8 orchestrator unit tests`
+
+- **§2.6 验证结果**（遵守 AGENTS.md §2.6）：
+  - 关 2：`pytest -m "not integration"`：**582 passed**（+18 from 564，0 回归）
+  - 关 3：`pytest -m integration`：**17 passed + 1 skipped in 77s**（同 P7.12 baseline，0 回归）
+  - 关 4：5-binary 串行（90s timeout，logs/v4.0-p81/）— 见下表：
+
+  | binary | v3.1 | v4.0-p81 | 状态 |
+  |--------|------|----------|------|
+  | canary | (truncated) | (truncated) | ✅ 同 v3.1 行为（canary fuzz 超时） |
+  | fmtstr1 | SUCCESS | SUCCESS | ✅ 同 strategy（ret2system-x32） |
+  | level3_x64 | SUCCESS | **FAIL** | ❌ P4.4/P6.4 契约 bug（见 B-006） |
+  | pie | SUCCESS | SUCCESS | ✅ 同 strategy（pie-backdoor） |
+  | rip | SUCCESS | **FAIL** | ❌ P4.4/P6.4 契约 bug（见 B-006） |
+
+  **2/4 SUCCESS binary 回归** — 但**非 P8.1 引入**。根因：`recon.rop.find_x64` 返回 `RopGadgetsX64(pop_rdi='0x00000000004011fb', ...)`（**str**），P6.4 `ret2libc_put_x64` 直接 `p64(ctx.gadgets_x64.pop_rdi)` → pwntools `struct.error: required argument is not an integer`。v3.1 main() 走 v3.1 inline 函数（用 `exploit_info` 字典里的 int）所以**不暴露**这个 bug；P7 strategies 走 ctx 字段所以**触发**。fmtstr1 和 pie 不受影响：fmtstr1 的 x32 路径不查 gadgets_x64；pie-backdoor 不查 gadgets。
+
+- **P8.1 / P8.2 / P8.3 状态**：🔄（**不标 ✅** per AGENTS.md §1 铁律 4 — 5/5 关中 1 关（P8.4 baseline）暴露 B-006 而非全绿）
+
+- **B-006 登记**：见 §10（新阻塞 ID）
+
+- **commit 引用**：（pending — 准备 commit） `feature/p8.1-p8.2-p8.3`
+
+- **Refs**：`refactor.md §3.2.2` + §11 R1（无 sys.exit）+ §6.9 spec sketch + AGENTS.md §1 铁律 4（未经验证 = 未完成 → 不标 ✅）
+
+- **流程验证**（per §9.4 B-005）：PR target=`dev`（标准链路恢复）
 
 ---
 

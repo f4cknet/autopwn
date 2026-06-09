@@ -69,6 +69,7 @@ markers = [
     "recon: P4 recon layer unit tests",
     "primitive: P6 primitives layer unit tests",
     "strategy: P7 strategies layer unit tests",
+    "orchestrator: P8 orchestrator unit tests (recon/detect/strategy phase)",
     "integration: end-to-end Challenge/ binary tests (P9.4)",
 ]
 # Test discovery: tests/ directory, files matching test_*.py.

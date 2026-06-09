@@ -247,9 +247,9 @@
 | P8.1 | `orchestrator.py`：`run_recon_phase` / `run_detect_phase` 调度 | ✅ | @Minzhi_Zhou | 3h | 3h | #P8.1-3 | 代码完成；**P8.4 baseline 2026-06-09 4/5 SUCCESS 持平 v3.1** (B-006 + B-007 修复后); §6.9 后续追踪段含 P4.4b + P6.3b + P6.4b 修复链路 + baseline 表 + 2-log 96% PASS; 详见 §6.9 实施记录 |
 | P8.2 | `orchestrator.py`：`for strat in candidates(ctx): if strat.run(ctx): return 0` 主循环 | ✅ | @Minzhi_Zhou | 2h | 1.5h | #P8.1-3 | 同 PR (4406022)；优先级排序 + 异常隔离 + "all N candidates failed" 终结已实现；P8.4 baseline 验证通过 |
 | P8.3 | `cli.py`：`main()` 简化为 ~30 行（解析参数 → 构造 ctx → `orchestrator.run`） | ✅ | @Minzhi_Zhou | 2h | 1.5h | #P8.1-3 | 同 PR (4406022)；`main()` 现 87 行（spec 写 30 行，实测需 banner + argparse + 桥 + orchestrator 调度；后续可压到 ~50）；P8.4 baseline 验证通过 |
-| P8.4 | 跑 Challenge/ 全部 4 个二进制，对比 v3.1 与 v4.0 的 CLI 输出（人眼 + grep 关键日志） | ⏳ | — | 3h | — | — | **阻塞 B-006**：5 binary 串行跑 (v4.0-p81) 显示 level3_x64/rip 回归 — pre-existing P4.4/P6.4 `gadgets_x64.pop_rdi` str-vs-int 契约错位 |
-| P8.5 | 收敛 P2 阶段保留的 `exploit_info` 桥函数；彻底删除 | ⏳ | — | 1h | — | — | 依赖 P8.4 + B-006 修复 |
-| P8.6 | 删除 `autopwn.py` shim；改为 `from autopwn.cli import main` | ⏳ | — | 0.5h | — | — | 收尾 |
+| P8.4 | 跑 Challenge/ 全部 4 个二进制，对比 v3.1 与 v4.0 的 CLI 输出（人眼 + grep 关键日志） | ✅ | @Minzhi_Zhou | 3h | 1.0h | #P8.4 | **P8.4 baseline 2026-06-09 4/5 SUCCESS 持平 v3.1**（logs/v4.0-p8-final/）：fmtstr1 / level3_x64 / pie / rip 全部 EXPLOITATION SUCCESSFUL, canary 90s timeout 与 baseline 一致。2-log 对比 96% (27/28) 一致 PASS, 0 失败模式 (KeyError / struct.error / leak parse failed = 0)。**B-006 + B-007 修复后解锁**（P4.4b `8c3bc7c` + P6.3b/P6.4b `1df463c`）。详见 §6.9 后续追踪段 + §10 B-006 / B-007 Resolved 行 |
+| P8.5 | 收敛 P2 阶段保留的 `exploit_info` 桥函数；彻底删除 | ⏳ | — | 1h | — | — | **依赖已解锁**（P8.4 ✅ + B-006 ✅ + B-007 ✅, M4 完结）。当前 5/5 关全绿, 可启动; 删 `_compat.py` 桥 + 改 14 个 caller 不读 `exploit_info` dict; 见 §3.1 临时文件生命周期表 |
+| P8.6 | 删除 `autopwn.py` shim；改为 `from autopwn.cli import main` | ⏳ | — | 0.5h | — | — | P8.5 完成后启动 (shim 删除依赖 §2.1 路径收敛); 收尾 |
 
 ### 4.10 P9 — 测试 + CI
 

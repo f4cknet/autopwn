@@ -12,12 +12,10 @@ Design principles (enforced by §6.3 reviewer checklist):
 Adoption roadmap (see ``rebuild.md`` §4.3):
   * P2.1 (✅ 2026-06-07) — define the dataclasses only; no behavior change.
   * P2.2 (this PR) — add ``ExploitContext.from_args(args)`` factory + ``ContextError``.
-  * P2.3 — build ``ctx = ExploitContext.from_args(args)`` at the top of ``main()``
-            and wire a bridge (``autopwn._compat.sync_ctx_to_legacy``) so old
-            ``exploit_info[...] = ...`` call sites keep working.
-  * P2.4 — replace the remaining ``exploit_info[]`` writes with bridge calls.
-  * P2.5 — deprecation warning on ``update_exploit_info``.
-  * P8.5 — delete the bridge entirely; only ``ctx`` remains.
+  * P2.3 (✅ 2026-06-07) — wire ``_compat.sync_ctx_to_legacy`` bridge (since deleted in P8.5).
+  * P2.4 (✅ 2026-06-07) — replace the 7 ``exploit_info[]`` writes with ``record_success`` bridge calls.
+  * P2.5 (✅ 2026-06-07) — done-by-P2.4; ``update_exploit_info`` helper deleted entirely.
+  * P8.5 (✅ 2026-06-09) — delete ``_compat`` entirely; only ``ctx`` remains.
 """
 from __future__ import annotations
 

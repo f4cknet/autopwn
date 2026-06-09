@@ -31,7 +31,7 @@ for bin in "$@"; do
   fi
   echo ">>> [$VERSION_TAG] $bin (timeout=${TIMEOUT_SEC}s)"
   start=$(date +%s)
-  if timeout "$TIMEOUT_SEC" python3 autopwn.py -l "Challenge/$bin" -v > "logs/$VERSION_TAG/$bin.log" 2>&1; then
+  if timeout "$TIMEOUT_SEC" python3 -m autopwn -l "Challenge/$bin" -v > "logs/$VERSION_TAG/$bin.log" 2>&1; then
     rc=0
   else
     rc=$?

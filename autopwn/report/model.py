@@ -8,8 +8,9 @@ Design principles (enforced by §6.4 reviewer checklist):
     (consistent with ``autopwn/context.py`` dataclasses from P2.1).
   * All mutable defaults use ``field(default_factory=...)`` (no dict literal).
   * No upward imports — this module depends only on stdlib.
-  * 6 required + 3 optional fields, mirroring ``_compat._legacy_info``
-    1:1 (9 keys, minus ``success`` — see deviation note below).
+  * 6 required + 3 optional fields (9 keys, minus ``success`` — see deviation note below).
+  * P8.5 (✅ 2026-06-09): ``_compat._legacy_info`` dict deleted; ``ExploitInfo``
+    is now the sole carrier.
   * ``extra`` is a forward-compatibility escape hatch for new fields
     that P3.4+ subscribers may need (e.g., libc base, canary value,
     fmtstr offset) without forcing a dataclass field on every PR.
@@ -45,9 +46,6 @@ from typing import Any, Dict
 @dataclass(slots=True)
 class ExploitInfo:
     """Typed result of a successful exploitation run.
-
-    Mirrors the 8 mutable fields of the legacy ``_compat._legacy_info``
-    dict (see ``autopwn/_compat.py`` for the canonical default values).
 
     Construction site: ``P3.4 report.record_success(ctx, info)`` in
     the success path of each strategy.  Docx / code generators

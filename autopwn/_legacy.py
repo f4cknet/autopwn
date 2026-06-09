@@ -86,35 +86,39 @@ from autopwn.core.runner import (  # noqa: F401, E402
 # sync_ctx_to_legacy is extended with target_name/timestamp kwargs to
 # replace the L3305-3306 startup writes.
 from autopwn.context import ExploitContext, ContextError  # noqa: F401, E402
-from autopwn._compat import _legacy_info as exploit_info  # noqa: F401, E402
-from autopwn._compat import sync_ctx_to_legacy, record_success  # noqa: F401, E402
+# P8.5 (2026-06-09): autopwn._compat import removed; legacy code
+# that still references `exploit_info[...]` will raise NameError, but
+# the production code path (autopwn.orchestrator → exp/strategies/*)
+# does not touch this module's monkey-patch dict.  handle_exploitation_success
+# above uses defensive placeholders.
 
 # Color schemes + print_* + banner + VERBOSE moved to autopwn.core.logging (P1.1).
 # Re-export above keeps the 418 existing call sites in _legacy.py working unchanged.
+# P8.5 (2026-06-09): _compat._legacy_info import removed — defensive fallbacks
+# in handle_exploitation_success use os.path.basename + datetime.now() instead.
 
 
 def handle_exploitation_success(exploit_type, payload, padding, addresses, vulnerability_type, architecture):
     """Handle successful exploitation by building ExploitInfo and dispatching.
 
     P3.4 refactor: the body is now a thin adapter that builds an
-    :class:`ExploitInfo` from the 6 caller-known kwargs (plus 2 startup
-    fields read from the legacy dict) and calls
+    :class:`ExploitInfo` from the 6 caller-known kwargs and calls
     :func:`autopwn.report.record_success` (the new subscriber
     orchestrator).  This replaces the P2.4 ``_compat.record_success``
     bridge for the 6 main fields — those now flow directly from kwargs
     to the typed dataclass with no dict intermediary.
 
-    Why the 2 dict reads remain
-    ---------------------------
-    ``target_binary`` and ``timestamp`` are populated at startup by
-    ``main()`` via ``_compat.sync_ctx_to_legacy``.  Plumbing them
-    through the 14 caller signatures is out of scope for P3.4 (would
-    be a 14-site mechanical change touching ~10 strategy functions).
-    P3.5 will introduce ``ctx`` as the new carrier and these 2 dict
-    reads will move to ``ctx.binary.path.name`` and a fresh
-    ``datetime.now()`` call in :func:`record_success`.  For P3.4 the
-    dict reads are unchanged from P3.2.
+    P8.5 (2026-06-09) defensive: ``target_binary`` / ``timestamp`` no
+    longer read from ``_compat._legacy_info`` dict (bridge deleted).
+    We use ``os.path.basename(...)`` of a placeholder + fresh
+    ``datetime.now()`` here for legacy safety.  Production code path
+    does NOT reach this function (P8 orchestrator calls
+    ``autopwn.report.record_success`` directly with a fully-built
+    ``ExploitInfo``); this fallback is kept for any future legacy
+    strategy that might import ``_legacy.handle_exploitation_success``.
     """
+    import os as _os
+    from datetime import datetime as _datetime
     from autopwn.report import ExploitInfo, record_success
 
     info = ExploitInfo(
@@ -124,8 +128,8 @@ def handle_exploitation_success(exploit_type, payload, padding, addresses, vulne
         addresses=addresses,
         vulnerability_type=vulnerability_type,
         architecture=architecture,
-        target_binary=exploit_info['target_binary'],
-        timestamp=exploit_info['timestamp'],
+        target_binary=_os.path.basename("unknown"),  # P8.5 defensive
+        timestamp=_datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # P8.5 defensive
     )
     record_success(info)
 

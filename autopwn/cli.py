@@ -1,7 +1,7 @@
 """AutoPwn CLI — modern entry point (P0.0 shim + P8.3 orchestrator dispatch).
 
 v4 起所有命令行入口都走这里：
-  - `python autopwn.py` (shim) → from autopwn.cli import main
+  - `python autopwn.py` (shim, deprecated per P8.6) → from autopwn.cli import main
   - `python -m autopwn`        → from autopwn.cli import main
   - `autopwn` (after pip install) → autopwn.cli:main (console_scripts)
 
@@ -9,18 +9,16 @@ P8.3 (this version): ``main()`` is reduced to a thin wrapper that
 parses args, builds the typed :class:`ExploitContext`, and hands
 control to :func:`autopwn.orchestrator.run`.  All decision-tree
 logic (recon → detect → strategy selection) lives in
-:mod:`autopwn.orchestrator`; the legacy ``autopwn._legacy.main``
-remains the v3.1 fallback for the ``autopwn.py`` shim until P8.6
-deletes the shim entirely.
+:mod:`autopwn.orchestrator`.
+
+P8.5 (2026-06-09): ``_compat.sync_ctx_to_legacy`` bridge removed.
+P8.6 (2026-06-09): ``autopwn.py`` shim deleted.
 """
 from __future__ import annotations
 
 import argparse
-import datetime
-import os
 import sys
 
-from autopwn._compat import sync_ctx_to_legacy
 from autopwn.context import ContextError, ExploitContext
 from autopwn.core.logging import print_banner, print_error, set_verbose
 from autopwn.orchestrator import run as orchestrator_run
@@ -74,8 +72,8 @@ def main() -> int:
 
     Returns the orchestrator's exit code (0 on successful
     exploitation, 1 on failure).  Does NOT call :func:`sys.exit`
-    — the wrapper (autopwn.py shim, ``python -m autopwn``) does
-    the ``raise SystemExit`` translation.  Per
+    — the wrapper (``python -m autopwn``) does the
+    ``raise SystemExit`` translation.  Per
     ``refactor.md`` §11 R1 + §6.8 Reviewer checklist.
 
     Side effects (in order):
@@ -87,11 +85,9 @@ def main() -> int:
          libc path exists).  Raises :class:`ContextError` on
          failure; we catch it and exit 1 with the legacy red
          error message.
-      4. ``set_current_ctx(ctx)`` + ``sync_ctx_to_legacy(...)`` —
-         wire the bridge so the legacy ``_compat.record_success``
-         and downstream report readers can find the ctx fields.
-         Kept for P2.3/P2.4/P3.5 backward compatibility until
-         P8.5 deletes ``_compat.py`` entirely.
+      4. ``set_current_ctx(ctx)`` — wire the report carrier so
+         ``autopwn.report.record_success`` (called from
+         orchestrator) can find the ctx.
       5. ``orchestrator_run(ctx)`` — recon + detect + strategy.
     """
     print_banner()
@@ -107,11 +103,6 @@ def main() -> int:
         return 1
 
     set_current_ctx(ctx)
-    sync_ctx_to_legacy(
-        ctx,
-        target_name=os.path.basename(args.local),
-        timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    )
 
     return orchestrator_run(ctx)
 

@@ -61,10 +61,9 @@ Design notes
   ``ctx.canary is None``).
 * **No global state writes**: the orchestrator reads and writes
   only ``ctx`` fields.  No ``globals()`` injection, no
-  ``exploit_info[...] = ...`` writes.  The P2.3/P2.4 bridge to
-  ``_compat._legacy_info`` is wired by ``cli.py`` via
-  ``sync_ctx_to_legacy`` at startup; per-strategy success-path
-  writes go through ``_compat.record_success`` (P2.4 contract).
+  ``exploit_info[...] = ...`` writes.  P8.5 (✅ 2026-06-09) deleted
+  the P2.3/P2.4 ``_compat`` bridge entirely; success-path writes
+  go through ``autopwn.report.record_success(ctx, info)`` directly.
 """
 from __future__ import annotations
 

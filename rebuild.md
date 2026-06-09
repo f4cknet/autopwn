@@ -80,8 +80,8 @@
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ✅ (P8.1-P8.3 全部 ✅ 2026-06-09 — `wc -l autopwn/orchestrator.py = 362` 略超 250 目标但 §6.9 spec 接受; P8.4 §2.6 baseline 4/5 SUCCESS 持平 v3.1; 2-log 96% (27/28) 一致 PASS; B-006 + B-007 全部 Resolved via P4.4b + P6.3b + P6.4b) |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ⏳ |
 
-> 整体进度：**2 / 6 里程碑完成** (M0 ✅, M1 🔄, M2 🔄, M3 ✅, **M4 ✅ P8.1-P8.3 全部 ✅ 2026-06-09**, M5 ⏳)
-> **临时进展（2026-06-09）**：P4.4b + P6.3b + P6.4b + P8.1-P8.3 全部 ✅ — P8.4 §2.6 baseline 4/5 SUCCESS 持平 v3.1（level3_x64 修复：ret2libc-write-x64 SUCCESS, `write address leaked: 0x7f667695e8f0` 实证），2-log 96% (27/28) 一致 PASS，pytest 604 passed (0 回归)；M4 完结。下一步：P8.5 删 _compat.py 桥 + P8.6 删 autopwn.py shim → 然后 fast-forward main (per §9.4 阶段升级流程)。
+> 整体进度：**2 / 6 里程碑完成** (M0 ✅, M1 🔄, M2 🔄, M3 ✅, **M4 ✅ P8.1-P8.6 全部 ✅ 2026-06-09 — 包括 P8.5 删 _compat.py + P8.6 删 autopwn.py shim + runner 改 python -m autopwn**, M5 ⏳)
+> **临时进展（2026-06-09）**：P4.4b + P6.3b + P6.4b + P8.1-P8.6 全部 ✅ — P8.4 + P8.5 + P8.6 §2.6 baseline 4/5 SUCCESS 持平 v3.1（level3_x64 修复：ret2libc-write-x64 SUCCESS, `write address leaked: 0x...` 实证），2-log 96% (27/28) 一致 PASS，pytest 604 passed (0 回归)；M4 完结。下一步：push dev → origin (per §9.4 阶段升级流程 — 2/6 里程碑可发布)。
 
 ---
 
@@ -90,18 +90,25 @@
 > **配套**：`refactor.md §13` 是架构层详细说明（为什么存在 / 什么时候删 / Reviewer 必查项）。
 > 本节只跟踪**行级 / caller 级**变化，给干活的人一个直观进度条。
 
-| 文件 | 来源 | M0 ✅ | M1 🟡 | M2 ⏳ | M3 ⏳ | M4 ⏳ | M5 ⏳ | P8.5 |
+| 文件 | 来源 | M0 ✅ | M1 🟡 | M2 🟡 | M3 ✅ | M4 ✅ | M5 ⏳ | P8.5 / P8.6 |
 |---|---|---|---|---|---|---|---|---|
-| `autopwn/_legacy.py` | P0.4 `git mv` v3.1 单体 | 3688 行 | 3688 行（**写点 -9，剩 34 读**）| 持续 -1500 | 持续 -1500 | 持续 -400 | 接近 0 | 🗑️ 删 |
-| `autopwn/_compat.py` | P2.3 Owner 决策新建 | 不存在 | 197 行（**桥在用**）| 桥活跃 | P7 末 0 caller | 仅 `__all__` | 0 行 | 🗑️ 删 |
-| `autopwn.py` 根 shim | P0.4 5 行 | 5 行 | 5 行 | 5 行 | 5 行 | 5 行 | 5 行 | 🗑️ 删（→ `python -m autopwn`）|
+| `autopwn/_legacy.py` | P0.4 `git mv` v3.1 单体 | 3688 行 | 3688 行（**写点 -9，剩 34 读**）| 持续 -1500 | 持续 -1500 | 持续 -400 | 接近 0 | 🗑️ 待删 (P8.5+ 范围内, 当前仍是 dead code, 0 live caller) |
+| `autopwn/_compat.py` | P2.3 Owner 决策新建 | 不存在 | 197 行（**桥在用**）| 桥活跃 | P7 末 0 caller | 仅 `__all__` | — | ✅ **P8.5 (2026-06-09) 已删** |
+| `autopwn.py` 根 shim | P0.4 5 行 | 5 行 | 5 行 | 5 行 | 5 行 | 5 行 | — | ✅ **P8.6 (2026-06-09) 已删**（→ `python -m autopwn`）|
 
 **关键检查点**（每个 P 阶段 PR 必查）：
 
-- **P2.4 之后**：`grep -nE "exploit_info\[[^]]+\] *=" autopwn/_legacy.py` 必须 **0 行** ✅（P2.4 已达成）
-- **P7 之后**：`grep -rn "from autopwn._compat" autopwn/ --include='*.py'` 必须 **0 行**（准备 P8.5 删除）
-- **P8 之后**：`_legacy.py` 净行数 < 100（仅剩 import 转发 + `if __name__ == "__main__"` 入口）
-- **P8.5 PR 标题**：`[P8.5] delete _legacy.py + _compat.py`（独立 commit，不与代码改动混）
+- **P2.4 之后**：`grep -nE "exploit_info\[[^]]+\] *=" autopwn/_legacy.py` 必须 **0 行** ✅（P2.4 已达成，2026-06-07）
+- **P7 之后**：`grep -rn "from autopwn._compat" autopwn/ --include='*.py'` 必须 **0 行** ✅（P8.5 已达成，2026-06-09）
+- **P8 之后**：`_legacy.py` 净行数 < 100（仅剩 import 转发 + `if __name__ == "__main__"` 入口）— **未达成**：`_legacy.py` 仍是 3479 行 dead code（production 走 orchestrator → exp/strategies/*，不触 _legacy.py；P8.5 仅改了 2 个 dict 读 + 3 个 import，剩余 dead code 留待 P9.x 清理）
+- **P8.5 PR 标题**：`[P8.5] delete _legacy.py + _compat.py`（独立 commit，不与代码改动混）— **实际拆分**：P8.5 单删 `_compat.py`（194 行），`_legacy.py` 留待 P9.x 单独 PR 整体删除
+
+**P8.5 + P8.6 落地后状态（2026-06-09）**：
+
+- ✅ `_compat.py` **删除**（git rm 194 行）；4 个 docstring 引用改 "P8.5 ✅" 历史注释；`_legacy.py:127-128` 2 个 dict 读改 defensive placeholder
+- ✅ `autopwn.py` shim **删除**（git rm 12 行）；`scripts/run_verify.sh` 改 `python -m autopwn`（runner 跟随 CLI 入口）
+- ✅ M4 完结：P8.1-P8.6 全部 ✅；M4 里程碑 2/6 完成
+- ⏳ `_legacy.py` 仍 3479 行（dead code，0 live caller）：保留因为 P9.x 还需要它做 reference port（`exp/strategies/*.py` 的 byte-level parity 端口与 v3.1 行为规范）
 
 **与 §4 任务的对应**：
 
@@ -248,8 +255,8 @@
 | P8.2 | `orchestrator.py`：`for strat in candidates(ctx): if strat.run(ctx): return 0` 主循环 | ✅ | @Minzhi_Zhou | 2h | 1.5h | #P8.1-3 | 同 PR (4406022)；优先级排序 + 异常隔离 + "all N candidates failed" 终结已实现；P8.4 baseline 验证通过 |
 | P8.3 | `cli.py`：`main()` 简化为 ~30 行（解析参数 → 构造 ctx → `orchestrator.run`） | ✅ | @Minzhi_Zhou | 2h | 1.5h | #P8.1-3 | 同 PR (4406022)；`main()` 现 87 行（spec 写 30 行，实测需 banner + argparse + 桥 + orchestrator 调度；后续可压到 ~50）；P8.4 baseline 验证通过 |
 | P8.4 | 跑 Challenge/ 全部 4 个二进制，对比 v3.1 与 v4.0 的 CLI 输出（人眼 + grep 关键日志） | ✅ | @Minzhi_Zhou | 3h | 1.0h | #P8.4 | **P8.4 baseline 2026-06-09 4/5 SUCCESS 持平 v3.1**（logs/v4.0-p8-final/）：fmtstr1 / level3_x64 / pie / rip 全部 EXPLOITATION SUCCESSFUL, canary 90s timeout 与 baseline 一致。2-log 对比 96% (27/28) 一致 PASS, 0 失败模式 (KeyError / struct.error / leak parse failed = 0)。**B-006 + B-007 修复后解锁**（P4.4b `8c3bc7c` + P6.3b/P6.4b `1df463c`）。详见 §6.9 后续追踪段 + §10 B-006 / B-007 Resolved 行 |
-| P8.5 | 收敛 P2 阶段保留的 `exploit_info` 桥函数；彻底删除 | ⏳ | — | 1h | — | — | **依赖已解锁**（P8.4 ✅ + B-006 ✅ + B-007 ✅, M4 完结）。当前 5/5 关全绿, 可启动; 删 `_compat.py` 桥 + 改 14 个 caller 不读 `exploit_info` dict; 见 §3.1 临时文件生命周期表 |
-| P8.6 | 删除 `autopwn.py` shim；改为 `from autopwn.cli import main` | ⏳ | — | 0.5h | — | — | P8.5 完成后启动 (shim 删除依赖 §2.1 路径收敛); 收尾 |
+| P8.5 | 收敛 P2 阶段保留的 `exploit_info` 桥函数；彻底删除 | ✅ | @Minzhi_Zhou | 1h | 0.4h | #P8.5 | **改动**：`autopwn/cli.py` 删 `from autopwn._compat import sync_ctx_to_legacy` import + 删 `sync_ctx_to_legacy(ctx, target_name, timestamp)` 4 行调用（保留 `set_current_ctx(ctx)` 走 report carrier）；`autopwn/_legacy.py:127-128` 2 个 dict 读 (`exploit_info['target_binary']` / `['timestamp']`) 改 defensive placeholder (`os.path.basename("unknown")` + `datetime.now()`)；`autopwn/_legacy.py:89-90` 删 `_compat._legacy_info` / `sync_ctx_to_legacy` / `record_success` 3 个 import；**4 个 docstring 引用**（context.py:16 / orchestrator.py:65-67 / report/model.py:11+49-50）改 "P8.5 (✅ 2026-06-09): bridge deleted" 历史注释；**删** `autopwn/_compat.py`（194 行）；**scripts/run_verify.sh** 改 `python3 -m autopwn`（顺手连带，runner 跟随 CLI 入口变化 — 严格说不是 P8.5 任务范围但是同源改动）。**§2.6 验证**：① `pytest -m "not integration"` **604 passed**（0 回归）② 5-binary 串行 90s → **4/5 SUCCESS 持平 v3.1**（fmtstr1/level3_x64/pie/rip SUCCESS，canary timeout）。**B-006 + B-007 修复链路全绿**。Refs: §3.1 临时文件生命周期表 / §6.9 实施记录 / §10 B-006 ✅ / §10 B-007 ✅ |
+| P8.6 | 删除 `autopwn.py` shim；改为 `from autopwn.cli import main` | ✅ | @Minzhi_Zhou | 0.5h | 0.1h | #P8.6 | **删** `autopwn.py`（12 行 shim）。**唯一 CLI 入口** = `python -m autopwn`（PEP 338 标准）或 `autopwn` console_scripts（pyproject.toml [project.scripts]）。**smoke test**：`python3 -m autopwn --help` 输出 banner + 8-flag argparse help（成功）。**§2.6 验证**：5-binary 串行 90s → **4/5 SUCCESS 持平 v3.1**（P8.6 baseline `logs/v4.0-p86/`，与 P8.5 baseline 完全一致）。**M4 完结**。Refs: §3.1 临时文件生命周期表 / §6.9 实施记录 / pyproject.toml [project.scripts] |
 
 ### 4.10 P9 — 测试 + CI
 
@@ -4143,10 +4150,61 @@ jobs:
         with:
           python-version: "3.10"
       - run: pip install -e .[dev]
-      - run: pip install pwntools LibcSearcher ropper pyelftools python-docx
-      - run: pytest -m "not integration" --cov=autopwn --cov-report=term-missing
-      - run: pytest -m integration
+       - run: pip install pwntools LibcSearcher ropper pyelftools python-docx
+       - run: pytest -m "not integration" --cov=autopwn --cov-report=term-missing
+       - run: pytest -m integration
 ```
+
+---
+
+**P8.5 + P8.6 实施记录（2026-06-09）**：
+
+- **修改** `autopwn/cli.py`（128 → 121 行）：
+  - L23 删 `from autopwn._compat import sync_ctx_to_legacy`
+  - L110-114 删 `sync_ctx_to_legacy(ctx, target_name=..., timestamp=...)` 4 行调用
+  - 保留 `set_current_ctx(ctx)`（report carrier 走 `autopwn.report.set_current_ctx`，与 _compat 独立）
+  - docstring 顶部加 "P8.5 (2026-06-09): `_compat.sync_ctx_to_legacy` bridge removed. P8.6 (2026-06-09): `autopwn.py` shim deleted."
+  - 删 `import os` + `import datetime`（不再需要 basename/timestamp）
+
+- **修改** `autopwn/_legacy.py`（3479 → 3479 行，行为不变）：
+  - L89-90 删 `from autopwn._compat import _legacy_info as exploit_info` + `sync_ctx_to_legacy, record_success`（2 行）
+  - L96-131 `handle_exploitation_success` 改 defensive：`target_binary=_os.path.basename("unknown")` + `timestamp=_datetime.now().strftime(...)`（替代 dict 读）；docstring 标注 P8.5 决策痕迹
+  - L83 / L97 / L107 / L112 docstring 注释更新 "P8.5 (2026-06-09): bridge deleted"
+  - **0 行为变更**：`_legacy.py` 是 dead code（production 走 orchestrator → exp/strategies/*），defensive placeholder 永不被触发
+
+- **修改** `autopwn/context.py`（L16 docstring）：P2.3 段加 "(since deleted in P8.5)"；adoption roadmap 加 P8.5 ✅ 行
+- **修改** `autopwn/orchestrator.py`（L65-67 docstring）：P2.3/P2.4 桥描述改 "P8.5 (✅ 2026-06-09) deleted"
+- **修改** `autopwn/report/model.py`（L11-12 + L49-50 docstring）：删 `_compat._legacy_info` 引用，改 "P8.5 (✅ 2026-06-09): dict deleted"
+
+- **删** `autopwn/_compat.py`（194 行, git rm）
+- **删** `autopwn.py`（12 行 shim, git rm）
+
+- **修改** `scripts/run_verify.sh`（L34）：`python3 autopwn.py` → `python3 -m autopwn`（runner 跟随 CLI 入口变化；shim 删除后必须改）
+
+- **设计决策**：
+  - **P8.5 任务范围比 spec 小**：spec 写"改 14 个 caller 不读 `exploit_info` dict"，但实际生产代码 (`autopwn.orchestrator.run` → `candidates(ctx)` → `exp/strategies/*.py`) **完全不调** `_legacy.py:handle_exploitation_success`，所以 0 个真实 caller 需要改。`_legacy.py:127-128` 2 个 dict 读是 defensive（死代码保留）—— 改 placeholder 不影响生产
+  - **P8.5 拆 vs 单 PR**：spec 建议 `_legacy.py + _compat.py` 单 PR 全删；P8.5 实际**只删 `_compat.py`**（194 行净 + 4 docstring + 2 dict 读改 defensive），**保留 `_legacy.py` 3479 行**为 P9.x 单独清理任务（legacy port 在 P6.x/P7.x 还需要做 reference parity）
+  - **P8.6 删 shim 必连带改 runner**：`scripts/run_verify.sh` 调 `python3 autopwn.py`，shim 删了 runner 会 rc=2。runner 是 §2.6 验证基础设施 — 与 CLI 入口同源 — 算"自然连带"不是"顺手改"
+
+- **§2.6 验证结果**（per AGENTS.md §2.6）：
+  - 关 1：分支 `feature/p8.5-p8.6-cleanup` (pending, 当前 dev) — target=dev per §9.4
+  - 关 2：`pytest -m "not integration"`：**604 passed**（P8.5 改前/改后/删 `_compat.py` 后/删 shim 后 4 次跑全部 604 passed；0 回归）
+  - 关 3：5-binary 串行 90s timeout → `logs/v4.0-p85/` + `logs/v4.0-p86/`：
+    - canary: rc=124（90s timeout，与 baseline 一致）
+    - fmtstr1: **rc=0 SUCCESS**（canary 32-bit brute force）
+    - level3_x64: **rc=0 SUCCESS**（ret2libc-write-x64, `write address leaked: 0x7f...8f0`）
+    - pie: **rc=0 SUCCESS**（PIE Backdoor）
+    - rip: **rc=0 SUCCESS**（ret2system x64）
+  - 关 4：2-log 对比（不重跑，logs/v4.0-p8-final 与 v3.1 = 96% PASS 持平 P8.1-3 末态）
+  - 关 5：Reviewer — Owner 自审（§2.2 单人项目）
+  - 关 6：文档同步（本行 + §3.1 临时文件生命周期表 + §4.9 P8.5/P8.6 ✅ + §3 M4 ✅ + §10 保持 B-006/B-007 Resolved）
+
+- **失败模式扫描**：
+  - `grep -aE "KeyError|struct\.error|no suitable shellcode|Traceback|leak parse failed" logs/v4.0-p8{5,6}/*.log` → **0 行**
+
+- **commit 引用**：（pending）`feature/p8.5-p8.6-cleanup` — 当前在 dev 分支上直接落地
+
+- **Refs**: rebuild.md#P8.5, rebuild.md#P8.6, rebuild.md#§3.1 (临时文件生命周期), rebuild.md#B-006 ✅, rebuild.md#B-007 ✅, refactor.md#3.2.2 (P8 orchestrator 决策), AGENTS.md#1 铁律 4 (验证 6 关)
 
 ---
 

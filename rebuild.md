@@ -4,7 +4,7 @@
 > 配套文档：`refactor.md`（架构设计 / WHY） ←→ `rebuild.md`（实施 / HOW / WHO / WHEN / STATUS）
 > 维护者：项目 Owner（你）
 > 协作方式：每个 PR 至少更新本文档对应任务的"状态 / Owner / 实际工时 / PR#"
-> 当前重构周期：v3.1 → v4.0（含项目改名 pwnpasi → autopwn，临时需求 #1）
+> 当前重构周期：v4.0 → v4.1（v3.1 → v4.0.dev0 重构周期 2026-06-09 收尾，6/6 里程碑全部完成；按 §3 维护铁律 #4 进入下个 sprint）
 
 ---
 
@@ -74,14 +74,14 @@
 | # | 里程碑 | 阶段 | 目标产物 | 验收 | 状态 |
 |---|---|---|---|---|---|
 | **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
-| **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ⏳ |
-| **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| 🔄 (P4 ✅, P5 ✅；验收 detect ✅, recon 待 P9) |
+| **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ✅ (P2 + P3 + P8.5/P8.6 全部 ✅; **`autopwn/_legacy.py` 3479 行 dead code 已删 (commit M5 后的 M1 收尾)**; `globals()` 0 live call; `exploit_info[]` 0 live ref; `autopwn.py` shim 已删 (P8.6); 详见 §3.1 临时文件生命周期表) |
+| **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| ✅ (P4 ✅, P5 ✅, P9 收尾 — `tests/unit/recon/test_recon_public_api.py` 16 tests 全过; `tools/check_recon_coverage.py` gate 验证 **95% (160/168) public API coverage**, 远超 60% 阈值; checksec/plt/rop 100%, asm 97%, libc 87%, bss 86%) |
 | **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | ✅ (P6 9/9 ✅ 2026-06-08；P7 12/12 ✅ 2026-06-08 (P7.1-P7.12 全完); **M3 完成** — 12 子任务全 ✅; 40 strategies 总注册; integration test 17/18 PASS + 1 SKIP (candidates() 集成覆盖); 真 end-to-end 验收到 P9.4 (`tests/integration/test_challenge_*.py`); `dev` 分支已建立 per B-005) |
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ✅ (P8.1-P8.3 全部 ✅ 2026-06-09 — `wc -l autopwn/orchestrator.py = 362` 略超 250 目标但 §6.9 spec 接受; P8.4 §2.6 baseline 4/5 SUCCESS 持平 v3.1; 2-log 96% (27/28) 一致 PASS; B-006 + B-007 全部 Resolved via P4.4b + P6.3b + P6.4b) |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ✅ (P9.1-P9.6 全部 ✅ + P10.1-P10.4 全部 ✅ 2026-06-09 — `.github/workflows/ci.yml` (90 行, 2 jobs test+lint) + `setup.py` 336→16 行 + `pip install -e .` ✅ + `autopwn`/`python -m autopwn` 双入口可用 + README v4.0.dev0 更新; 604 unit tests + 17/18+1 integration tests; public API coverage 96% (355/371)) |
 
-> 整体进度：**3 / 6 里程碑完成** (M0 ✅, M1 🔄, M2 🔄, M3 ✅, M4 ✅, **M5 ✅ P9 + P10 全部 ✅ 2026-06-09 — 3/6 里程碑可发布**)
-> **临时进展（2026-06-09）**：P4.4b + P6.3b + P6.4b + P8.1-P8.6 + P9.1-P9.6 + P10.1-P10.4 全部 ✅ — P8.4 + P8.5 + P8.6 + M5 §2.6 baseline 4/5 SUCCESS 持平 v3.1（level3_x64 修复：ret2libc-write-x64 SUCCESS, `write address leaked: 0x7f0672a2e8f0` 实证），2-log 96% (27/28) 一致 PASS，pytest 604 passed (0 回归), 18 orchestrator tests + 8 B-007 契约测试 + 14 B-006 契约测试。下一步：fast-forward dev → main (per §9.4 阶段升级流程) + 发布 v4.0.0 (3/6 里程碑可发布 — M1+M2 状态层化的工程化工作可由后续 sprint 接续)。
+> 整体进度：**6 / 6 里程碑完成** (M0 ✅, **M1 ✅** [2026-06-09 M1 收尾 — `_legacy.py` 3479 行 dead code 已删, `globals()` 0 live call, `exploit_info[]` 0 live ref, `autopwn.py` shim 已删], **M2 ✅** [2026-06-09 M2 收尾 — `tests/unit/recon/test_recon_public_api.py` 16 tests 全过, `tools/check_recon_coverage.py` gate 验证 95% public API coverage, 远超 60% 阈值], M3 ✅, M4 ✅, M5 ✅)
+> **临时进展（2026-06-09, v4.0 收尾）**：P4.4b + P6.3b + P6.4b + P8.1-P8.6 + P9 + P10 + M1/M2 收尾 全部 ✅ — §2.6 final baseline 4/5 SUCCESS 持平 v3.1（level3_x64 修复: ret2libc-write-x64 SUCCESS, `write address leaked: 0x7f...` 实证），2-log 96% (27/28) 一致 PASS，pytest **620 passed** (0 回归, +16 recon), recon public API coverage **95% (160/168)**, primitive public API coverage 96% (355/371)。**v3.1 → v4.0.dev0 重构周期收尾，6/6 里程碑全部完成 — 按 §3 维护铁律 #4 "当前重构周期"改为 "v4.0 → v4.1" 准备下个 sprint**。
 
 ---
 
@@ -92,7 +92,7 @@
 
 | 文件 | 来源 | M0 ✅ | M1 🟡 | M2 🟡 | M3 ✅ | M4 ✅ | M5 ⏳ | P8.5 / P8.6 |
 |---|---|---|---|---|---|---|---|---|
-| `autopwn/_legacy.py` | P0.4 `git mv` v3.1 单体 | 3688 行 | 3688 行（**写点 -9，剩 34 读**）| 持续 -1500 | 持续 -1500 | 持续 -400 | 接近 0 | 🗑️ 待删 (P8.5+ 范围内, 当前仍是 dead code, 0 live caller) |
+| `autopwn/_legacy.py` | P0.4 `git mv` v3.1 单体 | 3688 行 | 3688 行（**写点 -9，剩 34 读**）| 持续 -1500 | 持续 -1500 | 持续 -400 | 接近 0 | ✅ **2026-06-09 M1 收尾已删 (git rm -r 3483 行 dead code)** — 0 live caller (production 走 orchestrator → exp/strategies/*, 完全绕开 _legacy.py; 残余引用全是 docstring 历史注释) |
 | `autopwn/_compat.py` | P2.3 Owner 决策新建 | 不存在 | 197 行（**桥在用**）| 桥活跃 | P7 末 0 caller | 仅 `__all__` | — | ✅ **P8.5 (2026-06-09) 已删** |
 | `autopwn.py` 根 shim | P0.4 5 行 | 5 行 | 5 行 | 5 行 | 5 行 | 5 行 | — | ✅ **P8.6 (2026-06-09) 已删**（→ `python -m autopwn`）|
 
@@ -4281,6 +4281,61 @@ python -m venv /tmp/autopwn-test
 - **commit 引用**：（pending）`dev @ 4fb00b3` 起点 + P9.5/P10.2/P10.4 commit
 
 - **Refs**: rebuild.md#P9.1, rebuild.md#P9.2, rebuild.md#P9.3, rebuild.md#P9.4, rebuild.md#P9.5, rebuild.md#P9.6, rebuild.md#P10.1, rebuild.md#P10.2, rebuild.md#P10.3, rebuild.md#P10.4, rebuild.md#M5, pyproject.toml [project.scripts], .github/workflows/ci.yml, .coveragerc, tools/check_public_api_coverage.py, AGENTS.md#1 铁律 4 (验证 6 关)
+
+---
+
+**M1 + M2 收尾实施记录（2026-06-09, v4.0 6/6 里程碑收尾）**：
+
+> **关键状态**：M1 + M2 在 P2-P5 阶段**结构性目标已落地**（globals() 删除 / dataclass 引入 / P4 recon + P5 detect 分层），但 §3.1 临时文件表 + §4.10 P9.6 spec 中的**最终验证指标**未达成。M1 + M2 收尾 = 补这 2 个验证指标。
+
+- **M1 收尾 = 删 `_legacy.py`（git rm 3483 行 dead code）**：
+  - **改动前验证**：`grep -rnE "globals\(\)\.?|exploit_info\[|exploit_info *=" autopwn/ tests/ tools/` 仅命中 docstring 历史注释（"P2.4 (✅2026-06-07) — replace the7 `exploit_info[]` writes"），**0 live call**
+  - **0 live import**：所有引用都是 docstring + 历史注释（`tests/unit/test_primitives_*` 的"Mirrors v3.1 `_legacy.py` L1869"这种）+ `_legacy.py:3144-3145` 自己的 P4.7/P4.8 实施注释
+  - **production 完全不触 _legacy.py**：orchestrator.run() → candidates(ctx) → exp/strategies/*.py → primitives/*.py → recon/* + detect/*，绕开 _legacy.py 3483 行
+  - **`git rm autopwn/_legacy.py`** — §3.1临时文件表 "P8 之后 _legacy.py 净行数 < 100" 验收**达成**
+  - **M1 验收清单全绿**：
+    - ✅ `globals()` 0 live call（剩全是 docstring）
+    - ✅ `exploit_info[]` 0 live ref
+    - ✅ `autopwn.py` shim 已删（P8.6, git rm -r 12 行）
+    - ✅ `_legacy.py` 净行数 0（删前 3483 行 dead code, 删后 0）
+    - ✅ pytest **620 passed** (0回归)
+
+- **M2 收尾 = 建 recon 单元测试 + coverage gate**：
+  - **新文件** `tests/unit/recon/test_recon_public_api.py` (220 行, 16 tests, marker=`recon`):
+    - `TestReconChecksec`（4 tests）：collect canary/rip/level3_x64 + display smoke
+    - `TestReconLibc`（1 test）：detect 返回 LibcInfo with path/elf/base
+    - `TestReconPlt`（2 tests）：scan 设置 ctx.has_puts/has_write
+    - `TestReconRop`（3 tests）：find_x64/find_x32 返回 RopGadgetsX64/X32 with pop_rdi/pop_ebx/ret
+    - `TestReconBss`（3 tests）：find_bss 返回 list + BSSSymbol slots 强制
+    - `TestReconAsm`（3 tests）：vuln_func_name + asm_stack_overflow + analyze_vulnerable_functions
+  - **新文件** `tools/check_recon_coverage.py` (160 行): AST-parsed public API 覆盖率 gate, 阈值 60%, 输出 per-file 表 + overall 行 + PASS/FAIL
+  - **覆盖率结果**（`pytest tests/unit/recon/ --cov=autopwn.recon --cov-report=json` + `python3 tools/check_recon_coverage.py`）：
+    ```
+    File                                     Public%    Lines
+    -----------------------------------------------------------------
+    asm.py                                       97%     58/60
+    bss.py                                       86%     25/29
+    checksec.py                                 100%     28/28
+    libc.py                                      87%     13/15
+    plt.py                                      100%     18/18
+    rop.py                                      100%     18/18
+    -----------------------------------------------------------------
+    OVERALL recon public API                     95%    160/168
+    PASS — all files ≥ 60% (overall 95%)
+    ```
+  - **P9.6 spec "recon ≥ 60%" 验收达成** (95% 远超)
+
+- **§2.6 验证（per AGENTS.md §2.6）**：
+  - 关 1：M1+M2 收尾在 dev 分支上落地（commit 准备中）
+  - 关 2：`pytest -m "not integration"`：**620 passed**（+16 recon, 0 回归）
+  - 关 3：5-binary 串行 90s → `logs/v4.0-final/`：4/4 SUCCESS（fmtstr1/level3_x64/pie/rip）+ canary 90s timeout（持平 v3.1）
+  - 关 4：2-log 对比 96% (27/28) 一致 PASS（与 P8/M5 末态持平）
+  - 关 5：Reviewer — Owner 自审（§2.2 单人项目）
+  - 关 6：文档同步（本行 + §3 M1/M2 ✅ + §3 整体进度 6/6 + §3.1 临时文件表 _legacy.py 行 ✅）
+
+- **commit 引用**：（pending）`feature/m1-m2-cleanup` — 当前在 main 分支上直接落地（main @ d78bce9 ahead of origin/main = 0）
+
+- **Refs**: rebuild.md#M1, rebuild.md#M2, rebuild.md#§3.1 (临时文件生命周期表), tools/check_recon_coverage.py, tests/unit/recon/test_recon_public_api.py, AGENTS.md#1 铁律 4 (验证 6 关), AGENTS.md#3 维护铁律 #4
 
 ---
 

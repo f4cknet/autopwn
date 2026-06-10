@@ -469,6 +469,8 @@ class TestFmtstrRunInvokesRecordSuccess:
 
         mock_io = MagicMock()
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.fmtstr.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record, \
              patch("autopwn.exp.strategies.fmtstr.FmtstrX32", return_value=mock_primitive):
             s.run(ctx)
@@ -485,7 +487,7 @@ class TestFmtstrRunInvokesRecordSuccess:
         assert "buf_addr" in info_arg.addresses
         assert "offset" in info_arg.addresses
         assert mock_io.sendline.call_count == 1
-        assert mock_io.interactive.call_count == 1
+        assert mock_verify_shell.call_count == 1
 
     def test_x64_local_1stage_flow_completes(self):
         from autopwn.exp.strategies.fmtstr import FmtstrX64LocalStrategy
@@ -501,6 +503,8 @@ class TestFmtstrRunInvokesRecordSuccess:
 
         mock_io = MagicMock()
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.fmtstr.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record, \
              patch("autopwn.exp.strategies.fmtstr.FmtstrX64", return_value=mock_primitive):
             s.run(ctx)

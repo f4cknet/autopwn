@@ -24,17 +24,12 @@ from __future__ import annotations
 import datetime
 
 from autopwn.context import ExploitContext
-from autopwn.core.logging import (
-    print_critical,
-    print_info,
-    print_payload,
-    print_section_header,
-    print_success,
-)
+from autopwn.core.logging import print_critical, print_info, print_payload, print_section_header, print_success, print_warning
 from autopwn.exp.registry import register
 from autopwn.exp.strategies._canary_base import CanaryStrategy
 from autopwn.primitives.ret2libc_put import Ret2LibcPutX32, Ret2LibcPutX64
 from autopwn.report.model import ExploitInfo
+from autopwn.core.shell_verify import verify_shell
 
 
 @register
@@ -93,7 +88,11 @@ class CanaryRet2LibcPutX32LocalStrategy(CanaryStrategy):
         from autopwn.report import record_success
         record_success(info)
         print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
-        io.interactive()
+        id_ok, id_output = verify_shell(io)
+        if not id_ok:
+            print_warning(f"CanaryRet2LibcPutX32LocalStrategy: shell verification failed (no uid= output)")
+            return False
+        ctx.id_output = id_output
         return True
 
 
@@ -157,7 +156,11 @@ class CanaryRet2LibcPutX32RemoteStrategy(CanaryStrategy):
         from autopwn.report import record_success
         record_success(info)
         print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
-        io.interactive()
+        id_ok, id_output = verify_shell(io)
+        if not id_ok:
+            print_warning(f"CanaryRet2LibcPutX32LocalStrategy: shell verification failed (no uid= output)")
+            return False
+        ctx.id_output = id_output
         return True
 
 
@@ -216,7 +219,11 @@ class CanaryRet2LibcPutX64LocalStrategy(CanaryStrategy):
         from autopwn.report import record_success
         record_success(info)
         print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
-        io.interactive()
+        id_ok, id_output = verify_shell(io)
+        if not id_ok:
+            print_warning(f"CanaryRet2LibcPutX32LocalStrategy: shell verification failed (no uid= output)")
+            return False
+        ctx.id_output = id_output
         return True
 
 
@@ -280,7 +287,11 @@ class CanaryRet2LibcPutX64RemoteStrategy(CanaryStrategy):
         from autopwn.report import record_success
         record_success(info)
         print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
-        io.interactive()
+        id_ok, id_output = verify_shell(io)
+        if not id_ok:
+            print_warning(f"CanaryRet2LibcPutX32LocalStrategy: shell verification failed (no uid= output)")
+            return False
+        ctx.id_output = id_output
         return True
 
 

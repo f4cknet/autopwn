@@ -520,6 +520,8 @@ class TestRet2SystemRunInvokesRecordSuccess:
 
         mock_io = MagicMock()
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.ret2system_x32.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record:
             s.run(ctx)
 
@@ -537,7 +539,7 @@ class TestRet2SystemRunInvokesRecordSuccess:
         assert "bin_sh_addr" in info_arg.addresses
         # io was actually used
         assert mock_io.sendline.call_count == 1
-        assert mock_io.interactive.call_count == 1
+        assert mock_verify_shell.call_count == 1
 
     def test_x64_local_run_calls_record_success(self):
         """Same contract for the x64 strategy."""
@@ -550,6 +552,8 @@ class TestRet2SystemRunInvokesRecordSuccess:
 
         mock_io = MagicMock()
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.ret2system_x64.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record:
             s.run(ctx)
 

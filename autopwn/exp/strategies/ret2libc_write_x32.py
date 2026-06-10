@@ -41,17 +41,13 @@ from __future__ import annotations
 import datetime
 
 from autopwn.context import ExploitContext
-from autopwn.core.logging import (
-    print_info,
-    print_payload,
-    print_section_header,
-    print_success,
-)
+from autopwn.core.logging import print_info, print_payload, print_section_header, print_success, print_warning
 from autopwn.exp.base import ExploitStrategy
 from autopwn.exp.priorities import RET2LIBC_WRITE
 from autopwn.exp.registry import register
 from autopwn.primitives.ret2libc_write import Ret2LibcWriteX32
 from autopwn.report.model import ExploitInfo
+from autopwn.core.shell_verify import verify_shell
 
 
 # ---------------------------------------------------------------------------
@@ -138,7 +134,15 @@ class Ret2LibcWriteX32LocalStrategy(ExploitStrategy):
         from autopwn.report import record_success
         record_success(info)
 
-        io.interactive()
+        id_ok, id_output = verify_shell(io)
+
+        if not id_ok:
+
+            print_warning(f"Ret2LibcWriteX32LocalStrategy: shell verification failed (no uid= output)")
+
+            return False
+
+        ctx.id_output = id_output
         return True
 
 
@@ -216,7 +220,15 @@ class Ret2LibcWriteX32RemoteStrategy(ExploitStrategy):
         from autopwn.report import record_success
         record_success(info)
 
-        io.interactive()
+        id_ok, id_output = verify_shell(io)
+
+        if not id_ok:
+
+            print_warning(f"Ret2LibcWriteX32LocalStrategy: shell verification failed (no uid= output)")
+
+            return False
+
+        ctx.id_output = id_output
         return True
 
 

@@ -88,5 +88,13 @@ class ExploitInfo:
     # could store libc base in info.extra["libc_base"].
     extra: Dict[str, Any] = field(default_factory=dict)
 
+    # v4.0.1: shell verification result (per ``upgraded.md`` §3.1).
+    # Set by strategies via :func:`autopwn.core.shell_verify.verify_shell`
+    # to the ``id`` command output (``"uid=0(root) gid=0(...)"``) when
+    # the spawned process is a real shell.  ``None`` for non-shell
+    # exploits (e.g. ``execve_syscall`` which spawns a one-shot
+    # ``/bin/sh`` that exits before ``id`` can be probed).
+    id_output: str = ""
+
 
 __all__ = ["ExploitInfo"]

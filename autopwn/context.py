@@ -171,6 +171,11 @@ class ExploitContext:
     enable_report: bool = True
     report_dir: Path = field(default_factory=Path.cwd)
 
+    # v4.0.1: shell verification result (set by core.shell_verify.verify_shell
+    # in the strategy success path).  ``None`` until a strategy probes the
+    # spawned process; populated with the ``id`` command output on success.
+    id_output: Optional[str] = None
+
     def log(self, message: str, level: str = "info") -> None:
         """Convenience pass-through to ``core.logging.print_*``.
 

@@ -14,16 +14,12 @@ import datetime
 from pwn import p32
 
 from autopwn.context import ExploitContext
-from autopwn.core.logging import (
-    print_critical,
-    print_info,
-    print_payload,
-    print_section_header,
-)
+from autopwn.core.logging import print_critical, print_info, print_payload, print_section_header, print_success, print_warning
 from autopwn.exp.registry import register
 from autopwn.exp.strategies._canary_base import CanaryStrategy
 from autopwn.primitives.execve_syscall import ExecveSyscallX32
 from autopwn.report.model import ExploitInfo
+from autopwn.core.shell_verify import verify_shell
 
 
 @register
@@ -70,7 +66,11 @@ class CanaryExecveSyscallLocalStrategy(CanaryStrategy):
         from autopwn.report import record_success
         record_success(info)
         print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
-        io.interactive()
+        id_ok, id_output = verify_shell(io)
+        if not id_ok:
+            print_warning(f"CanaryExecveSyscallLocalStrategy: shell verification failed (no uid= output)")
+            return False
+        ctx.id_output = id_output
         return True
 
 
@@ -123,7 +123,11 @@ class CanaryExecveSyscallRemoteStrategy(CanaryStrategy):
         from autopwn.report import record_success
         record_success(info)
         print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
-        io.interactive()
+        id_ok, id_output = verify_shell(io)
+        if not id_ok:
+            print_warning(f"CanaryExecveSyscallLocalStrategy: shell verification failed (no uid= output)")
+            return False
+        ctx.id_output = id_output
         return True
 
 

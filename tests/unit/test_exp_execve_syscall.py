@@ -397,6 +397,8 @@ class TestExecveSyscallRunInvokesRecordSuccess:
 
         mock_io = MagicMock()
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.execve_syscall.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record, \
              patch("autopwn.exp.strategies.execve_syscall.ExecveSyscallX32", return_value=mock_primitive):
             s.run(ctx)
@@ -410,7 +412,7 @@ class TestExecveSyscallRunInvokesRecordSuccess:
         assert {"pop_eax_addr", "pop_ebx_addr", "pop_ecx_addr", "pop_edx_addr", "int_0_80"} <= set(info_arg.addresses)
         assert "pop_ecx_ebx_addr" not in info_arg.addresses
         assert mock_io.sendline.call_count == 1
-        assert mock_io.interactive.call_count == 1
+        assert mock_verify_shell.call_count == 1
 
     def test_local_combined_variant_flow(self):
         """Combined variant — pop_ecx == 0, pop_ecx_ebx != 0."""
@@ -436,6 +438,8 @@ class TestExecveSyscallRunInvokesRecordSuccess:
 
         mock_io = MagicMock()
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.execve_syscall.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record, \
              patch("autopwn.exp.strategies.execve_syscall.ExecveSyscallX32", return_value=mock_primitive):
             s.run(ctx)
@@ -463,6 +467,8 @@ class TestExecveSyscallRunInvokesRecordSuccess:
 
         mock_io = MagicMock()
         with patch("pwn.remote", return_value=mock_io), \
+             patch("autopwn.exp.strategies.execve_syscall.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record, \
              patch("autopwn.exp.strategies.execve_syscall.ExecveSyscallX32", return_value=mock_primitive):
             s.run(ctx)
@@ -471,4 +477,4 @@ class TestExecveSyscallRunInvokesRecordSuccess:
         info_arg = mock_record.call_args[0][0]
         assert info_arg.exploit_type == "execve syscall - x32 (separate)"
         assert mock_io.sendline.call_count == 1
-        assert mock_io.interactive.call_count == 1
+        assert mock_verify_shell.call_count == 1

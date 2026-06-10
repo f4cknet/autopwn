@@ -58,6 +58,7 @@ from autopwn.exp.registry import register
 from autopwn.exp.priorities import PIE_BACKDOOR
 from autopwn.primitives.pie_backdoor import PieBackdoor
 from autopwn.report.model import ExploitInfo
+from autopwn.core.shell_verify import verify_shell
 
 
 # ---------------------------------------------------------------------------
@@ -83,12 +84,7 @@ def _run_brute_force(ctx, *, use_remote: bool) -> bool:
          P3.4 report orchestrator).
     """
     from autopwn.report import record_success
-    from autopwn.core.logging import (
-        print_section_header,
-        print_payload,
-        print_info,
-        print_critical,
-    )
+    from autopwn.core.logging import print_critical, print_info, print_payload, print_section_header, print_success, print_warning
 
     label = "Remote" if use_remote else "Local"
     print_section_header(f"EXPLOITATION: PIE Backdoor - {label}")
@@ -150,7 +146,11 @@ def _run_brute_force(ctx, *, use_remote: bool) -> bool:
             )
             record_success(info)
             print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
-            io.interactive()
+            id_ok, id_output = verify_shell(io)
+            if not id_ok:
+                print_warning(f"PieBackdoorLocalStrategy: shell verification failed (no uid= output)")
+                return False
+            ctx.id_output = id_output
             return True
 
 

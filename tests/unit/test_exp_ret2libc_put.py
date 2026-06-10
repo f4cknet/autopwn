@@ -506,6 +506,8 @@ class TestRet2LibcPutRunInvokesRecordSuccess:
         mock_io.recv.return_value = b""
 
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.ret2libc_put_x32.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record:
             s.run(ctx)
 
@@ -519,7 +521,7 @@ class TestRet2LibcPutRunInvokesRecordSuccess:
         assert "puts_addr" in info_arg.addresses
         # IO was actually used
         assert mock_io.sendline.call_count == 2  # stage 1 + stage 2
-        assert mock_io.interactive.call_count == 1
+        assert mock_verify_shell.call_count == 1
 
     def test_x64_local_2stage_flow_completes(self):
         """Same 2-stage contract for x64."""
@@ -539,6 +541,8 @@ class TestRet2LibcPutRunInvokesRecordSuccess:
         mock_io.recv.return_value = b""
 
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.ret2libc_put_x64.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record:
             s.run(ctx)
 
@@ -548,7 +552,7 @@ class TestRet2LibcPutRunInvokesRecordSuccess:
         assert info_arg.architecture == "x64"
         assert "puts_addr" in info_arg.addresses
         assert mock_io.sendline.call_count == 2
-        assert mock_io.interactive.call_count == 1
+        assert mock_verify_shell.call_count == 1
 
     def test_x32_local_leak_parse_failure_returns_false(self):
         """If the leak recv raises, the strategy returns False (not crash)."""
@@ -564,6 +568,8 @@ class TestRet2LibcPutRunInvokesRecordSuccess:
         mock_io.recvuntil.side_effect = EOFError("connection closed")
 
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.ret2libc_put_x32.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record:
             result = s.run(ctx)
 

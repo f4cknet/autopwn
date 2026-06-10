@@ -645,6 +645,8 @@ class TestCanaryRunInvokesRecordSuccess:
 
         mock_io = MagicMock()
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.canary_execve_syscall.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record:
             s.run(ctx)
 
@@ -657,7 +659,7 @@ class TestCanaryRunInvokesRecordSuccess:
         assert "canary" in info_arg.addresses
         assert info_arg.addresses["canary"] == hex(0xCAFEBABE)
         assert mock_io.sendline.call_count == 1
-        assert mock_io.interactive.call_count == 1
+        assert mock_verify_shell.call_count == 1
 
     def test_ret2system_x32_local_1stage_flow_completes(self):
         """canary ret2system: needs has_system + binsh_in_binary.  The
@@ -688,6 +690,8 @@ class TestCanaryRunInvokesRecordSuccess:
 
         mock_io = MagicMock()
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.canary_ret2system.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record:
             s.run(ctx)
 
@@ -716,6 +720,8 @@ class TestCanaryRunInvokesRecordSuccess:
         mock_io.recvuntil.return_value = b"\xf7\xbe\xbe\xbe\xf7"
 
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.canary_ret2libc_put.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record:
             s.run(ctx)
 

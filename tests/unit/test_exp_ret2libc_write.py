@@ -536,6 +536,8 @@ class TestRet2LibcWriteRunInvokesRecordSuccess:
         mock_primitive.build_stage2_payload.return_value = b"\x90" * 64 + b"\xaa\xbb\xcc\xdd"
 
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.ret2libc_write_x32.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record, \
              patch("autopwn.exp.strategies.ret2libc_write_x32.Ret2LibcWriteX32", return_value=mock_primitive):
             s.run(ctx)
@@ -547,7 +549,7 @@ class TestRet2LibcWriteRunInvokesRecordSuccess:
         assert info_arg.architecture == "x32"
         assert "write_addr" in info_arg.addresses
         assert mock_io.sendline.call_count == 2
-        assert mock_io.interactive.call_count == 1
+        assert mock_verify_shell.call_count == 1
 
     def test_x64_local_2stage_flow_completes(self):
         """Same 2-stage contract for x64 (8-byte leak + gadget chain)."""
@@ -569,6 +571,8 @@ class TestRet2LibcWriteRunInvokesRecordSuccess:
         mock_primitive.build_stage2_payload.return_value = b"\x90" * 64 + b"\xaa\xbb\xcc\xdd\xee\xff\x00\x11"
 
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.ret2libc_write_x64.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record, \
              patch("autopwn.exp.strategies.ret2libc_write_x64.Ret2LibcWriteX64", return_value=mock_primitive):
             s.run(ctx)
@@ -579,7 +583,7 @@ class TestRet2LibcWriteRunInvokesRecordSuccess:
         assert info_arg.architecture == "x64"
         assert "write_addr" in info_arg.addresses
         assert mock_io.sendline.call_count == 2
-        assert mock_io.interactive.call_count == 1
+        assert mock_verify_shell.call_count == 1
 
     def test_x32_local_leak_parse_failure_returns_false(self):
         """If the leak recv raises, the strategy returns False (not crash)."""
@@ -595,6 +599,8 @@ class TestRet2LibcWriteRunInvokesRecordSuccess:
         mock_io.recv.side_effect = EOFError("connection closed")
 
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.ret2libc_write_x32.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record:
             result = s.run(ctx)
 

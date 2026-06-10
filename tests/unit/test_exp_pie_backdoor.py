@@ -371,6 +371,8 @@ class TestPieBackdoorRunGracefulSkip:
         mock_io = MagicMock()
         mock_io.recv.side_effect = Exception("no response")
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.pie_backdoor.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record:
             # We patched recv to always raise — so the loop never
             # succeeds.  In a real scenario, this would run forever,
@@ -443,6 +445,8 @@ class TestPieBackdoorRunInvokesRecordSuccess:
         mock_io.recv.side_effect = [b"banner\n", b"shell#"]
 
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.pie_backdoor.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record:
             result = s.run(ctx)
 
@@ -457,7 +461,7 @@ class TestPieBackdoorRunInvokesRecordSuccess:
         # PIE backdoor records the brute-force target address
         assert "backdoor" in info_arg.addresses
         assert mock_io.send.call_count == 1
-        assert mock_io.interactive.call_count == 1
+        assert mock_verify_shell.call_count == 1
 
     def test_x64_local_1stage_flow_completes(self):
         from autopwn.exp.strategies.pie_backdoor import PieBackdoorLocalStrategy
@@ -469,6 +473,8 @@ class TestPieBackdoorRunInvokesRecordSuccess:
         mock_io.recv.side_effect = [b"banner\n", b"shell#"]
 
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.pie_backdoor.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record:
             result = s.run(ctx)
 
@@ -488,6 +494,8 @@ class TestPieBackdoorRunInvokesRecordSuccess:
         mock_io.recv.side_effect = [b"banner\n", b"shell#"]
 
         with patch("pwn.remote", return_value=mock_io), \
+             patch("autopwn.exp.strategies.pie_backdoor.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record:
             result = s.run(ctx)
 
@@ -497,4 +505,4 @@ class TestPieBackdoorRunInvokesRecordSuccess:
         assert info_arg.exploit_type == "PIE Backdoor - Remote"
         # Remote is called with (host, port) tuple
         assert mock_io.send.call_count == 1
-        assert mock_io.interactive.call_count == 1
+        assert mock_verify_shell.call_count == 1

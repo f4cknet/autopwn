@@ -446,6 +446,8 @@ class TestRwxShellcodeRunInvokesRecordSuccess:
 
         mock_io = MagicMock()
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.rwx_shellcode_x32.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record, \
              patch("autopwn.exp.strategies.rwx_shellcode_x32.RwxShellcodeX32", return_value=mock_primitive):
             s.run(ctx)
@@ -459,7 +461,7 @@ class TestRwxShellcodeRunInvokesRecordSuccess:
         assert info_arg.addresses == {}
         # IO was actually used
         assert mock_io.sendline.call_count == 1
-        assert mock_io.interactive.call_count == 1
+        assert mock_verify_shell.call_count == 1
 
     def test_x64_local_1stage_flow_completes(self):
         """Same 1-stage contract for x64."""
@@ -475,6 +477,8 @@ class TestRwxShellcodeRunInvokesRecordSuccess:
 
         mock_io = MagicMock()
         with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.rwx_shellcode_x64.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
              patch("autopwn.report.record_success") as mock_record, \
              patch("autopwn.exp.strategies.rwx_shellcode_x64.RwxShellcodeX64", return_value=mock_primitive):
             s.run(ctx)
@@ -485,7 +489,7 @@ class TestRwxShellcodeRunInvokesRecordSuccess:
         assert info_arg.architecture == "x64"
         assert info_arg.addresses == {}
         assert mock_io.sendline.call_count == 1
-        assert mock_io.interactive.call_count == 1
+        assert mock_verify_shell.call_count == 1
 
     def test_x32_local_no_record_success_when_primitive_empty(self):
         """Primitive empty → strategy returns False, no record_success call."""

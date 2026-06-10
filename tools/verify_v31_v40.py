@@ -1,16 +1,64 @@
 """P0.8: v3.1 vs v4.0 关键行为标记对比 + summary.md 生成。
 Owner: @Minzhi_Zhou
+
+P11.4 扩展（2026-06-10）：
+- 加 --v31-dir / --v40-dir CLI 参数（override 默认路径）
+- 加 --v31-tag / --v40-tag 支持 git tag 引用（git show <tag>:logs/... 提取 baseline）
+- 默认行为不变（向后兼容 P0.7 / P0.8 既有调用）
 """
+import argparse
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 from datetime import datetime
 
 ROOT = Path("/ctf/autopwn")
 LOGS = ROOT / "logs"
-V31_DIR = LOGS / "v3.1"
-V40_DIR = LOGS / "v4.0"
+DEFAULT_V31_DIR = LOGS / "v3.1"
+DEFAULT_V40_DIR = LOGS / "v4.0"
 CMP_DIR = LOGS / "comparison"
 BINARIES = ["canary", "fmtstr1", "level3_x64", "pie", "rip"]
+
+
+def _resolve_dir(arg_value: str, default_dir: Path, label: str) -> Path:
+    """Resolve a CLI --v31-dir / --v40-dir argument.
+
+    Rules:
+      * If empty → return default_dir (filesystem path).
+      * If starts with "tag:" → git show <tag>:logs/<rest>  → extract to tempdir.
+      * Otherwise → treat as filesystem path.
+    """
+    if not arg_value:
+        return default_dir
+    if arg_value.startswith("tag:"):
+        tag = arg_value[4:]
+        return _extract_git_tag(tag, label)
+    p = Path(arg_value)
+    if p.is_dir():
+        return p
+    raise FileNotFoundError(f"{label} dir not found: {arg_value}")
+
+
+def _extract_git_tag(tag: str, label: str) -> Path:
+    """git show <tag>:logs/<X>/ → extract to tempdir.
+
+    Returns tempdir path; user can compare from it.  Raises if tag
+    not found or doesn't contain expected path.
+    """
+    tmp = Path(tempfile.mkdtemp(prefix=f"autopwn-{label}-"))
+    for bin_name in BINARIES:
+        rel = f"logs/{label}/{bin_name}.log"
+        out_file = tmp / f"{bin_name}.log"
+        # `git show <tag>:<rel>` writes to stdout
+        result = subprocess.run(
+            ["git", "show", f"{tag}:{rel}"],
+            cwd=ROOT, capture_output=True,
+        )
+        if result.returncode != 0:
+            raise FileNotFoundError(f"tag '{tag}' missing {rel}: {result.stderr.decode()[:200]}")
+        out_file.write_bytes(result.stdout)
+    return tmp
 
 MARKERS = [
     ("EXPLOITATION SUCCESSFUL",  r"EXPLOITATION SUCCESSFUL"),
@@ -64,6 +112,14 @@ def get_log_meta(path):
     }
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--v31-dir", default="", help="v3.1 baseline dir (default: logs/v3.1); prefix 'tag:<name>' for git tag")
+    parser.add_argument("--v40-dir", default="", help="v4.0 baseline dir (default: logs/v4.0); prefix 'tag:<name>' for git tag")
+    args = parser.parse_args()
+
+    v31_dir = _resolve_dir(args.v31_dir, DEFAULT_V31_DIR, "v3.1")
+    v40_dir = _resolve_dir(args.v40_dir, DEFAULT_V40_DIR, "v4.0")
+
     CMP_DIR.mkdir(parents=True, exist_ok=True)
     out = []
 
@@ -77,8 +133,8 @@ def main():
 
 ## 1. 数据来源
 
-- v3.1 logs: `logs/v3.1/<binary>.log` （临时 skin-swap 后的 pwnpasi 3.1 串行运行）
-- v4.0 logs: `logs/v4.0/<binary>.log` （autopwn 4.0.dev0 串行运行）
+- v3.1 logs: `{v31_dir}/<binary>.log`
+- v4.0 logs: `{v40_dir}/<binary>.log`
 - 5 个 binary 顺序: canary -> fmtstr1 -> level3_x64 -> pie -> rip
 - 60s timeout 强制结束（canary 暴力枚举需 ~7min，预期 partial log）
 
@@ -92,8 +148,8 @@ def main():
     detail_sections = []
 
     for idx, bin_name in enumerate(BINARIES, 1):
-        v31_log = V31_DIR / f"{bin_name}.log"
-        v40_log = V40_DIR / f"{bin_name}.log"
+        v31_log = v31_dir / f"{bin_name}.log"
+        v40_log = v40_dir / f"{bin_name}.log"
         if not v31_log.exists() or not v40_log.exists():
             out.append(f"| {bin_name} | 缺失 | 缺失 | — / — | — |\n")
             continue

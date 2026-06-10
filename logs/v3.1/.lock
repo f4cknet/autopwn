@@ -1,0 +1,10 @@
+# AutoPwn baseline lock (P11.4)
+# Created: 2026-06-10T14:38:24Z
+# Host: 9810bc8ba905
+# Files: 5 .log files
+# Format: <sha256sum>  <size>B  <mtime>  <path>
+fc48f551c3a53d85f877377af741352d23fc6f2be8de3ff19ec0c8e4a292e9cb  98484B  mtime=2026-06-07T00:28:51Z  ./canary.log
+34363ee08089052eea6b7ad43cb0f1e6620b570abfcea111c57dbb9e6f2e8a8c  56776B  mtime=2026-06-07T00:29:50Z  ./fmtstr1.log
+a06875158ebfd548aff46c4154b0a034a50f8c905b635e5e4bb6eedfbe44a229  16608B  mtime=2026-06-07T00:29:54Z  ./level3_x64.log
+0a84952f69c4f6edaf3ee804d728f5a5919809dec101b60fde0a71ae454fdb31  15661B  mtime=2026-06-07T00:30:06Z  ./pie.log
+dd1e8f60bfdc77a12fdd36e86b08dcaf6077e9be83eac8f32ee8f2e0fc5b809f  15926B  mtime=2026-06-07T00:30:09Z  ./rip.log

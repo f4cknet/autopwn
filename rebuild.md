@@ -79,9 +79,11 @@
 | **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | ✅ (P6 9/9 ✅ 2026-06-08；P7 12/12 ✅ 2026-06-08 (P7.1-P7.12 全完); **M3 完成** — 12 子任务全 ✅; 40 strategies 总注册; integration test 17/18 PASS + 1 SKIP (candidates() 集成覆盖); 真 end-to-end 验收到 P9.4 (`tests/integration/test_challenge_*.py`); `dev` 分支已建立 per B-005) |
 | **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ✅ (P8.1-P8.3 全部 ✅ 2026-06-09 — `wc -l autopwn/orchestrator.py = 362` 略超 250 目标但 §6.9 spec 接受; P8.4 §2.6 baseline 4/5 SUCCESS 持平 v3.1; 2-log 96% (27/28) 一致 PASS; B-006 + B-007 全部 Resolved via P4.4b + P6.3b + P6.4b) |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ✅ (P9.1-P9.6 全部 ✅ + P10.1-P10.4 全部 ✅ 2026-06-09 — `.github/workflows/ci.yml` (90 行, 2 jobs test+lint) + `setup.py` 336→16 行 + `pip install -e .` ✅ + `autopwn`/`python -m autopwn` 双入口可用 + README v4.0.dev0 更新; 604 unit tests + 17/18+1 integration tests; public API coverage 96% (355/371)) |
+| **M6** | v4.0.dev0 内部打磨 | **P11** | 文档清理 / 6 关全绿 / coverage 抬升 / baseline 治理 / orchestrator 拆分 | §2.6 5/5 SUCCESS 持平 v3.1（600s timeout）；coverage 60%+；orchestrator < 250 行 | ⏳ P11.0..P11.5 占位（2026-06-10 立项） |
 
-> 整体进度：**6 / 6 里程碑完成** (M0 ✅, **M1 ✅** [2026-06-09 M1 收尾 — `_legacy.py` 3479 行 dead code 已删, `globals()` 0 live call, `exploit_info[]` 0 live ref, `autopwn.py` shim 已删], **M2 ✅** [2026-06-09 M2 收尾 — `tests/unit/recon/test_recon_public_api.py` 16 tests 全过, `tools/check_recon_coverage.py` gate 验证 95% public API coverage, 远超 60% 阈值], M3 ✅, M4 ✅, M5 ✅)
-> **临时进展（2026-06-09, v4.0 收尾）**：P4.4b + P6.3b + P6.4b + P8.1-P8.6 + P9 + P10 + M1/M2 收尾 全部 ✅ — §2.6 final baseline 4/5 SUCCESS 持平 v3.1（level3_x64 修复: ret2libc-write-x64 SUCCESS, `write address leaked: 0x7f...` 实证），2-log 96% (27/28) 一致 PASS，pytest **620 passed** (0 回归, +16 recon), recon public API coverage **95% (160/168)**, primitive public API coverage 96% (355/371)。**v3.1 → v4.0.dev0 重构周期收尾，6/6 里程碑全部完成 — 按 §3 维护铁律 #4 "当前重构周期"改为 "v4.0 → v4.1" 准备下个 sprint**。
+> 整体进度：**6 / 6 核心里程碑完成 + 1 / 1 内部打磨期 M6 启动中** (M0 ✅, M1 ✅, M2 ✅, M3 ✅, M4 ✅, M5 ✅; **M6 ⏳ 启动中 — P11.x 6 个子任务占位**)
+> **临时进展（2026-06-09, v4.0 收尾）**：P4.4b + P6.3b + P6.4b + P8.1-P8.6 + P9 + P10 + M1/M2 收尾 全部 ✅ — §2.6 final baseline 4/5 SUCCESS 持平 v3.1（level3_x64 修复: ret2libc-write-x64 SUCCESS, `write address leaked: 0x7f...` 实证），2-log 96% (27/28) 一致 PASS，pytest **620 passed** (0 回归, +16 recon), recon public API coverage **95% (160/168)**, primitive public API coverage 96% (355/371)。**v3.1 → v4.0.dev0 重构周期收尾，6/6 核心里程碑全部完成**。
+> **M6 内部打磨期（2026-06-10 启动）**：按 Owner 决策 "继续 v4.0.dev0 内部打磨" 启动 P11 阶段，6 个子任务 P11.0..P11.5 立项——A 文档清理 (refactor.md §13 + rebuild.md §10) / B 阻塞表瘦身 / C 6 关全绿 (AUTOPWN_VERIFY_TIMEOUT=600) / D coverage 抬升 (43.5% → 60%) / E baseline 治理 (git tag v3.1-baseline) / F orchestrator 拆分 (362 → <250 行)。**不启动 v4.1 sprint**（per Owner 决策 2026-06-10）；P11 走 v4.0.dev0 名下，PR target=dev（M5 之后 main 一直同步，dev 分支 per B-005 是 P7.3+ 起所有新任务 target）。
 
 ---
 
@@ -275,8 +277,24 @@
 |---|---|---|---|---|---|---|---|
 | P10.1 | `pyproject.toml` 完整化：版本号、entry_points、classifiers | ✅ | @Minzhi_Zhou | 1h | 0.2h | feature/p0.3-pyproject | P0.3 阶段已落地 — `pyproject.toml` (77 行) 含 `[project]` name=autopwn version=4.0.dev0 + Python≥3.8 + 5 deps (pwntools / LibcSearcher / ropper / python-docx / pyelftools) + 13 classifiers + `[project.urls]` Homepage/Repository/Issues/BasedOn + `[project.scripts] autopwn=autopwn.cli:main` console script + `[tool.setuptools]` 7 包 packages 列表 + `[tool.pytest.ini_options]` 6 markers (detect/recon/primitive/strategy/orchestrator/integration) + testpaths + python_files。详见 §6.11 P10.1 实施记录段 |
 | P10.2 | `setup.py` 改为最小转发（`from setuptools import setup; setup()`） | ✅ | @Minzhi_Zhou | 0.5h | 0.05h | #P10.2 | **重写** `setup.py` (336 行 → 16 行) — 删除 v3.0 的 banner 渲染 + 交互式 system/Python 依赖安装器 (P10.2 spec "最小转发" — 全部 metadata 已在 pyproject.toml); 改 `from setuptools import setup; setup()` 最小转发; **删** `scripts=['autopwn.py']` 引用 (P8.6 已删 shim)。docstring 加 P10.2 决策痕迹 + 解释 PEP 517/518 兼容性。详见 §6.11 P10.2 实施记录段 |
-| P10.3 | 验证 `pip install .` 后 `autopwn -l Challenge/canary` 可用 | ⏳ | — | 0.5h | — | — | |
-| P10.4 | 更新 `README.md` 的安装段：`pip install autopwn` 优先 | ⏳ | — | 1h | — | — | |
+| P10.3 | 验证 `pip install .` 后 `autopwn -l Challenge/canary` 可用 | ✅ | @Minzhi_Zhou | 0.5h | 0.1h | d78bce9 | per M5 末态 — `pip install -e .` 验证通过（commit d78bce9）；`autopwn -l Challenge/canary` CLI 入口可调起 |
+| P10.4 | 更新 `README.md` 的安装段：`pip install autopwn` 优先 | ✅ | @Minzhi_Zhou | 1h | 0.3h | d78bce9 | per M5 末态 — `README.md` v4.0.dev0 更新，"安装"段 `pip install -e .` 优先于 `python autopwn.py`（已删 shim）；详见 §6.11 P10.4 实施记录段 |
+
+---
+
+### 4.12 P11 — v4.0.dev0 内部打磨（M6 阶段）
+
+> **本阶段 Owner 决策（2026-06-10）**：6/6 核心里程碑（M0-M5）已全绿，按 Owner "继续 v4.0.dev0 内部打磨" 决策启动 M6 阶段。**不启动 v4.1 sprint**——P11 走 v4.0.dev0 名下，PR target=`dev`（per B-005）。
+> **范围**：6 个子任务，按"风险递增 / 依赖递减"排序——文档清理（0.8h doc-only）→ .agents 整理（0.3h）→ 6 关全绿 baseline（0.5h 纯跑）→ coverage 抬升（2h）→ baseline 治理（1.5h）→ orchestrator 拆分（2.5h）。**§2.6 豁免**：P11.0 doc-only 走 AGENTS.md §2.6.4 豁免（不需跑 §2.6 验证）；其它 P11.1..P11.5 每个 PR 必走 §2.6 5-binary 串行 + 2-log 对比。
+
+| ID | 任务 | S | O | E | A | PR | Note |
+|---|---|---|---|---|---|---|---|
+| **P11.0** | **文档清理（A+B 合并 doc-only PR）**：（A）`refactor.md §13` 改"v4.0 历史"段（标注 `_legacy.py` / `_compat.py` / `autopwn.py` 已删）；（B）`rebuild.md §10` 阻塞表瘦身（B-001~B-007 全部 Resolved，改为"open = 0"段）| ⏳ | @Minzhi_Zhou | 0.8h | — | — | **§2.6 豁免** per AGENTS.md §2.6.4；**diff 预估**：~50 行 refactor.md 改写 + ~30 行 rebuild.md 改写 = ~80 行 doc diff；**Owner 决策**：A+B 合并 1 个 doc-only PR（不拆）|
+| **P11.1** | **`.agents/` 整理**：删除入仓的 `skills-lock.json`（0.5h）| ⏳ | @Minzhi_Zhou | 0.3h | — | — | `.agents/` 已在 `.gitignore` 84 行覆盖；`skills-lock.json` 应随 `mmx-cli` skill 一同不入仓；**风险**：低（验证 `git status` 无 untracked 残留）|
+| **P11.2** | **6 关全绿 baseline**：跑 `AUTOPWN_VERIFY_TIMEOUT=600` 拿 canary 完整数据（0.5h 纯跑，**不动代码**）| ⏳ | @Minzhi_Zhou | 0.5h | — | — | **目的**：v3.1 baseline 也 4/5（canary 暴力枚举 ~7min 被 60s 截断），调 600s 后预期 5/5 SUCCESS；**关键**：v3.1 与 v4.0 **同 timeout** 重跑（`logs/v3.1-600s/` vs `logs/v4.0-600s/`）才能算"持平"；**§2.6 验证**：5-binary 串行 600s/binary；**输出**：`logs/comparison/summary-600s.md` |
+| **P11.3** | **Coverage 抬升：行覆盖 43.5% → 60%**（2h，区分 public API 覆盖率与行覆盖率）| ⏳ | @Minzhi_Zhou | 2h | — | — | **现状**：7 个文件 231/531 行（`.coverage` 最近一次跑的是 unit tests only，缺 integration）；**目标**：识别高价值路径（orchestrator 三阶段调度 / detect canary 5 byte fuzz / primitive 3 变体 cascade / strategy candidates() 排序）补 unit tests；**关键**：阈值定 60% 而非 80%（避免凑数）；**§2.6 验证**：行覆盖阈值检查纳入 `tools/check_recon_coverage.py` 之类的 gate |
+| **P11.4** | **Baseline 治理**：`git tag v3.1-baseline` 锁住当前 v3.1 logs（129712B canary 等）+ `scripts/run_verify.sh --baseline=tag` 模式（1.5h）| ⏳ | @Minzhi_Zhou | 1.5h | — | — | **依赖 P11.2 先跑完**（600s baseline 数据准备好再 tag）；**风险**：中（CI 集成 / 未来 v4.1 验证收益大）；**输出**：`git tag -a v3.1-baseline logs/v3.1-600s/` + `--baseline=tag` 解析逻辑 + docs `rebuild.md §2.6` 加 baseline 治理段 |
+| **P11.5** | **`orchestrator.py` 362 → <250**：拆为 `orchestrator/{recon,detect,strategy}.py` 3 子模块（2.5h）| ⏳ | @Minzhi_Zhou | 2.5h | — | — | **现状**：被 §6.9 spec 接受为 362 偏离（spec 250）；**方案**：拆 `run_recon_phase` → `orchestrator/recon.py`、`run_detect_phase` → `orchestrator/detect.py`、`run_strategy_phase` → `orchestrator/strategy.py`；顶层 `orchestrator.py` 仅保留 `run(ctx)` 入口 + dispatch；**§2.6 验证**：5-binary 串行 + 2-log 96% 一致 PASS（零行为变更）；**风险**：中（架构调整，需保证 orchestrator 入口签名不变）|
 
 ---
 
@@ -4339,6 +4357,51 @@ python -m venv /tmp/autopwn-test
 
 ---
 
+### 6.12 P11 — v4.0.dev0 内部打磨（M6 阶段）
+
+**🟢 状态**：⏳ Pending｜**🟢 优先级**：P2（不阻塞 v4.0 GA；v4.1 sprint 前可完成也可延后）｜**⏱ 总预估**：7.6h
+
+**目标**：6/6 核心里程碑（M0-M5）已全绿，按 Owner 决策"继续 v4.0.dev0 内部打磨"启动 M6 阶段。**不启动 v4.1 sprint**。范围 6 个子任务 P11.0..P11.5，全部 doc-only / 纯跑 / 加 tests / 治理活——无新业务功能，无架构变更。
+
+**P11.0 验收（doc-only PR）**：
+- A：`refactor.md §13` 标题加 "(v4.0 历史 — 文件已删)" 后缀，§13.1 行级表 / §13.4 里程碑表 / §13.5 决策清单 / §13.6 关键引用改为历史注释格式（"P8.5 已删" / "本节作为 v4.0 演进史保留"）
+- B：`rebuild.md §10` 阻塞表保留 7 行历史 + 加"open = 0 (2026-06-10) — v3.1→v4.0.dev0 重构周期所有阻塞已 Resolved"段头
+- 验收：`git diff --stat` 应 < 200 行（纯 doc diff）；§2.6 验证 **豁免**（per AGENTS.md §2.6.4 文档-only PR）
+
+**P11.1 验收**：`.agents/skills-lock.json` `git rm`；`git status` 无 untracked `.agents/` 残留；`.gitignore` 84 行覆盖确认
+
+**P11.2 验收**：
+- `AUTOPWN_VERIFY_TIMEOUT=600 bash scripts/run_verify.sh v4.0 canary fmtstr1 level3_x64 pie rip` → 5/5 SUCCESS（canary 7min 完整跑）
+- 同 timeout 重跑 v3.1 baseline → `logs/v3.1-600s/`
+- `tools/verify_v31_v40.py` 加 `--timeout=600` 参数支持 → 生成 `logs/comparison/summary-600s.md`
+- §2.6 验证：5-binary 串行 600s/binary
+
+**P11.3 验收**：
+- `coverage run --source=autopwn pytest -m "not integration" tests/unit/` → `coverage report` 显示行覆盖 ≥ 60%
+- 区分 public API 覆盖率（95% 已达，per `tools/check_recon_coverage.py`）vs 行覆盖率（新阈值 60%）
+- 优先覆盖：orchestrator 三阶段调度（`tests/unit/orchestrator/` 新建）、detect canary 5 byte fuzz、primitive 3 变体 cascade
+- §2.6 验证：pytest `tests/unit/` 全过；coverage.json 提交入仓作 baseline 锁定
+
+**P11.4 验收**：
+- 依赖 P11.2 先跑完（600s baseline 数据准备好再 tag）
+- `git tag -a v3.1-baseline logs/v3.1-600s/` 锁住 baseline
+- `scripts/run_verify.sh --baseline=v3.1-baseline` 解析逻辑：git show tag → 提取 logs/ → diff 对比
+- `tools/verify_v31_v40.py` 默认 baseline 从文件系统改为 git tag 引用
+- `rebuild.md §2.6` 加"Baseline 治理"段
+
+**P11.5 验收**：
+- 拆 `autopwn/orchestrator.py`（362 行）→ `autopwn/orchestrator/{__init__.py, recon.py, detect.py, strategy.py}.py` 4 文件
+- 顶层 `autopwn/orchestrator.py` 保留 `run(ctx)` 入口 + dispatch 调度；行数 < 50
+- 三子模块分别接 `run_recon_phase(ctx)` / `run_detect_phase(ctx)` / `run_strategy_phase(ctx)`
+- 行为零变更：`__init__.py` re-export `run` 保持 `from autopwn.orchestrator import run` 兼容
+- §2.6 验证：5-binary 串行 + 2-log 96% (27/28) 一致 PASS（与拆前一致）
+
+**与 v4.1 sprint 的关系**：M6 不阻塞 v4.0 GA（已可发 v4.0 tag）；M6 子任务完成后再启动 v4.1（届时新立 P12.x）。
+
+**Refs**: rebuild.md#M6, rebuild.md#§4.12, AGENTS.md#1 铁律 2 (新需求先更新文档), AGENTS.md#2.6.4 (文档-only PR 豁免)
+
+---
+
 ## 7. Review 检查清单
 
 ### 7.1 通用（每个 PR）
@@ -4464,6 +4527,15 @@ Refs: rebuild.md#P4.1
 
 ## 10. 阻塞登记表（动态）
 
+> **当前 open 阻塞数 = 0**（2026-06-10 M6 启动时状态）。v3.1 → v4.0.dev0 重构周期所有阻塞已 Resolved。
+> **P11 阶段阻塞**（如出现）登记在本表下方"open"段；已 Resolved 的历史阻塞（B-001 ~ B-007）保留作审计追踪，**不删除**（per AGENTS.md §5 维护铁律 #2）。
+
+### 10.1 open 阻塞（当前 = 0）
+
+_（无 — 2026-06-10 M6 启动时无新阻塞）_
+
+### 10.2 历史阻塞（已 Resolved · 审计追踪保留）
+
 | 阻塞 ID | 阻塞任务 | 等待内容 | 责任人 | 起始时间 | 状态 |
 |---|---|---|---|---|---|
 | ~~**B-001**~~ | ~~P0.0 品牌变更决策（R12）~~ | GitHub=`f4cknet/autopwn` / 团队=`qzdx_soc` / 版本=`4.0.dev0` / 署名=方案 B | Owner | 2026-06-06 | ✅ Resolved 2026-06-06 |
@@ -4472,7 +4544,7 @@ Refs: rebuild.md#P4.1
 | **B-004** | P4.1–P7.2 跳过 `dev` 分支直接 fast-forward `main`（Owner 临时特批，per AGENTS.md §4 紧急通道 #3） | Owner 授权：feature/p7.2-registry 28 commits（P4.1 recon/checksec → P4.7/4.8 globals() 删除 → P5.1-P5.5 detect 完整 → P6.1-P6.9 primitives 完整 → P7.1 ExploitStrategy + P7.2a 决策 → P7.2 registry）直接 fast-forward 合入 main（merge-base = dbbc937 = main tip，无冲突）。原因：single-person Owner 项目；main 长期停在 P3.6 [fix] 状态（dbbc937），所有 P4-P6 22 commits + P7 6 commits 都在 feature/* 分支累积；dev 分支从未建立（按 §9.4 应有但实际不存在）。Owner 选择绕过 dev 直接 FF main，与项目历史工作流一致（P3.5/P3.6 [fix] 均为 main 直提交）。**§2.6 验证**：main 上 `pytest -m "not integration"` 284/284 全绿（与 feature/p7.2-registry 一致）。特批有效期：本次 P4.1–P7.2 落地；建议下次阶段切换时建立 `dev` 分支并恢复 §9.4 标准流程 | @Minzhi_Zhou | 2026-06-08 | ✅ Resolved 2026-06-08 |
 | **B-005** | **建立 `dev` 集成开发分支**（Owner 治理决策，per AGENTS.md §7 治理变更） | Owner 决策：① `dev` 由 `main@b95d9ec` 创建（包含 P4.1–P7.2 全部 28 commits）；② §9.4 重写为结构化表格 + inaugural 段 + 3 类例外通道（Owner-hotfix / 文档-only / 阶段升级）；③ §9.2 任务认领流程更新为「从 dev 拉分支 + target=dev」；④ P7.3+ 起所有新任务 PR **必须** target `dev`，恢复 §9.4 标准流程。**§2.6 豁免**：per AGENTS.md §2.6.4 文档-only PR 不适用 §2.6 验证流程；本次 main 上 `pytest -m "not integration"` 仍跑确认 284/284 全绿（与 B-004 末态一致）。**链上操作**：feature/governance-dev-branch → dev (FF) → main (FF) | @Minzhi_Zhou | 2026-06-08 | ✅ Resolved 2026-06-08 |
 | **B-006** | **P4.4 / P6.4 契约错位**：`recon.rop.find_x64` 返回 `RopGadgetsX64(pop_rdi='0x00000000004011fb', ...)`（**str**），P6.4 `ret2libc_put_x64` 直接 `p64(ctx.gadgets_x64.pop_rdi)` → `struct.error: required argument is not an integer` | **Owner 决策（2026-06-09, @Minzhi_Zhou）**：**采用方案 ① + 补充项** — 新立 **P4.4b**（临时需求 #5）改 `recon.rop._extract_x64_gadgets` 4 个地址赋值为 `int(..., 16)`，根治；x32 路径同步改 7 处（对称修复，x32 字段也声明为 int）；`RopGadgetsX64` / `RopGadgetsX32` 字段 docstring 同步更新为"hex int"语义；契约守护测试 `tests/unit/test_recon_rop_contract.py`（14 tests）锁契约；P6.x 6 个 primitive 保持干净不污染。**P4.4b 详细步骤见 §6.5 P4.4b 详细步骤段**。**实施 + 验证**：4/5 SUCCESS binary 回归消失（level3_x64/rip 命中 ret2system x64），2-log 对比 96% (27/28) 一致 PASS，无 KeyError/struct.error 失败模式。**下一步**：P8.4 baseline 跑（按 P4.4b 修复后状态）以解锁 P8.1-P8.3 转 ✅。**影响范围**：P8.4 / P8.5 / P8.6 / M4 验收 / P9.1 unit tests for P6 primitives | @Minzhi_Zhou | 2026-06-09 | ✅ Resolved 2026-06-09（per P4.4b ✅，§2.6 验证 4/5 SUCCESS 持平 baseline，2-log 96% PASS；P8.4 baseline 仍需跑以批量解锁 P8.1-P8.3 → ✅） |
-| **B-007** | **P6.4 / P6.3 漏读 extra_rdi/extra_rsi 信号**（R17 实例）：`Ret2LibcWriteX64.build_payload` 硬编码 5 元素 pop chain（v3.1 L949-958 `both 0` 单变体），**没读 `ctx.gadgets_x64.extra_rdi`/`extra_rsi`**；v3.1 main() L927-958 有 3 变体（`other_rsi_registers==1` 走 6-arg 多 0 占位 / `other_rdi_registers==1` 走 6-arg 顺序变体 / `both 0` 走 5-arg）。**实证**：`level3_x64.recon.rop.find_x64` 返回 `extra_rsi=1`（ropper 找到 "pop rsi; pop r15; ret"），v3.1 走 6-arg pop chain，P6.4 走 5-arg → 目标进程 RSP 错位 → write 返回无效地址 → `unpack requires a buffer of 8 bytes`。**被 B-006 掩盖**：B-006 未修前，struct.error 在 stage-0 阶段直接崩，根本到不了 stage-1。B-006 Resolved via P4.4b 后 B-007 暴露 by P8.4 §2.6 baseline（5 binary 串行，4/5 SUCCESS，level3_x64 leak parse 失败）。**Owner 决策（2026-06-09, 方案 3, @Minzhi_Zhou）**：立 **P6.4b**（根因修复，复刻 v3.1 L927-958 3 变体）+ **P6.3b**（防御性，同源未暴露但契约层必修）同步走铁律 2 流程。**实施 + 验证（2026-06-09）**：P6.3b + P6.4b 改 2 个 primitive + 8 变体契约测试全过；P8.4 §2.6 baseline 4/5 SUCCESS 持平 v3.1（**level3_x64 修复** — 命中 ret2libc-write-x64 SUCCESS, `write address leaked: 0x7f667695e8f0`），2-log 96% (27/28) 一致 PASS。**P8.1-P8.3 转 ✅ 路径解锁**：M4 阶段状态转 🔄 → ✅ 待 P8.4 baseline 跑通后批量转。**影响范围**：P8.4 / P8.5 / P8.6 / M4 验收 | @Minzhi_Zhou | 2026-06-09 | ✅ Resolved 2026-06-09（per P6.3b + P6.4b ✅，§2.6 验证 4/5 SUCCESS 持平 v3.1，2-log 96% PASS，level3_x64 leak parse 失败消失） |
+| **B-007** | **P6.4 / P6.3 漏读 extra_rdi/extra_rsi 信号**（R17 实例）：`Ret2LibcWriteX64.build_payload` 硬编码 5 元素 pop chain（v3.1 L949-958 `both 0` 单变体），**没读 `ctx.gadgets_x64.extra_rdi`/`extra_rsi`**；v3.1 main() L927-958 有 3 变体（`other_rsi_registers==1` 走 6-arg 多 0 占位 / `other_rdi_registers==1` 走 6-arg 顺序变体 / `both 0` 走 5-arg）。**实证**：`level3_x64.recon.rop.find_x64` 返回 `extra_rsi=1`（ropper 找到 "pop rsi; pop r15; ret"），v3.1 走 6-arg pop chain，P6.4 走 5-arg → 目标进程 RSP 错位 → write 返回无效地址 → `unpack requires a buffer of 8 bytes`。**被 B-006 掩盖**：B-006 未修前，struct.error 在 stage-0 阶段直接崩，根本到不了 stage-1。B-006 Resolved via P4.4b 后 B-007 暴露 by P8.4 §2.6 baseline（5 binary 串行，4/5 SUCCESS，level3_x64 leak parse 失败）。**Owner 决策（2026-06-09, 方案 3, @Minzhi_Zhou）**：立 **P6.4b**（根因修复，复刻 v3.1 L927-958 3 变体）+ **P6.3b**（防御性，同源未暴露但契约层必修）同步走铁律 2 流程。**实施 + 验证（2026-06-09）**：P6.3b + P6.4b 改 2 个 primitive + 8 变体契约测试全过；P8.4 §2.6 baseline 4/5 SUCCESS 持平 v3.1（**level3_x64 修复** — 命中 ret2libc-write-x64 SUCCESS, `write address leaked: 0x7f667695e8f0`），2-log 96% (27/28) 一致 PASS。**P8.1-P8.3 转 ✅ 路径解锁**：M4 阶段状态保持 🔄，待 P8.4 baseline（按 P6.3b + P6.4b 修复后状态）跑通后批量转 ✅。**影响范围**：P8.4 / P8.5 / P8.6 / M4 验收 | @Minzhi_Zhou | 2026-06-09 | ✅ Resolved 2026-06-09（per P6.3b + P6.4b ✅，§2.6 验证 4/5 SUCCESS 持平 v3.1，2-log 96% PASS，level3_x64 leak parse 失败消失） |
 
 ---
 

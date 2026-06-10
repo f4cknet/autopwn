@@ -231,11 +231,11 @@ class TestRunReconPhase:
         """``set_permission`` is called with the binary path."""
         ctx = _make_ctx(tmp_path)
 
-        with mock.patch("autopwn.orchestrator.set_permission") as perm, \
-             mock.patch("autopwn.orchestrator.checksec") as cs, \
-             mock.patch("autopwn.orchestrator.libc") as libc_mod, \
-             mock.patch("autopwn.orchestrator.plt") as plt_mod, \
-             mock.patch("autopwn.orchestrator.rop") as rop_mod:
+        with mock.patch("autopwn.orchestrator.recon.set_permission") as perm, \
+             mock.patch("autopwn.orchestrator.recon.checksec") as cs, \
+             mock.patch("autopwn.orchestrator.recon.libc") as libc_mod, \
+             mock.patch("autopwn.orchestrator.recon.plt") as plt_mod, \
+             mock.patch("autopwn.orchestrator.recon.rop") as rop_mod:
             perm.return_value = True
             cs.collect.return_value = ctx.binary
             cs.display = mock.MagicMock()
@@ -252,11 +252,11 @@ class TestRunReconPhase:
         """bit=64 routes to ``rop.find_x64``; ``find_x32`` is not called."""
         ctx = _make_ctx(tmp_path, bit=64)
 
-        with mock.patch("autopwn.orchestrator.set_permission"), \
-             mock.patch("autopwn.orchestrator.checksec") as cs, \
-             mock.patch("autopwn.orchestrator.libc") as libc_mod, \
-             mock.patch("autopwn.orchestrator.plt") as plt_mod, \
-             mock.patch("autopwn.orchestrator.rop") as rop_mod:
+        with mock.patch("autopwn.orchestrator.recon.set_permission"), \
+             mock.patch("autopwn.orchestrator.recon.checksec") as cs, \
+             mock.patch("autopwn.orchestrator.recon.libc") as libc_mod, \
+             mock.patch("autopwn.orchestrator.recon.plt") as plt_mod, \
+             mock.patch("autopwn.orchestrator.recon.rop") as rop_mod:
             cs.collect.return_value = ctx.binary
             cs.display = mock.MagicMock()
             libc_mod.detect.return_value = LibcInfo()
@@ -272,11 +272,11 @@ class TestRunReconPhase:
         """bit=32 routes to ``rop.find_x32``; ``find_x64`` is not called."""
         ctx = _make_ctx(tmp_path, bit=32)
 
-        with mock.patch("autopwn.orchestrator.set_permission"), \
-             mock.patch("autopwn.orchestrator.checksec") as cs, \
-             mock.patch("autopwn.orchestrator.libc") as libc_mod, \
-             mock.patch("autopwn.orchestrator.plt") as plt_mod, \
-             mock.patch("autopwn.orchestrator.rop") as rop_mod:
+        with mock.patch("autopwn.orchestrator.recon.set_permission"), \
+             mock.patch("autopwn.orchestrator.recon.checksec") as cs, \
+             mock.patch("autopwn.orchestrator.recon.libc") as libc_mod, \
+             mock.patch("autopwn.orchestrator.recon.plt") as plt_mod, \
+             mock.patch("autopwn.orchestrator.recon.rop") as rop_mod:
             cs.collect.return_value = ctx.binary
             cs.display = mock.MagicMock()
             libc_mod.detect.return_value = LibcInfo()
@@ -293,11 +293,11 @@ class TestRunReconPhase:
         ctx = _make_ctx(tmp_path)
         ctx.libc = LibcInfo(path=Path("/custom/libc.so.6"))
 
-        with mock.patch("autopwn.orchestrator.set_permission"), \
-             mock.patch("autopwn.orchestrator.checksec") as cs, \
-             mock.patch("autopwn.orchestrator.libc") as libc_mod, \
-             mock.patch("autopwn.orchestrator.plt") as plt_mod, \
-             mock.patch("autopwn.orchestrator.rop") as rop_mod:
+        with mock.patch("autopwn.orchestrator.recon.set_permission"), \
+             mock.patch("autopwn.orchestrator.recon.checksec") as cs, \
+             mock.patch("autopwn.orchestrator.recon.libc") as libc_mod, \
+             mock.patch("autopwn.orchestrator.recon.plt") as plt_mod, \
+             mock.patch("autopwn.orchestrator.recon.rop") as rop_mod:
             cs.collect.return_value = ctx.binary
             cs.display = mock.MagicMock()
             plt_mod.scan.return_value = {}
@@ -325,10 +325,10 @@ class TestRunDetectPhase:
             c.binsh_in_binary = True
             return True
 
-        with mock.patch("autopwn.orchestrator.detect_binsh") as binsh_mod, \
-             mock.patch("autopwn.orchestrator.detect_overflow") as ov_mod, \
-             mock.patch("autopwn.orchestrator.detect_canary") as canary_mod, \
-             mock.patch("autopwn.orchestrator.detect_fmtstr") as fmtstr_mod:
+        with mock.patch("autopwn.orchestrator.detect.detect_binsh") as binsh_mod, \
+             mock.patch("autopwn.orchestrator.detect.detect_overflow") as ov_mod, \
+             mock.patch("autopwn.orchestrator.detect.detect_canary") as canary_mod, \
+             mock.patch("autopwn.orchestrator.detect.detect_fmtstr") as fmtstr_mod:
             # Manual padding override (skip the dynamic test)
             ctx.padding = 64
             # The real ``detect_binsh.check_binsh`` mutates ctx.binsh_in_binary
@@ -345,10 +345,10 @@ class TestRunDetectPhase:
         ctx = _make_ctx(tmp_path, bit=64, canary=True)
         ctx.padding = 64  # skip dynamic overflow test
 
-        with mock.patch("autopwn.orchestrator.detect_binsh") as binsh_mod, \
-             mock.patch("autopwn.orchestrator.detect_overflow"), \
-             mock.patch("autopwn.orchestrator.detect_canary") as canary_mod, \
-             mock.patch("autopwn.orchestrator.detect_fmtstr") as fmtstr_mod:
+        with mock.patch("autopwn.orchestrator.detect.detect_binsh") as binsh_mod, \
+             mock.patch("autopwn.orchestrator.detect.detect_overflow"), \
+             mock.patch("autopwn.orchestrator.detect.detect_canary") as canary_mod, \
+             mock.patch("autopwn.orchestrator.detect.detect_fmtstr") as fmtstr_mod:
             binsh_mod.check_binsh.return_value = False
             probe = mock.MagicMock()
             probe.vulnerable = True
@@ -367,10 +367,10 @@ class TestRunDetectPhase:
         ctx = _make_ctx(tmp_path, bit=64, canary=False)
         ctx.padding = 64
 
-        with mock.patch("autopwn.orchestrator.detect_binsh") as binsh_mod, \
-             mock.patch("autopwn.orchestrator.detect_overflow"), \
-             mock.patch("autopwn.orchestrator.detect_canary") as canary_mod, \
-             mock.patch("autopwn.orchestrator.detect_fmtstr") as fmtstr_mod:
+        with mock.patch("autopwn.orchestrator.detect.detect_binsh") as binsh_mod, \
+             mock.patch("autopwn.orchestrator.detect.detect_overflow"), \
+             mock.patch("autopwn.orchestrator.detect.detect_canary") as canary_mod, \
+             mock.patch("autopwn.orchestrator.detect.detect_fmtstr") as fmtstr_mod:
             binsh_mod.check_binsh.return_value = False
 
             run_detect_phase(ctx)
@@ -384,10 +384,10 @@ class TestRunDetectPhase:
         ctx = _make_ctx(tmp_path)
         ctx.padding = 120  # manual override
 
-        with mock.patch("autopwn.orchestrator.detect_binsh") as binsh_mod, \
-             mock.patch("autopwn.orchestrator.detect_overflow") as ov_mod, \
-             mock.patch("autopwn.orchestrator.detect_canary"), \
-             mock.patch("autopwn.orchestrator.detect_fmtstr"):
+        with mock.patch("autopwn.orchestrator.detect.detect_binsh") as binsh_mod, \
+             mock.patch("autopwn.orchestrator.detect.detect_overflow") as ov_mod, \
+             mock.patch("autopwn.orchestrator.detect.detect_canary"), \
+             mock.patch("autopwn.orchestrator.detect.detect_fmtstr"):
             binsh_mod.check_binsh.return_value = True
 
             run_detect_phase(ctx)

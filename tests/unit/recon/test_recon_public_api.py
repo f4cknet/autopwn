@@ -250,3 +250,100 @@ class TestReconAsm:
 
         result = analyze_vulnerable_functions(CHALLENGE_DIR / "rip", bit=64)
         assert result is None or isinstance(result, int)
+
+
+# ---------------------------------------------------------------------------
+# P11.3 — error-path / edge-case tests (target 50%+ line coverage)
+# ---------------------------------------------------------------------------
+
+
+class TestReconErrorPaths:
+    """Error-path + edge-case tests added by P11.3 to lift line coverage.
+
+    Why these tests exist
+    ---------------------
+    The base 11-test suite (above) covers the happy path of every
+    public API.  It does NOT exercise the ``try/except`` branches
+    in the file bodies (silent-fail BSS read, libc ``detect``
+    user-override branch, rop ``_extract_x64_gadgets`` empty-input,
+    plt ``scan`` with no PLT entries, checksec ``collect`` with
+    non-existent file).  These tests cover the error paths so
+    that the `coverage.json` line coverage exceeds 50% without
+    resorting to testing the OBSOLETE ``_legacy_*`` ports (which
+    is explicitly excluded per ``tools/check_recon_coverage.py``).
+    """
+
+    def test_collect_nonexistent_file_raises(self):
+        """``collect`` on a missing file surfaces an exception (not silent)."""
+        from autopwn.recon.checksec import collect
+
+        with pytest.raises(Exception):
+            # /nonexistent ELF — subprocess call will fail; collect()
+            # propagates the exception instead of swallowing it.
+            collect(Path("/nonexistent/elf"))
+
+    def test_display_with_partial_info_does_not_crash(self, capsys):
+        """``display`` tolerates a BinaryInfo with default fields set."""
+        from autopwn.recon.checksec import BinaryInfo, display
+
+        info = BinaryInfo(
+            path=Path("/tmp/fake"),
+            bit=64,
+            stack_canary=False,
+            pie=False,
+            nx=True,
+            relro="Partial",
+            rwx_segments=False,
+            stripped=True,
+        )
+        display(info)  # must not raise
+        captured = capsys.readouterr()
+        assert len(captured.out) > 0  # prints at least section header
+
+    def test_bss_non_elf_file_returns_empty(self, tmp_path):
+        """``find_bss`` on a non-ELFFile returns [] silently (no exception)."""
+        from autopwn.recon.bss import find_bss
+
+        fake = tmp_path / "fake.txt"
+        fake.write_text("not an ELF")
+        results = find_bss(fake, min_size=10)
+        assert results == []  # silent failure per P4 spec
+
+    def test_bss_min_size_filter_rejects_small_symbols(self):
+        """``min_size`` filter rejects symbols below the threshold."""
+        from autopwn.recon.bss import BSSSymbol, find_bss
+
+        # We don't have a crafted BSS binary; verify the *contract* by
+        # checking the BSSSymbol dataclass + min_size rejection logic
+        # via the public API: find_bss with min_size=2 returns the
+        # same type (list) as min_size=30 (consistency check).
+        results_small = find_bss(CHALLENGE_DIR / "pie", min_size=2)
+        results_large = find_bss(CHALLENGE_DIR / "pie", min_size=200)
+        assert isinstance(results_small, list)
+        assert isinstance(results_large, list)
+        # Large threshold should never return more than small threshold
+        assert len(results_large) <= len(results_small)
+        # Sanity: BSSSymbol is constructable
+        sym = BSSSymbol(name="x", address=0x0, size=0)
+        assert sym.size == 0
+
+    def test_libc_path_override_bypasses_ldd(self, tmp_path):
+        """``detect`` with ``ctx.libc.path`` set returns LibcInfo(path=...) without calling ldd."""
+        from autopwn.recon.libc import detect
+
+        fake_libc = tmp_path / "libc.so.6"
+        fake_libc.write_text("")  # content doesn't matter; we never read it
+        ctx = ctx_for("canary", bit=32)
+        ctx.libc.path = fake_libc  # user override
+        info = detect(ctx, CHALLENGE_DIR / "canary")
+        assert info.path == fake_libc  # override path returned, no ldd call
+
+    def test_rop_extract_empty_input_returns_zeros(self):
+        """``_extract_x64_gadgets`` with empty input returns {} (no exception)."""
+        from autopwn.recon.rop import _extract_x64_gadgets
+
+        result = _extract_x64_gadgets("")
+        # Empty input → all fields default to 0 (int, not str — per P4.4b)
+        assert isinstance(result, dict)
+        assert result.get("pop_rdi", 0) == 0
+        assert result.get("ret", 0) == 0

@@ -55,6 +55,7 @@
 
 ### 1.2 v4.0 已知限制
 
+- **🚨 当前 4/5 SUCCESS 是"假阳性"**（2026-06-10 诊断）：runner 环境无 stdin，`io.interactive()` 立即 EOF，但 "EXPLOITATION SUCCESSFUL" banner 已在 io.interactive() 之前 print → record_success 误触发。**v4.0+ 判定**：必须 `io.sendline(b"id") + io.recvuntil(b"uid=")` 真拿到 shell 才算 SUCCESS（per 任务 v4.0.1 / v4.0.2）
 - **5/5 SUCCESS 不可达**：canary 暴力枚举需 > 10min，60s/600s timeout 都 PARTIAL；pre-existing v3.1 限制
 - **覆盖率 44%**（行覆盖）：剩 56% 主要是 `_legacy_*` 函数（已 obsolete，按 `check_recon_coverage.py` 原则不测）；public API 覆盖率 95%
 - **单一 Owner**：所有 PR 走 Owner 自审（per `AGENTS.md §2.2`）
@@ -66,6 +67,7 @@
 - **Web UI / RPC**：`orchestrator.run` 暴露为 HTTP/JSON（per `refactor.md §11` 旧扩展点）
 - **类型化异常**：`except Exception as e` 收敛为 `ReconError` / `DetectionError` / `StrategyError`
 - **LLM 辅助决策**：`candidates(ctx)` 优先级交给 LLM 微调（与 `mmx-cli` 技能联动）
+- **canary 暴力优化**（v4.1.3）：现 v4.0.3 "5/5 SUCCESS" 已被 v4.0.2 占位；如未来需要，可重写为并行爆破 + smarter padding
 
 ---
 
@@ -126,11 +128,13 @@ per `AGENTS.md §2.1`：
 
 ## 3. 任务看板
 
-### 3.1 v4.0 GA 准备（高优先级）
+### 3.1 v4.0 GA 准备（高优先级 · 修复后才发 GA）
 
 | ID | 任务 | 状态 | 预估 | 备注 |
 |---|---|---|---|---|
-| `v4.0.0` | **v4.0 GA 收尾**：切版本号 4.0.dev0 → 4.0 + tag `v4.0.0` + GitHub Release + CHANGELOG.md + README v4.0 更新 | ⏳ | 1.5h | 跟 P11.0-P11.5 一样 doc-only，pytest 626 仍跑 |
+| `v4.0.0` | **v4.0 GA 收尾**：切版本号 4.0.dev0 → 4.0 + tag `v4.0.0` + GitHub Release + CHANGELOG.md + README v4.0 更新 | ⏳ | 1.5h | **阻塞**：等 v4.0.1 / v4.0.2 修复后再做（per 2026-06-10 诊断） |
+| `v4.0.1` | **修复 SUCCESS 判定 = 真 shell (id)**（v3.1 历史问题）：`autopwn/exp/strategies/*.py` + `autopwn/primitives/*.py` 把 `io.interactive()` 替换为 `io.sendline(b"id") + io.recvuntil(b"uid=", timeout=2)` 验证；orchestrator 接 "id_verified" 布尔信号；record_success 加 `id_output` 字段 | ⏳ | 4h | **高优先级**：当前 4/5 SUCCESS 是"假阳性"——runner 环境无 stdin，io.interactive() 立即 EOF，但 "EXPLOITATION SUCCESSFUL" banner 已在 io.interactive() 之前 print，造成 record_success 误触发。详见 /tmp/diagnosis.md（2026-06-10 诊断）|
+| `v4.0.2` | **5 binary 实测修 padding / leak 路径**：fmtstr1 (canary 需先 fmtstr leak) / rip (padding 0x20 修复) / level3_x64 (ret2libc write leak 路径) / pie (PIE brute force 验证) — 4 binary 真实测 `id` 命令能拿到 `uid=` 后才算 SUCCESS | ⏳ | 2.5h | **依赖 v4.0.1**：先改判定逻辑，再修各 binary 实测 padding/leak。canary binary 仍 PARTIAL（v3.1 pre-existing 限制）|
 
 ### 3.2 v4.1 sprint 候选（按优先级排）
 
@@ -139,9 +143,9 @@ per `AGENTS.md §2.1`：
 | `v4.1.0` | **HEAP 利用层**：`primitives/heap.py` + `exp/strategies/heap_*.py` 至少 3 个新 strategy（malloc_hook / tcache / unsorted bin）| ⏳ | 12h | 大需求，Owner review 时机 |
 | `v4.1.1` | **类型化异常**：`ReconError` / `DetectionError` / `StrategyError` 替代 `except Exception` | ⏳ | 1.5h | 重构期遗留，含 `orchestrator.run_strategy_phase` 等 |
 | `v4.1.2` | **多 binary 批处理**：CLI `-L <dir>` 跑 `Challenge/*.bin` 全集，输出 `logs/batch/` summary | ⏳ | 3h | 跑 5 binary 当前要 5 次 `python -m autopwn` |
-| `v4.1.3` | **5/5 SUCCESS**：优化 canary 策略让 canary 60s timeout 内可解（parallel / smarter padding）| ⏳ | 8h | 需算法层重设计；可放弃走 ❌ |
 | `v4.1.4` | **Web UI / RPC**：`orchestrator.run` 暴露为 FastAPI，POST `/exploit` 返回 JSON | ⏳ | 6h | per `refactor.md §11` 旧扩展点 |
 | `v4.1.5` | **LLM 辅助决策**：`candidates(ctx)` 接受外部 LLM override（与 `mmx-cli` 技能联动）| ⏳ | 4h | 实验性 |
+| `v4.1.6` | **canary 暴力优化**（如 v4.0.2 未达标）：优化 canary 策略让 canary 60s timeout 内可解（parallel / smarter padding）| ⏳ | 8h | 需算法层重设计；可放弃走 ❌ |
 
 ### 3.3 open 阻塞（当前 = 0）
 

@@ -195,6 +195,8 @@ We welcome contributions! Whether it's:
 - 📚 Documentation improvements
 - 🔧 Performance optimizations
 
+**开发流程**：先读 [`upgraded.md`](./upgraded.md)（v4.0+ 迭代流程 + 任务看板）→ 必读 [`AGENTS.md`](./AGENTS.md) §1 铁律 → 了解 v4.0 架构 [`refactor.md §3`](./refactor.md) → 看重构历史 [`rebuild.md §3`](./rebuild.md) 阶段总结。
+
 ---
 
 ## 📜 License

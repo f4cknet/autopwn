@@ -5,6 +5,11 @@ P11.4 扩展（2026-06-10）：
 - 加 --v31-dir / --v40-dir CLI 参数（override 默认路径）
 - 加 --v31-tag / --v40-tag 支持 git tag 引用（git show <tag>:logs/... 提取 baseline）
 - 默认行为不变（向后兼容 P0.7 / P0.8 既有调用）
+
+AGENTS.md 1.5 治理变更（2026-06-10）：
+- AGENTS.md §2.6 验证方法论已完全删除（v3.1 vs v4.0 2-log 对比不再是规范）
+- 本工具作为**历史审计**保留：v3.1 logs 仍在 logs/v3.1/，可对比 logs/v3.1/ vs logs/v4.0-600s/ 等
+- 不作为未来任务强制规范；未来任务走 AGENTS.md §1 铁律 4 6 关验收（pytest + 5-binary smoke）
 """
 import argparse
 import re

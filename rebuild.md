@@ -1,6 +1,8 @@
 # AutoPwn 重构实施手册（rebuild.md）
 
-> ⚠️ **强制前置阅读**：[`AGENTS.md`](./AGENTS.md)（项目治理）—— 本文档所有行为受其 §1 四条铁律 + §2.6 验证方法论约束。**任何动手前先读 AGENTS.md §1 铁律 + §2.6**。
+> ⚠️ **强制前置阅读**：[`AGENTS.md`](./AGENTS.md)（项目治理）—— 本文档所有行为受其 §1 四条铁律约束。**任何动手前先读 AGENTS.md §1 铁律**。
+> 
+> ⚠️ **2026-06-10 治理变更（v1.5）**：v3.1 → v4.0.dev0 重构 6/6 里程碑 + M6 全部完成；`AGENTS.md §2.6` 验证方法论（v3.1 vs v4.0 串行 + 2-log 对比）已**完全删除**（per Owner 决策 2026-06-10）。本文档下方 §4/§6 任务行中残留的 `§2.6 验证 27/28=96% vs v3.1 baseline` 表述属于**历史记录 verbatim**（per R15 git 不可篡改原则），请理解为 "v3.1 时代该任务 P 阶段实施时的 5-binary 串行验证"；不作为未来任务规范。**未来任务**走 AGENTS.md §1 铁律 4 6 关验收（pytest unit + 5-binary smoke 不再要求 v3.1 对比）。
 > 配套文档：`refactor.md`（架构设计 / WHY） ←→ `rebuild.md`（实施 / HOW / WHO / WHEN / STATUS）
 > 维护者：项目 Owner（你）
 > 协作方式：每个 PR 至少更新本文档对应任务的"状态 / Owner / 实际工时 / PR#"
@@ -15,7 +17,7 @@
 | **第一次接触本次重构** | **必读 [`AGENTS.md`](./AGENTS.md) §1 铁律** → §1 → §2 → §3 → §4 |
 | **想认领任务** | `AGENTS.md` §1 铁律 → §2 图例 → §4 找 ⏳ → §6 详细步骤 → §5 约定 |
 | **正在做某个阶段** | §6 当前阶段 → §7 Review 清单 → §9 同步机制 |
-| **Code Review** | §7 对应阶段 checklist → §9 风险表 + `AGENTS.md §3` 违规表 + §2.6 验证方法论 |
+| **Code Review** | §7 对应阶段 checklist → §9 风险表 + `AGENTS.md §3` 违规表 |
 | **只关心进度** | §3 里程碑 + §4 总览表 |
 | **看到 `_legacy.py` / `_compat.py` 困惑** | `refactor.md §13`（架构层 WHY）+ **§3.1 下方**（实施层行数追踪）|
 
@@ -76,14 +78,14 @@
 | **M0** | 项目骨架就位 | P0 + P1 | 真正的 `autopwn/` 包；`autopwn.py` 变成 shim | `python autopwn.py -l Challenge/canary` 行为不变；`pip install .` 成功 | ✅ P0.0–P0.8 全完成 P1 ⏳ |
 | **M1** | 状态显式化 | P2 + P3 | `ExploitContext` 落地；报告层可独立关闭 | `--no-report` 参数生效；无 `globals().get` 在主流程 | ✅ (P2 + P3 + P8.5/P8.6 全部 ✅; **`autopwn/_legacy.py` 3479 行 dead code 已删 (commit M5 后的 M1 收尾)**; `globals()` 0 live call; `exploit_info[]` 0 live ref; `autopwn.py` shim 已删 (P8.6); 详见 §3.1 临时文件生命周期表) |
 | **M2** | 收集与检测层化 | P4 + P5 | `recon/` + `detect/` 完整，pure 化 | `pytest tests/unit/test_detect_*` 全绿（recon 测试 P9 补）| ✅ (P4 ✅, P5 ✅, P9 收尾 — `tests/unit/recon/test_recon_public_api.py` 16 tests 全过; `tools/check_recon_coverage.py` gate 验证 **95% (160/168) public API coverage**, 远超 60% 阈值; checksec/plt/rop 100%, asm 97%, libc 87%, bss 86%) |
-| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | ✅ (P6 9/9 ✅ 2026-06-08；P7 12/12 ✅ 2026-06-08 (P7.1-P7.12 全完); **M3 完成** — 12 子任务全 ✅; 40 strategies 总注册; integration test 17/18 PASS + 1 SKIP (candidates() 集成覆盖); 真 end-to-end 验收到 P9.4 (`tests/integration/test_challenge_*.py`); `dev` 分支已建立 per B-005) |
-| **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ✅ (P8.1-P8.3 全部 ✅ 2026-06-09 — `wc -l autopwn/orchestrator.py = 362` 略超 250 目标但 §6.9 spec 接受; P8.4 §2.6 baseline 4/5 SUCCESS 持平 v3.1; 2-log 96% (27/28) 一致 PASS; B-006 + B-007 全部 Resolved via P4.4b + P6.3b + P6.4b) |
+| **M3** | 利用层抽象 | P6 + P7 | `primitives/` + `exp/strategies/`；30+ 函数收敛为 12 策略 | `pytest tests/integration/` 跑通 Challenge/ 全部 4 个 二进制 | ✅ (P6 9/9 ✅ 2026-06-08；P7 12/12 ✅ 2026-06-08 (P7.1-P7.12 全完); **M3 完成** — 12 子任务全 ✅; 40 strategies 总注册; integration test 17/18 PASS + 1 SKIP (candidates() 集成覆盖); 真 end-to-end 验收到 P9.4 (`tests/integration/test_challenge_*.py`)) |
+| **M4** | 编排重写 | P8 | `main()` < 100 行；orchestrator 决策 | CLI 日志与重构前一致；`wc -l orchestrator.py < 250` | ✅ (P8.1-P8.3 全部 ✅ 2026-06-09 — `wc -l autopwn/orchestrator.py = 362` 略超 250 目标但 §6.9 spec 接受; P8.4 baseline 4/5 SUCCESS 持平 v3.1; 2-log 96% (27/28) 一致 PASS; B-006 + B-007 全部 Resolved via P4.4b + P6.3b + P6.4b) |
 | **M5** | 工程化 | P9 + P10 | 单元测试 + CI + 打包 | GitHub Actions 绿；`autopwn` 命令行可用 | ✅ (P9.1-P9.6 全部 ✅ + P10.1-P10.4 全部 ✅ 2026-06-09 — `.github/workflows/ci.yml` (90 行, 2 jobs test+lint) + `setup.py` 336→16 行 + `pip install -e .` ✅ + `autopwn`/`python -m autopwn` 双入口可用 + README v4.0.dev0 更新; 604 unit tests + 17/18+1 integration tests; public API coverage 96% (355/371)) |
-| **M6** | v4.0.dev0 内部打磨 | **P11** | 文档清理 / 6 关全绿 / coverage 抬升 / baseline 治理 / orchestrator 拆分 | §2.6 5/5 SUCCESS 持平 v3.1（600s timeout）；coverage 60%+；orchestrator < 250 行 | ⏳ P11.0..P11.5 占位（2026-06-10 立项） |
+| **M6** | v4.0.dev0 内部打磨 | **P11** | 文档清理 / 6 关全绿 / coverage 抬升 / baseline 治理 / orchestrator 拆分 | 5/5 SUCCESS 持平 v3.1（600s timeout）；coverage 60%+；orchestrator < 250 行 | ⏳ P11.0..P11.5 占位（2026-06-10 立项） |
 
 > 整体进度：**6 / 6 核心里程碑完成 + 1 / 1 内部打磨期 M6 启动中** (M0 ✅, M1 ✅, M2 ✅, M3 ✅, M4 ✅, M5 ✅; **M6 ⏳ 启动中 — P11.x 6 个子任务占位**)
-> **临时进展（2026-06-09, v4.0 收尾）**：P4.4b + P6.3b + P6.4b + P8.1-P8.6 + P9 + P10 + M1/M2 收尾 全部 ✅ — §2.6 final baseline 4/5 SUCCESS 持平 v3.1（level3_x64 修复: ret2libc-write-x64 SUCCESS, `write address leaked: 0x7f...` 实证），2-log 96% (27/28) 一致 PASS，pytest **620 passed** (0 回归, +16 recon), recon public API coverage **95% (160/168)**, primitive public API coverage 96% (355/371)。**v3.1 → v4.0.dev0 重构周期收尾，6/6 核心里程碑全部完成**。
-> **M6 内部打磨期（2026-06-10 启动）**：按 Owner 决策 "继续 v4.0.dev0 内部打磨" 启动 P11 阶段，6 个子任务 P11.0..P11.5 立项——A 文档清理 (refactor.md §13 + rebuild.md §10) / B 阻塞表瘦身 / C 6 关全绿 (AUTOPWN_VERIFY_TIMEOUT=600) / D coverage 抬升 (43.5% → 60%) / E baseline 治理 (git tag v3.1-baseline) / F orchestrator 拆分 (362 → <250 行)。**不启动 v4.1 sprint**（per Owner 决策 2026-06-10）；P11 走 v4.0.dev0 名下，PR target=dev（M5 之后 main 一直同步，dev 分支 per B-005 是 P7.3+ 起所有新任务 target）。
+> **临时进展（2026-06-09, v4.0 收尾）**：P4.4b + P6.3b + P6.4b + P8.1-P8.6 + P9 + P10 + M1/M2 收尾 全部 ✅ — baseline 4/5 SUCCESS 持平 v3.1（level3_x64 修复: ret2libc-write-x64 SUCCESS, `write address leaked: 0x7f...` 实证），2-log 96% (27/28) 一致 PASS，pytest **620 passed** (0 回归, +16 recon), recon public API coverage **95% (160/168)**, primitive public API coverage 96% (355/371)。**v3.1 → v4.0.dev0 重构周期收尾，6/6 核心里程碑全部完成**。
+> **M6 内部打磨期（2026-06-10 启动）**：按 Owner 决策 "继续 v4.0.dev0 内部打磨" 启动 P11 阶段，6 个子任务 P11.0..P11.5 立项——A 文档清理 (refactor.md §13 + rebuild.md §10) / B 阻塞表瘦身 / C 6 关全绿 (AUTOPWN_VERIFY_TIMEOUT=600) / D coverage 抬升 (43.5% → 60%) / E baseline 治理 (git tag v3.1-baseline) / F orchestrator 拆分 (362 → <250 行)。**不启动 v4.1 sprint**（per Owner 决策 2026-06-10）；P11 走 v4.0.dev0 名下，PR target=`main`（per AGENTS.md 1.5 主干开发简化 2026-06-10）。
 
 ---
 
@@ -285,13 +287,13 @@
 ### 4.12 P11 — v4.0.dev0 内部打磨（M6 阶段）
 
 > **本阶段 Owner 决策（2026-06-10）**：6/6 核心里程碑（M0-M5）已全绿，按 Owner "继续 v4.0.dev0 内部打磨" 决策启动 M6 阶段。**不启动 v4.1 sprint**——P11 走 v4.0.dev0 名下，PR target=`dev`（per B-005）。
-> **范围**：6 个子任务，按"风险递增 / 依赖递减"排序——文档清理（0.8h doc-only）→ .agents 整理（0.3h）→ 6 关全绿 baseline（0.5h 纯跑）→ coverage 抬升（2h）→ baseline 治理（1.5h）→ orchestrator 拆分（2.5h）。**§2.6 豁免**：P11.0 doc-only 走 AGENTS.md §2.6.4 豁免（不需跑 §2.6 验证）；其它 P11.1..P11.5 每个 PR 必走 §2.6 5-binary 串行 + 2-log 对比。
+> **范围**：6 个子任务，按"风险递增 / 依赖递减"排序——文档清理（0.8h doc-only）→ .agents 整理（0.3h）→ 6 关全绿 baseline（0.5h 纯跑）→ coverage 抬升（2h）→ baseline 治理（1.5h）→ orchestrator 拆分（2.5h）。**验证**：P11.0 doc-only 无代码改动（pytest 626 仍跑）；P11.1..P11.5 走铁律 4 验收（pytest unit 全过 + 5-binary smoke）。
 
 | ID | 任务 | S | O | E | A | PR | Note |
 |---|---|---|---|---|---|---|---|
-| **P11.0** | **文档清理（A+B 合并 doc-only PR）**：（A）`refactor.md §13` 改"v4.0 历史"段（标注 `_legacy.py` / `_compat.py` / `autopwn.py` 已删）；（B）`rebuild.md §10` 阻塞表瘦身（B-001~B-007 全部 Resolved，改为"open = 0"段）| ⏳ | @Minzhi_Zhou | 0.8h | — | — | **§2.6 豁免** per AGENTS.md §2.6.4；**diff 预估**：~50 行 refactor.md 改写 + ~30 行 rebuild.md 改写 = ~80 行 doc diff；**Owner 决策**：A+B 合并 1 个 doc-only PR（不拆）|
+| **P11.0** | **文档清理（A+B 合并 doc-only PR）**：（A）`refactor.md §13` 改"v4.0 历史"段（标注 `_legacy.py` / `_compat.py` / `autopwn.py` 已删）；（B）`rebuild.md §10` 阻塞表瘦身（B-001~B-007 全部 Resolved，改为"open = 0"段）| ⏳ | @Minzhi_Zhou | 0.8h | — | — | **文档-only PR 豁免**（无代码改动，pytest 仍跑 626 unit tests 验证无回归）；**diff 预估**：~50 行 refactor.md 改写 + ~30 行 rebuild.md 改写 = ~80 行 doc diff；**Owner 决策**：A+B 合并 1 个 doc-only PR（不拆）|
 | **P11.1** | **`.agents/` 整理**：删除入仓的 `skills-lock.json`（0.5h）| ✅ | @Minzhi_Zhou | 0.3h | 0.05h | #P11.1 | **P11.1 spec 偏离（实际不需要任何代码操作）**：调研发现 `skills-lock.json` **从未入仓**（`git ls-files skills-lock.json` 空 + `git log -- skills-lock.json` 空），同时 `.gitignore:85` 已有 `skills-lock.json` 排除规则 + `.gitignore:84` 排除 `.agents/` 整个目录；原 P11.1 spec 假设"`skills-lock.json` 入仓需要 `git rm`" 不成立。**0 文件操作**完成 P11.1 验收：①`git ls-files skills-lock.json` 0 行 ②`git status --porcelain` clean 无 `.agents/` 残留 ③`.gitignore:84-85` 覆盖确认；本任务唯一产出 = 本行 + §6.12 P11.1 实施记录；**§2.6 验证**：无代码变更不需跑（doc-only 等价）；**Refs**：rebuild.md#M6 / AGENTS.md §1 铁律 4 |
-| **P11.2** | **6 关全绿 baseline**：跑 `AUTOPWN_VERIFY_TIMEOUT=600` 拿 canary 完整数据（0.5h 纯跑，**不动代码**）| ✅ | @Minzhi_Zhou | 0.5h | 0.3h | #P11.2 | **P11.2 spec 偏离（5/5 不可达）**：(1) v3.1 baseline 是 P0.7 临时 skin-swap 跑的，v3.1 入口已不在主分支（git branch 无 v3.1），**无法重跑 v3.1-600s** 拿对照数据 (2) v4.0-600s 实际跑 5 binary 串行 600s/binary，**实测**：canary 实际耗时 9m55s（< 600s），但 mtime 后被 `timeout` 命令杀（rc=124）— canary_fuzz 阶段完整跑完（5 byte × N padding），进入 strategies 阶段试 canary-execve-syscall / ret2libc-put-x32 时被 timeout (3) **5/5 SUCCESS 不可达**：canary strategies 阶段（试 puts leak / execve syscall 等）需要更多时间，> 10min 持续触发 timeout；**v4.0-600s vs v3.1-60s 对比** — v4.0-600s canary 走得更远（canary_fuzz 完成 + 进入 strategies 阶段），v3.1-60s canary_fuzz 被 60s 截断在 c=3,i=3,padding=288；**结论**：canary PARTIAL 是 **pre-existing 限制**（v3.1 即如此），不阻塞 v4.0 GA；**§2.6 验证**：完成 5-binary 串行 600s/binary（4/5 SUCCESS + canary PARTIAL 持平/优于 v3.1）；**输出**：`logs/v4.0-600s/`（5 文件）+ `tools/verify_v31_v40.py` 加 `--timeout=600` 参数；**6 关验收**：✅ 代码未动 / ✅ pytest N/A / ✅ 集成 N/A / ✅ §2.6 5-binary 跑通 / ✅ Owner 自审 / ✅ 文档同步 |
+| **P11.2** | **6 关全绿 baseline**：跑 `AUTOPWN_VERIFY_TIMEOUT=600` 拿 canary 完整数据（0.5h 纯跑，**不动代码**）| ✅ | @Minzhi_Zhou | 0.5h | 0.3h | #P11.2 | **P11.2 spec 偏离（5/5 不可达）**：(1) v3.1 baseline 是 P0.7 临时 skin-swap 跑的，v3.1 入口已不在主分支（git branch 无 v3.1），**无法重跑 v3.1-600s** 拿对照数据 (2) v4.0-600s 实际跑 5 binary 串行 600s/binary，**实测**：canary 实际耗时 9m55s（< 600s），但 mtime 后被 `timeout` 命令杀（rc=124）— canary_fuzz 阶段完整跑完（5 byte × N padding），进入 strategies 阶段试 canary-execve-syscall / ret2libc-put-x32 时被 timeout (3) **5/5 SUCCESS 不可达**：canary strategies 阶段（试 puts leak / execve syscall 等）需要更多时间，> 10min 持续触发 timeout；**v4.0-600s vs v3.1-60s 对比** — v4.0-600s canary 走得更远（canary_fuzz 完成 + 进入 strategies 阶段），v3.1-60s canary_fuzz 被 60s 截断在 c=3,i=3,padding=288；**结论**：canary PARTIAL 是 **pre-existing 限制**（v3.1 即如此），不阻塞 v4.0 GA；**铁律 4 验证**：完成 5-binary 串行 600s/binary（4/5 SUCCESS + canary PARTIAL 持平/优于 v3.1）；**输出**：`logs/v4.0-600s/`（5 文件）+ `tools/verify_v31_v40.py` 加 `--timeout=600` 参数；**6 关验收**：✅ 代码未动 / ✅ pytest N/A / ✅ 集成 N/A / ✅ 5-binary smoke 跑通 / ✅ Owner 自审 / ✅ 文档同步 |
 | **P11.3** | **Coverage 抬升：行覆盖 43.5% → 60%**（2h，区分 public API 覆盖率与行覆盖率）| ✅ | @Minzhi_Zhou | 2h | 0.5h | #P11.3 | **P11.3 spec 修订（高价值优先于凑数）+ 实测结果**：(1) **现状调研** — `.coverage` 是 unit tests 跑出来的（缺 integration），7 个文件都是 `recon/`，public API 行覆盖 36-48%（asm/bss/checksec/libc/plt/rop）；每个文件 missing lines 主要在 `_legacy_*` 函数（已 obsolete 字符串返回实现，per B-006/P4.4b + 字节级 parity 保留）和 `try/except` 错误处理分支。(2) **关键判断**：测 `_legacy_*` 函数 = 测已 obsolete 的 v3.1 历史代码 = 凑数；按 `check_recon_coverage.py` 设计原则，**`coverage.json` 数字不应被 _legacy 拉低**。P11.3 实际可行 spec = **扩展 recon public API error-path tests**（mock 异常路径 + bss 边缘 case + rop 解析错误），不追求具体 60% 数字（**测有意义的行不凑数**）。(3) **实施 + 验证**：在 `tests/unit/recon/test_recon_public_api.py` 加 6 个 error-path / edge-case tests（`test_collect_nonexistent_file_raises` / `test_display_with_partial_info_does_not_crash` / `test_bss_non_elf_file_returns_empty` / `test_bss_min_size_filter_rejects_small_symbols` / `test_libc_path_override_bypasses_ldd` / `test_rop_extract_empty_input_returns_zeros`）共 99 行新代码。(4) **实测行覆盖**：`pytest --cov=autopwn.recon --cov-report=term` → 44% (234/531)（从 43.5% 抬到 44% — **未达原 60% 目标也未达修订 50% 目标**，因为每个 error path 只覆盖 ~3-5 行，6 个文件共 ~30 行新增覆盖；剩 56% 主要是 `_legacy_*` 函数 + v3.1 byte-level parity 代码，按 `check_recon_coverage.py` 原则**不测**）。(5) **Owner 决策（@Minzhi_Zhou）**：**接受 44% 实测数字**，不凑数测 _legacy；**P11.3 实质价值** = 加 6 个 high-value error-path tests（每行覆盖对应真实可触发的错误处理），而非数字本身。(6) **§2.6 验证**：pytest unit 全过 626 tests（+6 新增，0 回归）；(7) **6 关验收**：✅ 代码已合 / ✅ pytest 626 pass / N/A integration / N/A baseline / ✅ Owner 自审 / ✅ 文档同步 |
 | **P11.4** | **Baseline 治理**：`git tag v3.1-baseline` 锁住当前 v3.1 logs（129712B canary 等）+ `scripts/run_verify.sh --baseline=tag` 模式（1.5h）| ✅ | @Minzhi_Zhou | 1.5h | 0.4h | #P11.4 | **P11.4 spec 修订（git tag → sha256sum lockfile）**：(1) **调研发现**：原 spec "git tag + run_verify.sh --baseline=tag" **不可行** — `.gitignore:58` 排除 `*.log`，baseline log 文件**不入仓**，git tag 不能引用不入仓的文件；`git show <tag>:logs/v3.1/canary.log` 报 "path exists on disk, but not in tag"。(2) **修订方案**：改用 **sha256sum lockfile 模式**（`logs/<baseline>/.lock` 入仓 + hash 验证 tamper detection）+ `tools/verify_v31_v40.py` 加 `--v31-dir / --v40-dir` CLI 参数（支持 `tag:` 前缀的 git tag 引用，但**当前 baseline 走 lockfile 模式**）。(3) **实施**：`scripts/baseline_lock.sh`（90 行）— 三 action：`lock <dir>` 生成 .lock（sha256sum + size + mtime + path 5 字段）；`verify <dir>` 对照 .lock 验证所有文件 hash；`list` 列出所有 .lock。`tools/verify_v31_v40.py` 加 argparse（35 行净增）+ `_resolve_dir` / `_extract_git_tag` 辅助函数（tag 引用支持，向后兼容默认路径）。(4) **验证**：`bash scripts/baseline_lock.sh lock logs/v3.1` + `lock logs/v4.0-600s` + `verify` 全过；模拟 tamper（追加 "tampered" 到 canary.log）→ `verify` 报 `[FAIL] baseline tampered`。(5) **入仓**：`logs/v3.1/.lock`（729B）+ `logs/v4.0-600s/.lock`（728B）+ `scripts/baseline_lock.sh` + `tools/verify_v31_v40.py`（35 行 net）；(6) **§2.6 验证**：unit tests 不需跑（doc-only + 工具脚本等效）；(7) **6 关验收**：✅ 代码已合 / N/A pytest（脚本不需测试）/ N/A integration / N/A baseline（baseline 本身就是输出）/ ✅ Owner 自审 / ✅ 文档同步 |
 | **P11.5** | **`orchestrator.py` 362 → <250**：拆为 `orchestrator/{recon,detect,strategy}.py` 3 子模块（2.5h）| ✅ | @Minzhi_Zhou | 2.5h | 0.7h | #P11.5 | **P11.5 实施 + 验证**：(1) **拆分方案** — 删 `autopwn/orchestrator.py` (361 行) → 新建 `autopwn/orchestrator/` 子包 4 文件：`__init__.py` (92 行：re-exports + `run()` 入口 + 完整 docstring) / `recon.py` (84 行：Phase 1) / `detect.py` (107 行：Phase 2) / `strategy.py` (53 行：Phase 3)。**新顶层 92 行 < 250 目标** ✅。(2) **行为零变更**：`__init__.py` 重导 `run` / `run_recon_phase` / `run_detect_phase` / `run_strategy_phase` 保持 `from autopwn.orchestrator import run` 兼容；`cli.py:24` 仍 `from autopwn.orchestrator import run as orchestrator_run`。(3) **测试 mock 路径调整**（49 处）：`tests/unit/test_orchestrator.py` 把 `mock.patch("autopwn.orchestrator.X")` 改为 `mock.patch("autopwn.orchestrator.recon.X")`（recon 5 个 + detect 4 个 = 9 处），其它 40 处（run_recon_phase / run_detect_phase / run_strategy_phase / cli）保留 package level。(4) **§2.6 验证**：`pytest tests/unit/` **626 passed**（0 回归，+0 新增 — 测试集未变）；5-binary 串行 60s 跑：拆后 `logs/v4.0-p115/` 5 files vs 拆前 `logs/v4.0-p44b/` 5 files — **result 一致** (canary 0/5 PARTIAL / fmtstr1 1/5 PASS / level3_x64 1/5 PASS / pie 1/5 PASS / rip 1/5 PASS) 且 strategy 选中路径一致 (ret2system x32 / PIE Backdoor / ret2system x64 等)。(5) **size 差异根因**：60s timeout 抖动（拆前 56709B vs 拆后 25680B fmtstr1）— **非拆分引入**，是 60s timeout 跑法本身不稳；选 strategy / result 路径完全一致。(6) **6 关验收**：✅ 代码已合 / ✅ pytest 626 / N/A integration / ✅ §2.6 5-binary 跑通 / ✅ Owner 自审 / ✅ 文档同步 |
@@ -4488,32 +4490,33 @@ python -m venv /tmp/autopwn-test
 
 ### 9.4 分支策略
 
+> **2026-06-10 简化**（Owner 决策）：单 Owner 项目，删 `dev` 角色，`main` 是唯一长期分支。所有 PR target=`main`，主干开发模式。
+
 | 分支 | 角色 | 保护 | 来源 / 流向 |
 |---|---|---|---|
-| `main` | **稳定版本**，CI 必绿 | 推荐: 禁止 force-push；禁止直 push（需 PR） | 来源：`dev` fast-forward（§6 阶段全部完成时升级）；发布时打 tag `vN.M.P` |
-| `dev` | **集成开发分支**，所有 PR target 这里 | 推荐: PR 前必须 §2.6 PASS + 至少 1 位 Reviewer | 来源：`feature/p{阶段}-*` fast-forward；测试中断时可 reset 到上一个绿 commit |
-| `feature/p{阶段}-*` | **单任务工作分支**（per §9.2） | 无 | fork 自 `dev`；PR target 必须是 `dev`（例外见下） |
+| `main` | **唯一长期分支**，CI 必绿 | 推荐: 禁止 force-push | 来源：feature/* / docs/* / fix/* 短期分支 PR；发布时打 tag `vN.M.P` |
+| `docs/*` `fix/*` `feature/*` | **单任务短期分支**（per §9.2） | 无 | fork 自 `main`；完成后 PR 回 `main`（单 Owner 项目 Owner 自审） |
 
-**Inaugural（2026-06-08, per B-005）**：
-- `dev` 由 `main@b95d9ec` 创建（包含 P4.1–P7.2 全部 28 commits + 本次治理变更）
+**Inaugural（2026-06-08 B-005 / 2026-06-10 简化）**：
+- v3.1 → v4.0.dev0 重构 6/6 里程碑 + M6 全部完成；`dev` 角色废除（per Owner 决策 2026-06-10）
 - 历史 P3.5 [fix] 之前的 22 commits 已在 B-004 时通过 Owner-override 直接 fast-forward 到 main，不追溯重写
-- **P7.3 起所有新任务 PR 必须 target `dev`**，本节是 §9.2 任务认领流程的强制前置
-- 团队成员从 `dev` 拉个人分支：`git checkout dev && git pull && git checkout -b feature/p{阶段}-{slug}`
+- **P11 起所有新任务 PR target `main`**（per Owner 决策 2026-06-10），本节是 §9.2 任务认领流程的强制前置
+- 单 Owner 项目简化：从 `main` 拉个人分支 `git checkout main && git pull && git checkout -b {docs|fix|feature}/{P{X}.{Y}|short-desc}`
 
-**例外通道**（per AGENTS.md §4 紧急通道，可临时跳过 `dev` 中间层）：
+**例外通道**（per AGENTS.md §4 紧急通道，可临时跳过标准流程）：
 
 | 例外 | 触发条件 | 强制配套 |
 |---|---|---|
-| **Owner-hotfix 直 main** | CI 全红阻塞合入 / 线上安全类紧急修复 / Owner 明确授权 | 1) 同 PR 内补 B-NNN 阻塞登记（§10）<br>2) §2.6 验证必须跑（不享受 §2.6.4 豁免）<br>3) PR 描述明示 "Owner-hotfix" + 原因 |
-| **文档-only 直 main** | 仅改 `AGENTS.md` / `rebuild.md` / `refactor.md` 文字（无代码 / 无 `_legacy.py` / 无 `/scripts` 改动） | 1) PR 标题含 `[docs]` 前缀<br>2) §2.6.4 自动豁免（无需 5-binary 串行）<br>3) §2.6.2 流程仍适用（pytest 仍跑） |
-| **§3 阶段切换的版本升级** | 完成全部 §4 任务升 v4.0.0 时 | `dev → main` 走 PR + 2 位 Reviewer（§9.4 升级为严格流程） |
+| **Owner-hotfix 直 main** | CI 全红阻塞合入 / 线上安全类紧急修复 / Owner 明确授权 | 1) PR 描述明示 "Owner-hotfix" + 原因<br>2) 铁律 4 验收必须跑（pytest + integration）<br>3) 同 PR 内补 B-NNN 阻塞登记（§10） |
+| **文档-only 直 main** | 仅改 `AGENTS.md` / `rebuild.md` / `refactor.md` 文字（无代码 / 无 `_legacy.py` / 无 `/scripts` 改动） | 1) PR 标题含 `[docs]` 前缀<br>2) 铁律 4 验收跑 unit tests（不必跑 5-binary） |
+| **§3 阶段切换的版本升级** | 完成全部 §4 任务升 v4.0.0 时 | 走 PR + tag `vN.M.P` 即可（无中间层） |
 
-**PR title 格式**（沿用 §9.5）：`[P{阶段}.{子任务}] {动词} {对象}`
+**PR title 格式**（沿用 §9.5）：`[P{阶段}.{子任务}] {动词} {对象}` 或 `[docs]` / `[fix]` 简短描述
 
-**Feature 分支清理**（P11.6, 2026-06-10 Owner 特批）：
-- 触发条件：`feature/p{阶段}-*` 分支的内容**已通过 fast-forward / cherry-pick 合入 `main`**（per B-004 工作流），且 后续 30 天内**无未合 commit**（用 `git rev-list --count main..feature/X` = 0 验证）
-- 清理动作：`git branch -D feature/X`（本地）+ `git push origin --delete feature/X`（远程）
-- 安全网：git reflog 默认保留 30 天，可通过 `git reflog` + `git checkout -b feature/X-recover <sha>` 恢复
+**Feature 分支清理**（2026-06-10 Owner 特批）：
+- 触发条件：`feature/*` / `docs/*` / `fix/*` 分支的内容**已通过 fast-forward / cherry-pick 合入 `main`**（per B-004 工作流），且 后续 30 天内**无未合 commit**（用 `git rev-list --count main..branch` = 0 验证）
+- 清理动作：`git branch -D <branch>`（本地）+ `git push origin --delete <branch>`（远程）
+- 安全网：git reflog 默认保留 30 天，可通过 `git reflog` + `git checkout -b <branch>-recover <sha>` 恢复
 - 不在 `rebuild.md §4` 任务清单（属于 workflow housekeeping 不属于代码改动），按 §4 紧急通道 #3 Owner 特批
 - 首次批量清理：2026-06-10 删 36 个本地 + 10 个远程 feature/*（feature/governance-dev-branch + p2-context + p3.1-p3.6 + p4.1 + p4.4b-fix-roper-int + p5.1-p5.5 + p6.1-p6.9 + p7.1-p7.10 + p8.1-p8.2-p8.3 + p8.4-integration）；其中 2 个含未合 commit 已确认内容已被 main 包含（cherry-pick 残影 + 后续 docs 超越）
 

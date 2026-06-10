@@ -74,7 +74,7 @@
 ### 铁律 4：未经验证 = 未完成
 "完成"的判定标准（**全部满足**才能把状态改 ✅）：
 
-1. ✅ 代码已合并到 `dev` 分支
+1. ✅ 代码已合并到 `main` 分支
 2. ✅ `pytest -m "not integration"` 全绿
 3. ✅ 若涉及行为变化：`pytest -m integration` 跑通对应 `Challenge/` 二进制
 4. ✅ 若涉及 `autopwn.py` 行为：在至少 1 个 `Challenge/` 二进制上跑一次，对比关键日志（`EXPLOITATION SUCCESSFUL` / 选中的 strategy 名 / 关键地址）一致
@@ -118,56 +118,6 @@
 - 任何阻塞必须在 `rebuild.md` §10 登记
 - 阻塞超过 3 天 ⇒ Owner 升级到项目 Owner
 - 阻塞超过 7 天 ⇒ 任务在周例会重新评估（继续 / 拆分 / 取消）
-
-### 2.6 验证方法论（Owner 决策 2026-06-07，临时需求 #3）
-
-> **本节是铁律 4（"未经验证 = 未完成"）的具体落地规范**。所有代码任务的验证必须按本节执行。
-
-#### 2.6.1 四大原则
-1. **串行执行**：验证脚本必须**串行**跑每个 binary。**禁止并发**——并发会引入 race condition（如 `Information_Collection.txt` 共享污染，详见 R13）。
-2. **关键节点 debug 日志**：在以下 7 个关键节点必须调用 `print_debug()`，输出到 stderr：
-   - `print_section_header` 入口（每个 section 标题）
-   - `collect_binary_info` 中 `checksec` 调用
-   - `set_permission`（提权前）
-   - `pie_backdoor_exploit` / `pie_backdoor_exploit_remote`（PIE 爆破）
-   - `ret2_system_x64` / `ret2_system_x32`（ret2system 触发）
-   - `detect_libc`（libc 探测）
-   - `canary_fuzz`（canary 暴力枚举）
-3. **logs/ 目录**：所有验证产物必须落到 `logs/<version>/<binary>.log`。`logs/` 下分 4 个子目录：
-   - `logs/v3.1/`：原 pwnpasi 3.1 baseline
-   - `logs/v4.0/`：当前 autopwn 4.0.dev0
-   - `logs/comparison/`：2-log 对比报告（`summary.md`）
-   - `logs/_debug/`：verbose 模式详细日志（不入仓，加 `.gitignore`）
-4. **2-log 对比为主**：验证结论以 v3.1 log 与 v4.0 log 的对比为依据（关键行为标记一致性 ≥ 90% 为 PASS）。
-
-#### 2.6.2 标准流程
-```bash
-# 1. 备份当前 _legacy.py
-cp autopwn/_legacy.py /tmp/_legacy_backup.py
-
-# 2. 串行跑目标版本
-bash scripts/run_verify.sh <version-tag> <bin1> [bin2] ...   # 默认 60s/binary
-# 或设长 timeout:
-AUTOPWN_VERIFY_TIMEOUT=600 bash scripts/run_verify.sh v4.0 canary fmtstr1 level3_x64 pie rip
-
-# 3. 2-log 对比
-python3 tools/verify_v31_v40.py    # 生成 logs/comparison/summary.md
-
-# 4. 验证 PASS 判定
-#    - 关键标记一致性 ≥ 90%
-#    - SUCCESS 计数与 baseline 持平或更好
-#    - 无新增 KeyError / "no suitable shellcode" 失败模式
-```
-
-#### 2.6.3 工具与脚本
-- **runner**：`scripts/run_verify.sh`（不入主包）
-- **debug helper**：`autopwn._legacy.print_debug()`（临时落 `_legacy.py`，P1 阶段移入 `core/logging.py`）
-- **对比脚本**：`tools/verify_v31_v40.py`（19 个关键行为标记）
-- **timeout**：默认 60s/二进制，可用 `AUTOPWN_VERIFY_TIMEOUT` 环境变量调整
-
-#### 2.6.4 豁免
-- 单文件 PR（≤ 50 行）可仅跑相关 1-2 个 binary 即可，**不豁免 2.6.2 流程**
-- 文档-only PR（`AGENTS.md` / `rebuild.md` / `refactor.md`）**不适用**本节
 
 ---
 
@@ -244,7 +194,6 @@ python3 tools/verify_v31_v40.py    # 生成 logs/comparison/summary.md
 | 治理规则变更 | 本文件，需 Owner 签字 |
 | 旧→新文件路径 | `rebuild.md` §11 附录 B |
 | 决策树优先级 | `rebuild.md` §11 附录 A |
-| `_legacy.py` / `_compat.py` 是什么 | `refactor.md §13`（架构 WHY）+ `rebuild.md §3.1`（行数追踪表）|
 
 ---
 
@@ -254,11 +203,12 @@ python3 tools/verify_v31_v40.py    # 生成 logs/comparison/summary.md
 
 1. **Owner 起草**变更提案
 2. 在 PR 描述中写明 **"治理变更"** + 原因
-3. **至少 1 位**其他维护者 Review
-4. 合并后**立即通知**所有 Owner（issue / 群通知）
+3. Owner 自审（**单 Owner 项目** per §2.2 — 跳过"其他维护者 Review"）
+4. 合并后**立即通知**所有 Owner（issue / 群通知；单 Owner 项目 no-op）
 5. 重要变更应回填到 `refactor.md` 的"后续扩展点"或 `rebuild.md` 的 §3 里程碑
 
 > 治理变更记录保留在本文件 §8"变更日志"，不允许只写在 PR 描述里。
+> 治理变更在**主干开发**模式下合并即可（PR target=`main`，per `rebuild.md §9.4`）——不需要"dev 集成分支"中间层。
 
 ---
 
@@ -271,6 +221,7 @@ python3 tools/verify_v31_v40.py    # 生成 logs/comparison/summary.md
 | 2026-06-07 | 1.2 | **临时需求 #2+#3 落地**：B-002 验证方法论规范化——加 §2.6（串行 + logs/ + 7 关键节点 debug + 2-log 对比）。P0.7（验证基础设施）+ P0.8（v3.1 vs v4.0 严格对比 96% 一致 PASS）按 §2.6 跑通。B-002 Resolved 2026-06-07。 | @Minzhi_Zhou | — |
 | 2026-06-07 | 1.3 | **临时需求 #4 + Owner rename**：B-001 团队改名 B-002 已 Resolved 后，**临时需求 #4**（runner 工具集扩展）按铁律 2 跑通——4 个子任务 P1.3a-d 加 14 个工具 + 2 个 qemu Popen 接口；同时 **Owner 名字从 @Ba1_Ma0 改为 @Minzhi_Zhou**——本文件签字栏 / changelog 三行 / rebuild.md §4.2 16 行 Owner 列 / tools/verify_v31_v40.py header / logs/comparison/summary.md 共 ~50 处全替换。**保留**（非 Owner）：refactor.md:265 + README.md:185 + LICENSE:3 + rebuild.md:286/294/408 中 pwnpasi 原作者 @Ba1_Ma0 引用（MIT 历史致谢，不可改）；git 历史中 9+ 个 commit 的 author name **不可改**（git 不可篡改原则）。 | @Minzhi_Zhou | — |
 | 2026-06-09 | 1.4 | **P8.1+P8.2+P8.3 落地（合入未标 ✅）**：建 `autopwn/orchestrator.py` (262 行, 3 段调度 run_recon_phase / run_detect_phase / run_strategy_phase + 顶层 run) + `autopwn/cli.py` 重写（15→116 行，从 `_legacy.main` 切到 `orchestrator.run`）+ 18 unit tests（582/582 + 17/18+1 skip 集成无回归）。**§2.6 baseline 暴露 B-006 + R16**（pre-existing P4.4/P6.4 契约错位：recon.rop.find_x64 返回 str 地址，P6.x primitives 假设 int；fmtstr1/pie 不受影响，level3_x64/rip 回归）。P8.1-P8.3 **不标 ✅**（per §1 铁律 4 — 5 关中 P8.4 baseline 暴露 B-006 而非全绿）— Owner 拍板 B-006 修复方案（P4.4b 改 `int(addr_str,16)` 推荐）后重跑 baseline 才能转 ✅。rebuild.md §4.9 + §6.9 + §3 M4 + §8 R16 + §10 B-006 同步更新。本变更**自身**也按"新需求先更新文档"路径走通：先建 §4.9 P8.1-3 🔄 占位 + §10 B-006 + §8 R16 → 实施 → §2.6 验证 → 暴露 P4.4/P6.4 风险后**回填** 实施记录。 | @Minzhi_Zhou | — |
+| 2026-06-10 | 1.5 | **重构期收尾 + 主干开发 + 删 §2.6**（Owner 决策 2026-06-10）：(1) v3.1 → v4.0.dev0 重构 6/6 里程碑 + M6 全部完成；v3.1 baseline 已不在主分支（v3.1 入口已删），§2.6 验证方法论（串行 + 7 关键节点 debug + v3.1 vs v4.0 2-log 对比）丧失 reference；**完全删 §2.6**（原 L122-170）。(2) 单 Owner 项目简化 git 流程：删 dev 角色，`main` 是唯一长期分支，所有 PR target=main（per `rebuild.md §9.4` 简化）；§1 铁律 4 第 1 条 "代码已合并到 dev" 改 "代码已合并到 main"；§7 治理变更"至少 1 位其他维护者 Review" 简化为 "Owner 自审"（per §2.2 单 Owner 项目）。(3) 删除 36 个本地 + 10 个远程 feature/* 分支（per B-004 fast-forward 工作流已合入 main，cherry 命令确认）；`rebuild.md §9.4` 加 "Feature 分支清理" 段。**影响范围**：AGENTS.md §2.6 / §5 删 `2.6` 引用；§6 删 `_legacy.py` 引用（已 obsolete）；§7 简化；rebuild.md §9.4 简化；tools/verify_v31_v40.py 保留（v3.1 logs 还在仓，2-log 对比脚本仍可跑用于历史审计） | @Minzhi_Zhou | — |
 
 ---
 

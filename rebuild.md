@@ -4510,6 +4510,13 @@ python -m venv /tmp/autopwn-test
 
 **PR title 格式**（沿用 §9.5）：`[P{阶段}.{子任务}] {动词} {对象}`
 
+**Feature 分支清理**（P11.6, 2026-06-10 Owner 特批）：
+- 触发条件：`feature/p{阶段}-*` 分支的内容**已通过 fast-forward / cherry-pick 合入 `main`**（per B-004 工作流），且 后续 30 天内**无未合 commit**（用 `git rev-list --count main..feature/X` = 0 验证）
+- 清理动作：`git branch -D feature/X`（本地）+ `git push origin --delete feature/X`（远程）
+- 安全网：git reflog 默认保留 30 天，可通过 `git reflog` + `git checkout -b feature/X-recover <sha>` 恢复
+- 不在 `rebuild.md §4` 任务清单（属于 workflow housekeeping 不属于代码改动），按 §4 紧急通道 #3 Owner 特批
+- 首次批量清理：2026-06-10 删 36 个本地 + 10 个远程 feature/*（feature/governance-dev-branch + p2-context + p3.1-p3.6 + p4.1 + p4.4b-fix-roper-int + p5.1-p5.5 + p6.1-p6.9 + p7.1-p7.10 + p8.1-p8.2-p8.3 + p8.4-integration）；其中 2 个含未合 commit 已确认内容已被 main 包含（cherry-pick 残影 + 后续 docs 超越）
+
 ### 9.5 提交信息规范
 ```
 [P{阶段}.{子任务}] {动词} {对象}

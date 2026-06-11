@@ -83,7 +83,6 @@ def _run_brute_force(ctx, *, use_remote: bool) -> bool:
          no ExploitInfo; P7.9 wires this up for the
          P3.4 report orchestrator).
     """
-    from autopwn.report import record_success
     from autopwn.core.logging import print_critical, print_info, print_payload, print_section_header, print_success, print_warning
 
     label = "Remote" if use_remote else "Local"
@@ -144,13 +143,14 @@ def _run_brute_force(ctx, *, use_remote: bool) -> bool:
                 target_binary=ctx.binary.path.name,
                 timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             )
-            record_success(info)
-            print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
-            id_ok, id_output = verify_shell(io)
-            if not id_ok:
-                print_warning(f"PieBackdoorLocalStrategy: shell verification failed (no uid= output)")
+            verify_ok, verify_output = verify_shell(io, keep_alive=True)
+            from autopwn.core.shell_verify import record_success_verified
+            ok = record_success_verified(info, verify_ok, verify_output, ctx)
+            if not ok:
+                print_warning(f"PieBackdoorLocalStrategy: shell verification failed (no PWNED in shell output)")
                 return False
-            ctx.id_output = id_output
+            ctx.id_output = verify_output
+            io.interactive()  # v4.0.4: drop user into shell; returns when user exits
             return True
 
 

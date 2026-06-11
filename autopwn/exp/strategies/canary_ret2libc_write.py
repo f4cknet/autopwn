@@ -84,14 +84,14 @@ class CanaryRet2LibcWriteX32LocalStrategy(CanaryStrategy):
             target_binary=ctx.binary.path.name,
             timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
-        from autopwn.report import record_success
-        record_success(info)
-        print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
-        id_ok, id_output = verify_shell(io)
-        if not id_ok:
-            print_warning(f"CanaryRet2LibcWriteX32LocalStrategy: shell verification failed (no uid= output)")
+        verify_ok, verify_output = verify_shell(io, keep_alive=True)
+        from autopwn.core.shell_verify import record_success_verified
+        ok = record_success_verified(info, verify_ok, verify_output, ctx)
+        if not ok:
+            print_warning(f"CanaryRet2LibcWriteX32LocalStrategy:: shell verification failed (no PWNED in shell output)")
             return False
-        ctx.id_output = id_output
+        ctx.id_output = verify_output
+        io.interactive()  # v4.0.4: drop user into shell; returns when user exits
         return True
 
 
@@ -152,14 +152,14 @@ class CanaryRet2LibcWriteX32RemoteStrategy(CanaryStrategy):
             target_binary=ctx.binary.path.name,
             timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
-        from autopwn.report import record_success
-        record_success(info)
-        print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
-        id_ok, id_output = verify_shell(io)
-        if not id_ok:
-            print_warning(f"CanaryRet2LibcWriteX32LocalStrategy: shell verification failed (no uid= output)")
+        verify_ok, verify_output = verify_shell(io, keep_alive=True)
+        from autopwn.core.shell_verify import record_success_verified
+        ok = record_success_verified(info, verify_ok, verify_output, ctx)
+        if not ok:
+            print_warning(f"CanaryRet2LibcWriteX32LocalStrategy:: shell verification failed (no PWNED in shell output)")
             return False
-        ctx.id_output = id_output
+        ctx.id_output = verify_output
+        io.interactive()  # v4.0.4: drop user into shell; returns when user exits
         return True
 
 
@@ -215,14 +215,14 @@ class CanaryRet2LibcWriteX64LocalStrategy(CanaryStrategy):
             target_binary=ctx.binary.path.name,
             timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
-        from autopwn.report import record_success
-        record_success(info)
-        print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
-        id_ok, id_output = verify_shell(io)
-        if not id_ok:
-            print_warning(f"CanaryRet2LibcWriteX32LocalStrategy: shell verification failed (no uid= output)")
+        verify_ok, verify_output = verify_shell(io, keep_alive=True)
+        from autopwn.core.shell_verify import record_success_verified
+        ok = record_success_verified(info, verify_ok, verify_output, ctx)
+        if not ok:
+            print_warning(f"CanaryRet2LibcWriteX32LocalStrategy:: shell verification failed (no PWNED in shell output)")
             return False
-        ctx.id_output = id_output
+        ctx.id_output = verify_output
+        io.interactive()  # v4.0.4: drop user into shell; returns when user exits
         return True
 
 
@@ -283,14 +283,14 @@ class CanaryRet2LibcWriteX64RemoteStrategy(CanaryStrategy):
             target_binary=ctx.binary.path.name,
             timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
-        from autopwn.report import record_success
-        record_success(info)
-        print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
-        id_ok, id_output = verify_shell(io)
-        if not id_ok:
-            print_warning(f"CanaryRet2LibcWriteX32LocalStrategy: shell verification failed (no uid= output)")
+        verify_ok, verify_output = verify_shell(io, keep_alive=True)
+        from autopwn.core.shell_verify import record_success_verified
+        ok = record_success_verified(info, verify_ok, verify_output, ctx)
+        if not ok:
+            print_warning(f"CanaryRet2LibcWriteX32LocalStrategy:: shell verification failed (no PWNED in shell output)")
             return False
-        ctx.id_output = id_output
+        ctx.id_output = verify_output
+        io.interactive()  # v4.0.4: drop user into shell; returns when user exits
         return True
 
 

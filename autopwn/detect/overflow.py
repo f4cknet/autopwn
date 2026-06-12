@@ -230,23 +230,28 @@ def analyze_vulnerable_functions(
     func_pattern = r"^[0-9a-f]+ <(\w+)>:(.*?)(?=^\d+ <\w+>:|\Z)"
     functions = re.finditer(func_pattern, content, re.MULTILINE | re.DOTALL)
 
+    # v4.0.2c3: defer to recon/asm._extract_buffer_lea_padding for
+    # the per-function padding computation (epilogue-aware — skips
+    # ``lea -0x8(%ebp),%esp`` restore-esp instructions).
+    from autopwn.recon.asm import _extract_buffer_lea_padding
+
     vulnerable: List[dict] = []
     for func in functions:
         func_name = func.group(1)
         func_body = func.group(2)
-        has_lea = "lea" in func_body
-        has_dangerous_call = any(c in func_body for c in _DANGEROUS_CALLS)
-        if has_lea and has_dangerous_call:
-            lea_match = _LEA_RE.search(func_body)
-            if lea_match:
-                offset_dec = abs(int(lea_match.group(1), 16))
-                alignment = 8 if bit == 64 else 4
-                padding = offset_dec + alignment
-                vulnerable.append({
-                    "name": func_name,
-                    "stack_size": offset_dec,
-                    "padding": padding,
-                })
+        if "lea" not in func_body:
+            continue
+        padding = _extract_buffer_lea_padding(func_body, bit)
+        if padding is not None:
+            # Recover the raw stack size for the vulnerable dict
+            # (same value _extract_buffer_lea_padding computed
+            # internally — recompute via the offset - alignment).
+            offset_dec = padding - (8 if bit == 64 else 4)
+            vulnerable.append({
+                "name": func_name,
+                "stack_size": offset_dec,
+                "padding": padding,
+            })
 
     if not vulnerable:
         return None

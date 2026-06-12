@@ -80,6 +80,62 @@ _LEA_RE = re.compile(r"lea\s+(-?0x[0-9a-f]+)\(%[er]bp\)")
 # ``call.*read@plt`` — matches both AT&T and intel-style call sites
 _DANGEROUS_CALLS = ("read", "gets", "fgets", "scanf")
 
+# v4.0.2c3: pattern for finding a dangerous call site in func body.
+# Loose match — accepts ``call <addr> <name>@plt`` (AT&T objdump) or
+# ``call <name>`` (intel).  Word-boundary-ish: the dangerous name
+# must be followed by a non-letter (so "getegid" doesn't match "gets").
+_DANGEROUS_CALL_RE_TPL = r"call\s+[\w<>, ]*?{name}(?![A-Za-z0-9_])"
+
+
+def _extract_buffer_lea_padding(func_body: str, bit: int) -> Optional[int]:
+    """v4.0.2c3: find the buffer-setup lea in a function body.
+
+    Walks the disassembly to find:
+      1. The FIRST dangerous call (``read``/``gets``/``fgets``/``scanf``)
+      2. The LAST ``lea -N(%ebp/%rbp)`` BEFORE that call
+
+    The second pattern is the buffer setup; the lea in the function
+    epilogue (``lea -0x8(%ebp),%esp`` to restore esp) is AFTER the
+    dangerous call and is correctly excluded.
+
+    Returns the inferred padding (``abs(N) + 8`` for x64, + 4 for
+    x32) or ``None`` when no buffer-setup lea was found before a
+    dangerous call.
+
+    Args:
+        func_body: raw AT&T disassembly text of a single function
+            (the ``group(2)`` of the per-function regex).
+        bit: ``32`` or ``64`` (architecture).
+
+    Note:
+        Only matches ``%ebp``/``%rbp``-based leas.  Binaries that
+        use ``and $0xf0,%esp; sub $N,%esp`` + ``lea -M(%esp)``
+        (e.g. Challenge/fmtstr1) still return ``None`` — this is
+        a pre-existing limitation.  The fix only addresses the
+        **false positive** (epilogue lea being misread as buffer
+        offset), not the false negative (buffer lea using %esp).
+    """
+    first_dangerous_pos = -1
+    for dangerous in _DANGEROUS_CALLS:
+        pattern = _DANGEROUS_CALL_RE_TPL.format(name=re.escape(dangerous))
+        m = re.search(pattern, func_body)
+        if m and (first_dangerous_pos == -1 or m.start() < first_dangerous_pos):
+            first_dangerous_pos = m.start()
+    if first_dangerous_pos == -1:
+        return None
+
+    # All lea -N(%ebp/rbp) matches; pick the LAST one before the
+    # first dangerous call (the buffer setup lea is the closest
+    # preceding lea, not the first one in the function).
+    lea_matches = list(_LEA_RE.finditer(func_body))
+    valid_leas = [m for m in lea_matches if m.start() < first_dangerous_pos]
+    if not valid_leas:
+        return None
+
+    lea_match = valid_leas[-1]
+    offset_dec = abs(int(lea_match.group(1), 16))
+    return offset_dec + 8 if bit == 64 else offset_dec + 4
+
 
 def vuln_func_name(program: Path) -> List[str]:
     """Return names of functions with ``lea`` + dangerous call (BOF candidates).
@@ -131,6 +187,11 @@ def asm_stack_overflow(program: Path, bit: int) -> Optional[int]:
     + 4`` for 32-bit (the +4/+8 accounts for the saved RBP / return
     address).
 
+    v4.0.2c3: the buffer-setup lea is the **last** ``lea -N(%ebp/rbp)``
+    before the first dangerous call (not the first lea in the function
+    body, which can be the function epilogue ``lea -0x8(%ebp),%esp``).
+    See :func:`_extract_buffer_lea_padding` for the extraction logic.
+
     Args:
         program: path to the target ELF.
         bit: ``32`` or ``64`` (architecture).
@@ -151,14 +212,13 @@ def asm_stack_overflow(program: Path, bit: int) -> Optional[int]:
         func_body = func.group(2)
         has_lea = "lea" in func_body
         has_call = "call" in func_body
-        has_dangerous_call = any(call in func_body for call in _DANGEROUS_CALLS)
-        if not (has_lea and has_call and has_dangerous_call):
+        if not (has_lea and has_call):
             continue
-        lea_match = _LEA_RE.search(func_body)
-        if lea_match:
-            offset_hex = lea_match.group(1)
-            offset_dec = abs(int(offset_hex, 16))
-            padding = offset_dec + 8 if bit == 64 else offset_dec + 4
+        # v4.0.2c3: find the buffer-setup lea (closest lea BEFORE
+        # the first dangerous call) instead of the function's first
+        # lea (which can be the epilogue ``lea -0x8(%ebp),%esp``).
+        padding = _extract_buffer_lea_padding(func_body, bit)
+        if padding is not None:
             return padding
     return None
 
@@ -172,9 +232,12 @@ def analyze_vulnerable_functions(program: Path, bit: int) -> Optional[int]:
     port (which prints the VULNERABLE FUNCTIONS table) is a small
     variation on the same parse loop.
 
+    v4.0.2c3: also uses :func:`_extract_buffer_lea_padding` for
+    epilogue-aware extraction (see :func:`asm_stack_overflow`).
+
     Args:
         program: path to the target ELF.
-        bit: ``32`` or ``64``.
+        bit: ``32`` or ``64`` (architecture).
 
     Returns:
         Padding (int) of the first vulnerable function, or ``None``.
@@ -187,15 +250,13 @@ def analyze_vulnerable_functions(program: Path, bit: int) -> Optional[int]:
         func_name = func.group(1)
         func_body = func.group(2)
         has_lea = "lea" in func_body
-        has_dangerous_call = any(call in func_body for call in _DANGEROUS_CALLS)
-        if not (has_lea and has_dangerous_call):
+        if not has_lea:
             continue
-        lea_match = _LEA_RE.search(func_body)
-        if lea_match:
-            offset_hex = lea_match.group(1)
-            offset_dec = abs(int(offset_hex, 16))
-            alignment = 8 if bit == 64 else 4
-            return offset_dec + alignment
+        # v4.0.2c3: same epilogue-aware buffer-lea extraction as
+        # :func:`asm_stack_overflow`.
+        padding = _extract_buffer_lea_padding(func_body, bit)
+        if padding is not None:
+            return padding
     return None
 
 

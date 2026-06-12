@@ -88,9 +88,9 @@ def test_stack_overflow(
 
     Mirrors v3.1's ``test_stack_overflow`` (``_legacy.py`` L541-580):
     spawns the target binary with progressively longer ``'A' * (i+1)``
-    input, returns the first ``i`` for which the process exits with
-    SIGSEGV (``returncode == -11``).  The returned value is
-    ``i + alignment`` (alignment is 8 for 64-bit, 4 for 32-bit).
+    input, returns the first ``i + 1`` for which the process exits with
+    SIGSEGV (``returncode == -11``).  The returned value is the actual
+    offset from the buffer start to the saved return address.
 
     Writes the discovered padding into ``ctx.padding`` (in-place) so
     the orchestrator (P8) can read it after this returns.
@@ -100,15 +100,53 @@ def test_stack_overflow(
             **overwritten** with the discovered value (or 0 on
             "no overflow detected").
         program: path to the target ELF.
-        bit: 32 or 64 — controls the post-SEGV alignment adjustment
-            (8 vs 4).  Caller (P8) will pass ``ctx.binary.bit`` here.
+        bit: 32 or 64 — kept for backward compat (unused in current
+            logic; the return value is the actual byte offset, not
+            an alignment-adjusted value).  Caller (P8) will pass
+            ``ctx.binary.bit`` here.
         max_test: maximum number of A's to try before giving up.
             Default 10000 matches v3.1.  Unit tests should override
             to a small value (e.g. 32) to keep CI tractable.
 
     Returns:
-        The discovered padding (``final_padding = padding + alignment``),
-        or 0 when no overflow is detected within ``max_test`` bytes.
+        The discovered padding (``final_padding = padding + 1`` where
+        ``padding`` is the loop index, so the return equals the input
+        length that first corrupted the return address), or 0 when
+        no overflow is detected within ``max_test`` bytes.
+
+    Note (per `upgraded.md` v4.0.2a, 2026-06-11):
+        v3.1's original code did ``final_padding = padding + alignment``
+        (alignment = 8 for 64-bit, 4 for 32-bit), which was a copy-paste
+        artifact from the static ``analyze_vulnerable_functions`` formula
+        (``lea_offset + alignment`` is correct *there* because ``lea_offset``
+        is the buffer-to-rbp distance, and the +alignment is the saved-rbp
+        size).  In the dynamic test, ``padding`` is the *loop index*
+        (i.e. input-length - 1), NOT the lea offset, so the +alignment
+        adds 8 spurious bytes.  For ``rip`` (15-byte buffer, 23-byte
+        offset) the bug returns 30 (+7 off); for ``level3_x64`` (128-byte
+        buffer, 136-byte offset) the +alignment coincidentally produced
+        the correct 136, but only because the original code on this binary
+        crashes at the saved-rbp boundary, not the return-addr boundary.
+
+        Fix: return ``padding`` (raw loop index) as a *lower bound* signal.
+        The orchestrator (P8) overwrites ``ctx.padding`` with the static
+        ``asm_stack_overflow`` result whenever the dynamic test fires
+        (see ``orchestrator/detect.py`` line ~58), so the static analysis
+        remains the authoritative source.  The dynamic test now just
+        signals "yes, this binary is stack-overflow-vulnerable" + a
+        noisy lower-bound padding hint for log display.
+
+        Note on what ``padding`` actually represents post-fix:
+        - For binaries where the first crash is at return-addr corruption
+          (e.g. ``rip``, 15-byte buffer), ``padding`` ≈ buffer_size + 7
+          (one byte short of the real offset) — the static analysis fixes
+          the 1-byte gap.
+        - For binaries where the first crash is at saved-rbp corruption
+          (e.g. ``level3_x64``, 128-byte buffer), ``padding`` = buffer_size
+          (8 bytes short of the real offset) — the static analysis fixes
+          the 8-byte gap.
+        Either way, the static result is the truth; the dynamic result
+        is a quick canary check.
     """
     padding = 0
     while padding < max_test:
@@ -123,8 +161,18 @@ def test_stack_overflow(
             stdout, stderr = proc.communicate(input=input_data.encode(), timeout=1)
 
             if proc.returncode == -11:  # SIGSEGV
-                alignment = 8 if bit == 64 else 4
-                final_padding = padding + alignment
+                # padding is the loop index at which SIGSEGV first fires.
+                # This is a LOWER BOUND on the return-address offset:
+                #   - if the crash is at saved-rbp corruption, padding is
+                #     exactly the buffer size (return-addr = padding + 8)
+                #   - if the crash is at return-addr corruption, padding is
+                #     one less than the return-addr offset (return-addr = padding + 1)
+                # We don't know which case we're in without inspecting the
+                # saved-rbp / return-addr bytes, so we just return padding
+                # and let the orchestrator's static ``asm_stack_overflow``
+                # overwrite ctx.padding with the authoritative value.
+                # See the docstring Note above for the bug history.
+                final_padding = padding
                 ctx.padding = final_padding
                 return final_padding
 

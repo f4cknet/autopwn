@@ -131,18 +131,15 @@ class Ret2LibcWriteX32LocalStrategy(ExploitStrategy):
             timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
 
-        from autopwn.report import record_success
-        record_success(info)
 
-        id_ok, id_output = verify_shell(io)
-
-        if not id_ok:
-
-            print_warning(f"Ret2LibcWriteX32LocalStrategy: shell verification failed (no uid= output)")
-
+        verify_ok, verify_output = verify_shell(io, keep_alive=True)
+        from autopwn.core.shell_verify import record_success_verified
+        ok = record_success_verified(info, verify_ok, verify_output, ctx)
+        if not ok:
+            print_warning(f"Ret2LibcWriteX32LocalStrategy: shell verification failed (no PWNED in shell output)")
             return False
-
-        ctx.id_output = id_output
+        ctx.id_output = verify_output
+        io.interactive()  # v4.0.4: drop user into shell; returns when user exits
         return True
 
 
@@ -217,18 +214,15 @@ class Ret2LibcWriteX32RemoteStrategy(ExploitStrategy):
             timestamp=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
 
-        from autopwn.report import record_success
-        record_success(info)
 
-        id_ok, id_output = verify_shell(io)
-
-        if not id_ok:
-
-            print_warning(f"Ret2LibcWriteX32LocalStrategy: shell verification failed (no uid= output)")
-
+        verify_ok, verify_output = verify_shell(io, keep_alive=True)
+        from autopwn.core.shell_verify import record_success_verified
+        ok = record_success_verified(info, verify_ok, verify_output, ctx)
+        if not ok:
+            print_warning(f"Ret2LibcWriteX32LocalStrategy: shell verification failed (no PWNED in shell output)")
             return False
-
-        ctx.id_output = id_output
+        ctx.id_output = verify_output
+        io.interactive()  # v4.0.4: drop user into shell; returns when user exits
         return True
 
 

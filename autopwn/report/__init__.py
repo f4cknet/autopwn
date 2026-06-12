@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Optional
 
 from autopwn.context import ExploitContext
-from autopwn.core.logging import print_critical
 from autopwn.report.code import generate_code
 from autopwn.report.docx import generate_docx
 from autopwn.report.model import ExploitInfo
@@ -70,8 +69,12 @@ def record_success(info: ExploitInfo) -> None:
 
     Side effects
     ------------
-    * Prints the "EXPLOITATION SUCCESSFUL! Dropping to shell..." banner
-      (always — this is a status message, not a report artifact).
+    * **No banner print here** (v4.0.3): the "EXPLOITATION
+      SUCCESSFUL" banner is printed by
+      :func:`autopwn.core.shell_verify.record_success_verified`
+      only after :func:`verify_shell` confirms a real shell.
+      :func:`record_success` is now a pure report-dispatch helper
+      (no stdout).
     * If ``_current_ctx`` is set AND ``ctx.enable_report`` is True,
       calls :func:`generate_docx` to write the .docx (or .md fallback)
       to ``ctx.report_dir``.
@@ -93,10 +96,12 @@ def record_success(info: ExploitInfo) -> None:
     ``autopwn._legacy.handle_exploitation_success`` and will be
     removed in P8.
     """
-    # 1. Banner (unchanged from legacy L361 — always printed)
-    print_critical("EXPLOITATION SUCCESSFUL! Dropping to shell...")
-
-    # 2. Resolve ctx (from module-level carrier set by main())
+    # 1. Resolve ctx (from module-level carrier set by main())
+    #    NOTE: the "EXPLOITATION SUCCESSFUL" banner is NOT printed
+    #    here anymore (per v4.0.3).  It is now printed by
+    #    :func:`autopwn.core.shell_verify.record_success_verified`
+    #    after :func:`verify_shell` confirms a real shell was
+    #    acquired.  See ``upgraded.md`` §3.1 v4.0.3.
     ctx = _current_ctx
 
     # 3. --no-report gate (P3.5)

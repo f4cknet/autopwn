@@ -20,6 +20,11 @@ writes outside ctx mutation; unit-testable in isolation under P9.1):
   * **P4.6** (``asm``)     — ``vuln_func_name(program) -> list[str]``,
     ``asm_stack_overflow(program, bit) -> int``, and
     ``analyze_vulnerable_functions(program, bit) -> int``
+  * **P4.7** (``frame``)   — ``extract_frame_context(program, bit)
+    -> Optional[FrameContext]`` and ``compute_required_ret_count(
+    lea_offset, frame_size) -> Literal[0, 1]`` (v4.0.5; replaces
+    the v4.0.2b magic-number heuristic with a typed
+    ``FrameContext`` capturing the caller's frame structure)
 """
 from __future__ import annotations
 
@@ -46,6 +51,11 @@ from autopwn.recon.asm import (
     asm_stack_overflow as asm_stack_overflow,
     analyze_vulnerable_functions as analyze_vulnerable_functions,
 )
+from autopwn.recon.frame import (
+    FrameContext as FrameContext,
+    compute_required_ret_count as compute_required_ret_count,
+    extract_frame_context as extract_frame_context,
+)
 
 __all__: list[str] = [
     "collect",
@@ -59,4 +69,7 @@ __all__: list[str] = [
     "vuln_func_name",
     "asm_stack_overflow",
     "analyze_vulnerable_functions",
+    "FrameContext",
+    "compute_required_ret_count",
+    "extract_frame_context",
 ]

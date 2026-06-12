@@ -20,7 +20,7 @@ from autopwn.core.logging import (
     print_section_header,
     print_warning,
 )
-from autopwn.recon import checksec, libc, plt, rop
+from autopwn.recon import checksec, frame, libc, plt, rop
 
 
 def run_recon_phase(ctx: ExploitContext) -> None:
@@ -37,11 +37,15 @@ def run_recon_phase(ctx: ExploitContext) -> None:
        program)`` (mutates ``ctx.has_*`` in-place).
     4. ``ROP GADGET DISCOVERY`` section header + ``rop.find_x64``
        or ``rop.find_x32`` (per ``ctx.binary.bit``).
+    5. **v4.0.5**: ``frame.extract_frame_context(program, bit)`` →
+       populate ``ctx.frame_context`` (P4.7) so primitives can
+       decide the stack-alignment ``ret`` gadget count from real
+       ABI arithmetic, not the v4.0.2b magic number.
 
     Args:
         ctx: the run's :class:`ExploitContext`.  ``ctx.binary``,
-            ``ctx.libc``, ``ctx.has_*`` and ``ctx.gadgets_*`` are
-            populated by this function.
+            ``ctx.libc``, ``ctx.has_*``, ``ctx.gadgets_*`` and
+            ``ctx.frame_context`` are populated by this function.
 
     Returns:
         ``None`` — mutates ``ctx`` in place.
@@ -79,6 +83,15 @@ def run_recon_phase(ctx: ExploitContext) -> None:
     else:
         print_info("searching for x32 ROP gadgets")
         ctx.gadgets_x32 = rop.find_x32(ctx, program)
+
+    # v4.0.5 (P4.7): extract caller's frame structure for ret-count math.
+    # Failure is non-fatal: ``frame.extract_frame_context`` returns
+    # ``None`` (or a conservative default) when no vulnerable function
+    # is found; primitives fall back to ``required_ret_count=1``.
+    bit = ctx.binary.bit
+    ctx.frame_context = frame.extract_frame_context(program, bit) or frame.FrameContext(
+        required_ret_count=1,
+    )
 
 
 __all__ = ["run_recon_phase"]

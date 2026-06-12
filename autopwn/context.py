@@ -22,7 +22,13 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Optional, Tuple
+
+if TYPE_CHECKING:
+    # ``FrameContext`` lives in the recon layer (modeled by P4.7 / v4.0.5);
+    # imported only for type hints so ``context.py`` remains import-cycle-free
+    # and pwntools-free (per module docstring §"Design principles").
+    from autopwn.recon.frame import FrameContext
 
 
 class ContextError(RuntimeError):
@@ -152,6 +158,17 @@ class ExploitContext:
     libc: LibcInfo = field(default_factory=LibcInfo)
     gadgets_x64: Optional[RopGadgetsX64] = None
     gadgets_x32: Optional[RopGadgetsX32] = None
+
+    # v4.0.5: stack-frame context for the vulnerable function.  Populated
+    # by ``recon.frame.extract_frame_context`` (P4.7) during the recon phase.
+    # Primitives (``Ret2LibcWriteX64`` / ``Ret2SystemX64`` /
+    # ``Ret2LibcPutX64``) consume ``required_ret_count`` to decide whether
+    # the stack-alignment ``ret`` gadget is needed before ``system()``.
+    # Replaces the v4.0.2b magic-number heuristic (``padding < 32``) that
+    # silently mis-aligned the caller's rsp and triggered do_system+0x73's
+    # movaps SIGSEGV on glibc 2.35+.  See ``fix.md`` §2.1 (root cause) and
+    # §3.1 (v4.0.5 task).
+    frame_context: Optional["FrameContext"] = None
 
     # Vulnerability facts — populated by detect phase
     padding: int = 0
@@ -329,3 +346,8 @@ __all__ = [
     "ExploitContext",
     "ContextError",
 ]
+# ``FrameContext`` is intentionally NOT re-exported from this module:
+# it lives in ``autopwn.recon.frame`` (the recon layer is the canonical
+# owner) and is imported into the type annotation via ``TYPE_CHECKING``.
+# Callers that need the class object should ``from autopwn.recon.frame
+# import FrameContext`` directly.

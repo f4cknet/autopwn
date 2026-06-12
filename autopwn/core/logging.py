@@ -45,10 +45,10 @@ def print_banner():
 {Colors.BOLD}{Colors.CYAN}
     ┌────────────────────────────────────────────────────────────────┐
     │                                                                │
-    │   {Colors.YELLOW}AutoPwn{Colors.CYAN}  ·  Automated Binary Exploitation Framework           │
+    │   {Colors.YELLOW}AutoPwn{Colors.CYAN}  ·  Automated Binary Exploitation Framework          │
     │                                                                │
-    │   v{VERSION:<10}  by {AUTHOR}{Colors.CYAN}  ({ORG_CN})             │
-    │   {Colors.UNDERLINE}{GITHUB}{Colors.END}{Colors.CYAN}                          │
+    │   v{VERSION:<10}  by {AUTHOR}{Colors.CYAN}  ({ORG_CN})           │
+    │   {Colors.UNDERLINE}{GITHUB}{Colors.END}{Colors.CYAN}                           │
     │                                                                │
     └────────────────────────────────────────────────────────────────┘
 {Colors.END}

@@ -5,8 +5,8 @@ Maintained by qzdx_soc (衢州电信安全运营中心).
 """
 from __future__ import annotations
 
-__version__ = "4.0.dev0"
-__author__ = "qzdx_soc"
+__version__ = "4.0.dev"
+__author__ = "MinZhiZhou"
 __org__ = "衢州电信安全运营中心"
 __github__ = "https://github.com/f4cknet/autopwn"
 

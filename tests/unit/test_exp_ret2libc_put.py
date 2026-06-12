@@ -629,3 +629,53 @@ class TestRet2LibcPutRunInvokesRecordSuccess:
         assert first_recv.kwargs.get("timeout") == 0.5, (
             f"initial io.recv() must have timeout=0.5; got {first_recv}"
         )
+
+    def test_x64_local_recvuntil_called_with_timeout_2(self):
+        """v4.0.2c4: x64 recvuntil must have timeout=2 (mirror x32
+        fix from v4.0.2c1 — same hang risk if binary doesn't produce
+        the expected 0x7f-terminated leak)."""
+        from unittest.mock import patch, MagicMock
+        from autopwn.exp.strategies.ret2libc_put_x64 import (
+            Ret2LibcPutX64LocalStrategy,
+        )
+
+        s = Ret2LibcPutX64LocalStrategy()
+        ctx = _ctx_64()
+
+        mock_io = MagicMock()
+        # Make recvuntil raise so run() returns False cleanly
+        mock_io.recvuntil.side_effect = EOFError("closed")
+
+        with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.ret2libc_put_x64.verify_shell"), \
+             patch("autopwn.report.record_success"):
+            s.run(ctx)
+
+        leak_call = mock_io.recvuntil.call_args_list[0]
+        assert leak_call.kwargs.get("timeout") == 2, (
+            f"x64 recvuntil must be called with timeout=2; got {leak_call}"
+        )
+
+    def test_x64_local_initial_recv_called_with_timeout(self):
+        """v4.0.2c4: x64 initial ``io.recv()`` (banner read) must
+        have timeout=0.5 (mirror x32 fix)."""
+        from unittest.mock import patch, MagicMock
+        from autopwn.exp.strategies.ret2libc_put_x64 import (
+            Ret2LibcPutX64LocalStrategy,
+        )
+
+        s = Ret2LibcPutX64LocalStrategy()
+        ctx = _ctx_64()
+
+        mock_io = MagicMock()
+        mock_io.recvuntil.side_effect = EOFError("closed")
+
+        with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.ret2libc_put_x64.verify_shell"), \
+             patch("autopwn.report.record_success"):
+            s.run(ctx)
+
+        first_recv = mock_io.recv.call_args_list[0]
+        assert first_recv.kwargs.get("timeout") == 0.5, (
+            f"x64 initial io.recv() must have timeout=0.5; got {first_recv}"
+        )

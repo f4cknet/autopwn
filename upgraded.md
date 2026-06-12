@@ -254,7 +254,11 @@ AUTOPWN_VERIFY_TIMEOUT=60 bash scripts/run_verify.sh v<X>.<Y>-smoke canary fmtst
 # log 输出到 logs/v<X>.<Y>-smoke/
 ```
 
-**当前基准**：4/5 SUCCESS（fmtstr1 / level3_x64 / pie / rip 全部 EXPLOITATION SUCCESSFUL，canary PARTIAL）
+**当前基准**（2026-06-12 v4.0.5 merge 后更新）：
+- v4.0.4 静默后**真实成功** = 3/5（rip + level3_x64 + pie，docx + interactive 都到位；fmtstr1 / canary 仍 pre-existing hang）
+- `run_verify.sh` `rc=0` 计数 = 3/5（rip / level3_x64 / pie；fmtstr1 / canary rc=124 timeout）
+- 旧 v3.1 banner "EXPLOITATION SUCCESSFUL" 计数 4/5 已**不再适用**（v4.0.4 已删 banner + 改为 record_success_verified 仅在 verify_shell=True 路径触发）—— 4/5 是 v3.1 假阳性基线；4/5 vs 3/5 差的是 fmtstr1 在 v3.1 banner 下被误判 SUCCESS，在 v4.0.4+ 静默下露出真 hang
+- v4.0.5 FrameContext 把 level3_x64 从"假阳性 SUCCESS + SIGSEGV"升级为"真 SUCCESS + interactive"
 
 ### 5.5 关 5: Owner 自审
 

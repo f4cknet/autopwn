@@ -576,3 +576,56 @@ class TestRet2LibcPutRunInvokesRecordSuccess:
         assert result is False
         # record_success should NOT be called on leak failure
         assert mock_record.call_count == 0
+
+    def test_x32_local_recvuntil_called_with_timeout_2(self):
+        """v4.0.2c1: recvuntil must be called with timeout=2 to prevent
+        the fmtstr1 hang (canary-protected binary never produces a
+        puts leak → recvuntil blocks forever without timeout)."""
+        from unittest.mock import patch, MagicMock
+        from autopwn.exp.strategies.ret2libc_put_x32 import (
+            Ret2LibcPutX32LocalStrategy,
+        )
+
+        s = Ret2LibcPutX32LocalStrategy()
+        ctx = _ctx_32()
+
+        mock_io = MagicMock()
+        # Make recvuntil raise so run() returns False cleanly
+        mock_io.recvuntil.side_effect = EOFError("closed")
+
+        with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.ret2libc_put_x32.verify_shell"), \
+             patch("autopwn.report.record_success"):
+            s.run(ctx)
+
+        # Verify recvuntil was called with timeout=2 (the v4.0.2c1 fix)
+        leak_call = mock_io.recvuntil.call_args_list[0]
+        assert leak_call.kwargs.get("timeout") == 2, (
+            f"recvuntil must be called with timeout=2; got {leak_call}"
+        )
+
+    def test_x32_local_initial_recv_called_with_timeout(self):
+        """v4.0.2c1: initial ``io.recv()`` (banner read) must have
+        a timeout so the canary+no-prompt case (fmtstr1) doesn't
+        block waiting for output that never arrives."""
+        from unittest.mock import patch, MagicMock
+        from autopwn.exp.strategies.ret2libc_put_x32 import (
+            Ret2LibcPutX32LocalStrategy,
+        )
+
+        s = Ret2LibcPutX32LocalStrategy()
+        ctx = _ctx_32()
+
+        mock_io = MagicMock()
+        mock_io.recvuntil.side_effect = EOFError("closed")
+
+        with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.ret2libc_put_x32.verify_shell"), \
+             patch("autopwn.report.record_success"):
+            s.run(ctx)
+
+        # First recv() call should have timeout=0.5 (the v4.0.2c1 fix)
+        first_recv = mock_io.recv.call_args_list[0]
+        assert first_recv.kwargs.get("timeout") == 0.5, (
+            f"initial io.recv() must have timeout=0.5; got {first_recv}"
+        )

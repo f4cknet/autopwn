@@ -379,6 +379,70 @@ class TestRunDetectPhase:
         canary_mod.canary_fuzz.assert_not_called()
         fmtstr_mod.detect_format_string_vulnerability.assert_not_called()
 
+    def test_fmtstr_detection_populates_ctx_fields(self, tmp_path):
+        """v4.0.2c1: when ``detect_format_string_vulnerability`` returns
+        ``vulnerable=True`` AND ``find_offset`` + ``find_bss`` succeed,
+        the orchestrator populates ``ctx.fmtstr_offset`` and
+        ``ctx.fmtstr_buf`` (previously P5.2 spec said "do not write to
+        ctx" — v4.0.2c1 fixes this so FmtstrX{32,64}LocalStrategy can
+        build_payload for canary+fmtstr binaries like Challenge/fmtstr1)."""
+        from autopwn.recon import bss as recon_bss
+        from autopwn.recon.bss import BSSSymbol
+
+        ctx = _make_ctx(tmp_path, bit=32, canary=True)
+        ctx.padding = 12  # not zero — fmtstr strategy only via new path
+
+        with mock.patch("autopwn.orchestrator.detect.detect_binsh") as binsh_mod, \
+             mock.patch("autopwn.orchestrator.detect.detect_overflow"), \
+             mock.patch("autopwn.orchestrator.detect.detect_canary") as canary_mod, \
+             mock.patch("autopwn.orchestrator.detect.detect_fmtstr") as fmtstr_mod, \
+             mock.patch.object(recon_bss, "find_bss") as mock_find_bss:
+            binsh_mod.check_binsh.return_value = False
+            probe = mock.MagicMock()
+            probe.vulnerable = True
+            fmtstr_mod.detect_format_string_vulnerability.return_value = probe
+            fmtstr_mod.find_offset.return_value = 7
+            canary_mod.leakage_canary_value.return_value = []
+            canary_mod.canary_fuzz.return_value = None
+            mock_find_bss.return_value = [
+                BSSSymbol(name="buf", address=0x804a080, size=128),
+            ]
+
+            run_detect_phase(ctx)
+
+        # v4.0.2c1 assertions: ctx fields now populated
+        assert ctx.fmtstr_offset == 7
+        assert ctx.fmtstr_buf == 0x804a080
+        fmtstr_mod.find_offset.assert_called_once()
+
+    def test_fmtstr_detection_graceful_on_find_offset_failure(self, tmp_path):
+        """v4.0.2c1: if ``find_offset`` raises (sentinel not found
+        in leaked stack tokens), the orchestrator swallows the
+        exception and leaves ``ctx.fmtstr_offset = None`` — the
+        existing fmtstr strategy gate still rejects with
+        ``padding == 12``."""
+        ctx = _make_ctx(tmp_path, bit=32, canary=True)
+        ctx.padding = 12
+
+        with mock.patch("autopwn.orchestrator.detect.detect_binsh") as binsh_mod, \
+             mock.patch("autopwn.orchestrator.detect.detect_overflow"), \
+             mock.patch("autopwn.orchestrator.detect.detect_canary") as canary_mod, \
+             mock.patch("autopwn.orchestrator.detect.detect_fmtstr") as fmtstr_mod:
+            binsh_mod.check_binsh.return_value = False
+            probe = mock.MagicMock()
+            probe.vulnerable = True
+            fmtstr_mod.detect_format_string_vulnerability.return_value = probe
+            fmtstr_mod.find_offset.side_effect = ValueError(
+                "AAAA sentinel not found in leaked stack tokens"
+            )
+            canary_mod.leakage_canary_value.return_value = []
+            canary_mod.canary_fuzz.return_value = None
+
+            # Should not raise
+            run_detect_phase(ctx)
+
+        assert ctx.fmtstr_offset is None
+
     def test_manual_padding_skips_overflow_test(self, tmp_path):
         """``ctx.padding != 0`` (from ``-f``) skips the dynamic overflow test."""
         ctx = _make_ctx(tmp_path)

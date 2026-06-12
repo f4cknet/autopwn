@@ -99,6 +99,25 @@ def run_detect_phase(ctx: ExploitContext) -> None:
                 print_warning("failed to leak canary value (will retry via candidates())")
             else:
                 print_success("canary value successfully leaked")
+            # v4.0.2c1: when fmtstr is detected, populate the
+            # primitive's input fields so FmtstrX{32,64}LocalStrategy
+            # can build_payload (was previously gated on
+            # ``ctx.padding == 0`` only, which excluded canary+fmtstr
+            # binaries like Challenge/fmtstr1).
+            try:
+                ctx.fmtstr_offset = detect_fmtstr.find_offset(ctx, program)
+                from autopwn.recon import bss as recon_bss
+                bss_syms = recon_bss.find_bss(
+                    program, min_size=2, name_filter=lambda n: "_" not in n
+                )
+                if bss_syms:
+                    ctx.fmtstr_buf = bss_syms[0].address
+                    print_success(
+                        f"fmtstr inputs populated: offset={ctx.fmtstr_offset}, "
+                        f"buf=0x{ctx.fmtstr_buf:x}"
+                    )
+            except Exception as e:
+                print_warning(f"fmtstr offset/buf lookup failed: {e}")
 
     print_section_header("EXPLOITATION PHASE")
     print_info("initializing exploitation attempts")

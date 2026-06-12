@@ -228,10 +228,23 @@ class TestFmtstrMatches:
         assert FmtstrX32LocalStrategy().matches(_ctx_32(padding=0)) is True
 
     def test_x32_local_rejects_padding_nonzero(self):
-        """v3.1 main() only enters fmtstr when padding == 0 (no BOF)."""
+        """v4.0.2c1: padding != 0 + fmtstr_offset/buf both None
+        → no match.  v3.1's ``padding == 0`` gate is preserved for
+        the no-fmtstr case (when the orchestrator never populated
+        the primitive fields)."""
         from autopwn.exp.strategies.fmtstr import FmtstrX32LocalStrategy
 
-        assert FmtstrX32LocalStrategy().matches(_ctx_32(padding=112)) is False
+        ctx = _ctx_32(padding=112, fmtstr_buf=None, fmtstr_offset=None)
+        assert FmtstrX32LocalStrategy().matches(ctx) is False
+
+    def test_x32_local_matches_padding_nonzero_when_fmtstr_fields_set(self):
+        """v4.0.2c1: padding != 0 + fmtstr_offset/buf populated
+        → match (fmtstr strategy is the correct exploit for
+        canary+fmtstr binaries like Challenge/fmtstr1)."""
+        from autopwn.exp.strategies.fmtstr import FmtstrX32LocalStrategy
+
+        ctx = _ctx_32(padding=112, fmtstr_buf=0x804a080, fmtstr_offset=63)
+        assert FmtstrX32LocalStrategy().matches(ctx) is True
 
     def test_x32_local_rejects_x64_ctx(self):
         from autopwn.exp.strategies.fmtstr import FmtstrX32LocalStrategy
@@ -251,9 +264,12 @@ class TestFmtstrMatches:
         assert FmtstrX64LocalStrategy().matches(_ctx_64(padding=0)) is True
 
     def test_x64_local_rejects_padding_nonzero(self):
+        """v4.0.2c1: padding != 0 + fmtstr_offset/buf both None
+        → no match (per FmtstrX32LocalStrategy.matches gate)."""
         from autopwn.exp.strategies.fmtstr import FmtstrX64LocalStrategy
 
-        assert FmtstrX64LocalStrategy().matches(_ctx_64(padding=112)) is False
+        ctx = _ctx_64(padding=112, fmtstr_buf=None, fmtstr_offset=None)
+        assert FmtstrX64LocalStrategy().matches(ctx) is False
 
     def test_x32_remote_matches_remote_padding_zero(self):
         from autopwn.exp.strategies.fmtstr import FmtstrX32RemoteStrategy
@@ -263,9 +279,11 @@ class TestFmtstrMatches:
         assert FmtstrX32RemoteStrategy().matches(ctx) is True
 
     def test_x32_remote_rejects_padding_nonzero(self):
+        """v4.0.2c1: padding != 0 + fmtstr_offset/buf both None
+        → no match (per FmtstrX32LocalStrategy.matches gate)."""
         from autopwn.exp.strategies.fmtstr import FmtstrX32RemoteStrategy
 
-        ctx = _ctx_32(mode="remote", padding=112)
+        ctx = _ctx_32(mode="remote", padding=112, fmtstr_buf=None, fmtstr_offset=None)
         ctx.remote = ("127.0.0.1", 9999)
         assert FmtstrX32RemoteStrategy().matches(ctx) is False
 
@@ -275,9 +293,12 @@ class TestFmtstrMatches:
         assert FmtstrPrintStringsX32LocalStrategy().matches(_ctx_32(padding=0)) is True
 
     def test_bypass_x32_local_rejects_padding_nonzero(self):
+        """v4.0.2c1: padding != 0 + fmtstr_offset/buf both None
+        → no match (per FmtstrX32LocalStrategy.matches gate)."""
         from autopwn.exp.strategies.fmtstr import FmtstrPrintStringsX32LocalStrategy
 
-        assert FmtstrPrintStringsX32LocalStrategy().matches(_ctx_32(padding=112)) is False
+        ctx = _ctx_32(padding=112, fmtstr_buf=None, fmtstr_offset=None)
+        assert FmtstrPrintStringsX32LocalStrategy().matches(ctx) is False
 
     def test_bypass_x32_remote_matches_remote_padding_zero(self):
         from autopwn.exp.strategies.fmtstr import FmtstrPrintStringsX32RemoteStrategy
@@ -332,11 +353,25 @@ class TestFmtstrCandidates:
         names = [s.name for s in result]
         assert "fmtstr-x64-remote" in names
 
-    def test_candidates_padding_nonzero_excludes_fmtstr(self):
-        """``padding != 0`` filters out all fmtstr strategies (the main gate)."""
+    def test_candidates_padding_nonzero_with_fmtstr_fields_includes_fmtstr(self):
+        """v4.0.2c1: padding != 0 + fmtstr_offset/buf populated
+        → candidates() returns the fmtstr strategy (the canary+fmtstr
+        case for binaries like Challenge/fmtstr1)."""
         from autopwn.exp import candidates
 
-        result = candidates(_ctx_32(padding=112))
+        ctx = _ctx_32(padding=112, fmtstr_buf=0x804a080, fmtstr_offset=63)
+        result = candidates(ctx)
+        names = [s.name for s in result]
+        assert "fmtstr-x32" in names
+
+    def test_candidates_padding_nonzero_without_fmtstr_fields_excludes_fmtstr(self):
+        """v4.0.2c1: padding != 0 + fmtstr_offset/buf both None
+        → candidates() filters out all fmtstr strategies (v3.1
+        behavior preserved for the no-fmtstr case)."""
+        from autopwn.exp import candidates
+
+        ctx = _ctx_32(padding=112, fmtstr_buf=None, fmtstr_offset=None)
+        result = candidates(ctx)
         for s in result:
             assert "fmtstr" not in s.name
 

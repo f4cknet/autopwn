@@ -129,8 +129,16 @@ class FmtstrX32LocalStrategy(ExploitStrategy):
             is_remote = ctx.mode == "remote"
             if self.requires_remote != is_remote:
                 return False
-        # v3.1 main() gate: only enter fmtstr branch when padding == 0
-        return ctx.padding == 0
+        # v3.1 main() gate: only enter fmtstr branch when padding == 0.
+        # v4.0.2c1: also accept fmtstr-detected binaries (canary + fmtstr
+        # cases like Challenge/fmtstr1) when the orchestrator populated
+        # the primitive input fields (``ctx.fmtstr_offset`` and
+        # ``ctx.fmtstr_buf``) during the detect phase.
+        if ctx.padding == 0:
+            return True
+        if ctx.fmtstr_offset is not None and ctx.fmtstr_buf is not None:
+            return True
+        return False
 
     def run(self, ctx: ExploitContext) -> bool:
         """Execute the 32-bit format-string exploit locally."""
@@ -200,7 +208,14 @@ class FmtstrX64LocalStrategy(ExploitStrategy):
             is_remote = ctx.mode == "remote"
             if self.requires_remote != is_remote:
                 return False
-        return ctx.padding == 0
+        # v4.0.2c1: see FmtstrX32LocalStrategy.matches — accept
+        # either ``padding == 0`` (v3.1 main() gate) or a binary
+        # with populated fmtstr primitive inputs.
+        if ctx.padding == 0:
+            return True
+        if ctx.fmtstr_offset is not None and ctx.fmtstr_buf is not None:
+            return True
+        return False
 
     def run(self, ctx: ExploitContext) -> bool:
         """Execute the 64-bit format-string exploit locally."""
@@ -268,7 +283,14 @@ class FmtstrX32RemoteStrategy(ExploitStrategy):
             is_remote = ctx.mode == "remote"
             if self.requires_remote != is_remote:
                 return False
-        return ctx.padding == 0
+        # v4.0.2c1: see FmtstrX32LocalStrategy.matches — accept
+        # either ``padding == 0`` (v3.1 main() gate) or a binary
+        # with populated fmtstr primitive inputs.
+        if ctx.padding == 0:
+            return True
+        if ctx.fmtstr_offset is not None and ctx.fmtstr_buf is not None:
+            return True
+        return False
 
     def run(self, ctx: ExploitContext) -> bool:
         """Execute the 32-bit format-string exploit against a remote service."""
@@ -341,7 +363,14 @@ class FmtstrX64RemoteStrategy(ExploitStrategy):
             is_remote = ctx.mode == "remote"
             if self.requires_remote != is_remote:
                 return False
-        return ctx.padding == 0
+        # v4.0.2c1: see FmtstrX32LocalStrategy.matches — accept
+        # either ``padding == 0`` (v3.1 main() gate) or a binary
+        # with populated fmtstr primitive inputs.
+        if ctx.padding == 0:
+            return True
+        if ctx.fmtstr_offset is not None and ctx.fmtstr_buf is not None:
+            return True
+        return False
 
     def run(self, ctx: ExploitContext) -> bool:
         """Execute the 64-bit format-string exploit against a remote service."""
@@ -426,7 +455,14 @@ class FmtstrPrintStringsX32LocalStrategy(ExploitStrategy):
             is_remote = ctx.mode == "remote"
             if self.requires_remote != is_remote:
                 return False
-        return ctx.padding == 0
+        # v4.0.2c1: see FmtstrX32LocalStrategy.matches — accept
+        # either ``padding == 0`` (v3.1 main() gate) or a binary
+        # with populated fmtstr primitive inputs.
+        if ctx.padding == 0:
+            return True
+        if ctx.fmtstr_offset is not None and ctx.fmtstr_buf is not None:
+            return True
+        return False
 
     def run(self, ctx: ExploitContext) -> bool:
         """100 sendline leak loop — print non-empty results."""
@@ -465,7 +501,14 @@ class FmtstrPrintStringsX32RemoteStrategy(ExploitStrategy):
             is_remote = ctx.mode == "remote"
             if self.requires_remote != is_remote:
                 return False
-        return ctx.padding == 0
+        # v4.0.2c1: see FmtstrX32LocalStrategy.matches — accept
+        # either ``padding == 0`` (v3.1 main() gate) or a binary
+        # with populated fmtstr primitive inputs.
+        if ctx.padding == 0:
+            return True
+        if ctx.fmtstr_offset is not None and ctx.fmtstr_buf is not None:
+            return True
+        return False
 
     def run(self, ctx: ExploitContext) -> bool:
         """100 sendline leak loop over remote."""

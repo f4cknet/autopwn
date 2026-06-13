@@ -32,6 +32,7 @@
 | `fix_fmtstr1_routing` | v4.0.2c1 | [fix_fmtstr1_routing.md](./fix_fmtstr1_routing.md) | ✅ | fmtstr1 ret2libc_put hang 修复 + fmtstr strategy 路由到 canary+fmtstr 二进制 |
 | `fix_asm_and_add_padding` | v4.0.2c3 | [fix_asm_and_add_padding.md](./fix_asm_and_add_padding.md) | ✅ | `recon/asm.py::asm_stack_overflow` 误把函数 epilogue 的 `lea -0x8(%ebp),%esp` 当 buffer offset |
 | `fix_x64_recv_timeout` | v4.0.2c4 | [fix_x64_recv_timeout.md](./fix_x64_recv_timeout.md) | ✅ | x64 ret2libc strategies (`io.recv()` + `io.recvuntil(b"\x7f")` / `io.recv(8)`) 无 timeout hang（mirror v4.0.2c1 x32 fix） |
+| `fix_tee_bytes_repr` | v4.1.10 | [fix_tee_bytes_repr.md](./fix_tee_bytes_repr.md) | ✅ | `core/tee.py::Tee.write()` 用 `str(bytes)` 把 pwntools shell 输出变 repr（v4.1.8 引入 bug）|
 
 > **未做 / TODO** → 走 `upgraded.md §3` 任务看板，**不进**本文件。
 

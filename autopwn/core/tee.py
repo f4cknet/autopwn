@@ -83,8 +83,35 @@ class Tee:
         the others (best-effort).  This matches the legacy
         ``print(*, file=...)`` semantics where the kernel will simply
         discard the write if the fd is closed.
+
+        Input type coercion (v4.1.10 fix)
+        ---------------------------------
+        :class:`Tee` accepts three input shapes and normalises them to
+        ``str`` before fanning out:
+
+        * ``str`` — written verbatim (the common case for ``print()``
+          and ``logging`` output).
+        * ``bytes`` — decoded as UTF-8 with ``errors="replace"`` (the
+          common case for pwntools ``tube._log`` / ``io.interactive``
+          which writes the spawned process's stdout bytes back to
+          ``sys.stdout``).  Per PEP 3116 this is the right conversion
+          — the previous ``str(data)`` form was a *bug* that turned
+          ``b'foo\\nbar'`` into the repr ``"b'foo\\\\nbar'"`` (note the
+          extra ``b'`` prefix and double-escaped newline).
+        * any other type — ``str(data)`` (fallback for int / None / etc.;
+          matches the legacy ``print(42)`` → ``"42"`` contract).
+
+        v4.1.10 root-cause: prior to this fix, ``Tee.write`` called
+        ``str()`` on bytes input, producing the bytes repr rather than
+        the decoded string.  Owner-reported (per `upgraded.md` §3.2
+        v4.1.10): shell ``ls`` output rendered as
+        ``b'AGENTS.md  ...\\nChallenge  ...\\t  ...'`` instead of a
+        real multi-line tab-separated listing.  See
+        `bugs/fix_tee_bytes_repr.md` for the full diagnosis.
         """
-        if not isinstance(data, str):
+        if isinstance(data, bytes):
+            data = data.decode("utf-8", errors="replace")
+        elif not isinstance(data, str):
             data = str(data)
         n = len(data)
         for s in self._streams:

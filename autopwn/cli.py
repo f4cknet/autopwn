@@ -13,14 +13,23 @@ logic (recon → detect → strategy selection) lives in
 
 P8.5 (2026-06-09): ``_compat.sync_ctx_to_legacy`` bridge removed.
 P8.6 (2026-06-09): ``autopwn.py`` shim deleted.
+
+v4.1.8 (2026-06-13): Mirror ``sys.stdout`` / ``sys.stderr`` to
+``logs/{challenge_name}/run.log`` via :class:`autopwn.core.tee.Tee`
+(see ``upgraded.md`` §3.2 v4.1.8).  The banner + recon/detect/
+strategy output (including pwntools tube output that uses
+``sys.stdout``) is captured to disk for post-mortem analysis
+without changing the on-terminal experience.
 """
 from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from autopwn.context import ContextError, ExploitContext
 from autopwn.core.logging import print_banner, print_error, set_verbose
+from autopwn.core.tee import Tee
 from autopwn.orchestrator import run as orchestrator_run
 from autopwn.report import set_current_ctx
 
@@ -67,6 +76,35 @@ Examples:
     return parser
 
 
+def _resolve_log_path(args: argparse.Namespace) -> Path | None:
+    """v4.1.8 — compute the per-run log file path from CLI args.
+
+    Returns ``logs/{challenge_name}/run.log`` (cwd-relative) for
+    local binaries, ``logs/remote_{ip}_{port}/run.log`` for remote
+    targets, or ``None`` if no identifier is available (caller
+    should skip log capture).
+
+    The directory is auto-created.  The file is opened in **write**
+    mode by the caller (overwrites any previous run log for the
+    same challenge name — v4.1.8b may add a timestamp suffix if
+    historical preservation is needed).
+    """
+    local = getattr(args, "local", None)
+    if local:
+        challenge_name = Path(local).stem
+    else:
+        ip = getattr(args, "ip", None)
+        port = getattr(args, "port", None)
+        if ip:
+            challenge_name = f"remote_{ip}_{port or 0}"
+        else:
+            return None
+
+    log_dir = Path("logs") / challenge_name
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / "run.log"
+
+
 def main() -> int:
     """CLI entry point: parse args → build ctx → dispatch to orchestrator.
 
@@ -77,34 +115,88 @@ def main() -> int:
     ``refactor.md`` §11 R1 + §6.8 Reviewer checklist.
 
     Side effects (in order):
-      1. ``print_banner()`` — startup banner.
-      2. ``set_verbose(args.verbose)`` — propagate ``-v`` to
+      1. **v4.1.8** — resolve log path from args, open log file,
+         wrap ``sys.stdout``/``sys.stderr`` with :class:`Tee`,
+         and redirect pwntools' ``context.log_console`` to the
+         same tee (pwntools captures the original stdout at
+         ``pwn`` import time, so a plain ``sys.stdout`` swap is
+         not enough — see :class:`autopwn.core.tee.Tee` for the
+         full pwntools-compat story).
+      2. ``print_banner()`` — startup banner (now also goes to log).
+      3. ``set_verbose(args.verbose)`` — propagate ``-v`` to
          :mod:`autopwn.core.logging`.
-      3. ``ExploitContext.from_args(args)`` — typed context with
+      4. ``ExploitContext.from_args(args)`` — typed context with
          validation (binary exists, ip+port pair consistency,
          libc path exists).  Raises :class:`ContextError` on
          failure; we catch it and exit 1 with the legacy red
          error message.
-      4. ``set_current_ctx(ctx)`` — wire the report carrier so
+      5. ``set_current_ctx(ctx)`` — wire the report carrier so
          ``autopwn.report.record_success`` (called from
          orchestrator) can find the ctx.
-      5. ``orchestrator_run(ctx)`` — recon + detect + strategy.
+      6. ``orchestrator_run(ctx)`` — recon + detect + strategy.
+      7. **v4.1.8** — in ``finally``: restore ``sys.stdout``/
+         ``sys.stderr`` / ``pwnlib.context.context.log_console``
+         and close the log file handle.
     """
-    print_banner()
-
     args = _build_argparser().parse_args()
 
     set_verbose(args.verbose)
 
+    # v4.1.8: mirror stdout/stderr to logs/{challenge_name}/run.log
+    log_path = _resolve_log_path(args)
+    log_file = None
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    pwn_context = None
+    old_pwn_log_console = None
+    if log_path is not None:
+        log_file = open(log_path, "w", encoding="utf-8")
+        tee_stdout = Tee(sys.stdout, log_file)
+        tee_stderr = Tee(sys.stderr, log_file)
+        sys.stdout = tee_stdout
+        sys.stderr = tee_stderr
+        # pwntools' Handler.emit reads ``context.log_console`` at
+        # emit time, but the value was captured at ``pwn`` import.
+        # Override so pwntools' "[+] Starting local process" etc.
+        # also land in the log file.  See pwnlib/log.py:521 and
+        # pwnlib/context/__init__.py:367,1073.
+        try:
+            from pwnlib.context import context as _pwn_context
+            pwn_context = _pwn_context
+            old_pwn_log_console = _pwn_context.log_console
+            _pwn_context.log_console = tee_stdout
+        except ImportError:
+            # pwntools not installed — nothing to do, our tee still
+            # captures everything that uses sys.stdout/sys.stderr.
+            pass
+
     try:
-        ctx = ExploitContext.from_args(args)
-    except ContextError as e:
-        print_error(str(e))
-        return 1
+        print_banner()
 
-    set_current_ctx(ctx)
+        try:
+            ctx = ExploitContext.from_args(args)
+        except ContextError as e:
+            print_error(str(e))
+            return 1
 
-    return orchestrator_run(ctx)
+        set_current_ctx(ctx)
+
+        return orchestrator_run(ctx)
+    finally:
+        # v4.1.8: always restore streams + close log file, even on
+        # exception / KeyboardInterrupt.
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        if pwn_context is not None and old_pwn_log_console is not None:
+            try:
+                pwn_context.log_console = old_pwn_log_console
+            except Exception:
+                pass
+        if log_file is not None:
+            try:
+                log_file.flush()
+                log_file.close()
+            except Exception:
+                pass
 
 
 # Wire the legacy SystemExit translation for the `python autopwn.py`

@@ -109,6 +109,23 @@ autopwn -l ./binary --no-report
 autopwn -l ./binary
 ```
 
+### Log output
+
+> **v4.1.8 change**: The full terminal output (autopwn's `print_*`
+> + pwntools' tube output) is mirrored to
+> `logs/{challenge_name}/run.log` for post-mortem analysis.  ANSI
+> color codes are preserved (use `less -R` to view with colors).
+> The log is overwritten on each run; see `upgraded.md` §3.2 v4.1.8
+> for the rationale and pwntools-compat story.
+
+```bash
+# Run + log is auto-written to logs/level3_x64/run.log
+autopwn -l ./Challenge/level3_x64
+
+# Replay the run with colors
+less -R logs/level3_x64/run.log
+```
+
 ---
 
 ## 💡 Usage Examples

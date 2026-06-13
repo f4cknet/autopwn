@@ -13,6 +13,21 @@ library is missing, ``generate_docx`` falls back to a markdown
 generator (``_generate_markdown``) that writes ``{target}_wp.md`` to
 ``out_dir`` instead of the .docx.  See ``refactor.md`` §10.
 
+v4.1.7 update (2026-06-13)
+==========================
+Output destination is now hard-coded to the ``writeups/`` subdirectory
+in the current working directory (per Owner request — see
+``upgraded.md`` §3.2 v4.1.7).  The ``out_dir`` parameter is still
+accepted for backward compatibility with the caller
+(``autopwn.report.__init__.record_success`` still passes
+``ctx.report_dir``), but it is **not used** — the file is always
+written to ``Path("writeups") / f"{target_name}_wp.{ext}"``.
+
+The ``--report-dir`` CLI flag continues to be parsed and stored on
+``ctx.report_dir``, but its value is ignored at the file-write step
+(per the v4.1.7 trade-off; the legacy ``--report-dir`` behavior can be
+restored in a follow-up v4.1.7b task if needed).
+
 Why module-level, not function-level
 ------------------------------------
 The ``rebuild.md`` §6.4 spec example has the ``try/except ImportError``
@@ -33,11 +48,13 @@ Design
 ======
 * **Module-level import guard**: ``_HAS_DOCX`` flag is ``True`` if
   ``python-docx`` imports cleanly, ``False`` otherwise.
-* **Pure-ish function**: takes ``info`` and ``out_dir``, returns the
-  generated ``Path``.  Caller (P3.4 ``record_success``) is responsible
-  for success-gating (``--no-report``).
+* **Pure-ish function**: takes ``info`` and ``out_dir`` (ignored since
+  v4.1.7), returns the generated ``Path``.  Caller (P3.4
+  ``record_success``) is responsible for success-gating (``--no-report``).
 * **No more global state**: the legacy ``global exploit_info`` declaration
   is gone.  All 14 ``exploit_info['x']`` reads become ``info.x``.
+* **v4.1.7**: write destination is ``Path("writeups")`` (cwd-relative)
+  — see ``upgraded.md`` §3.2 for rationale and trade-offs.
 
 Field mapping (legacy dict → ExploitInfo)
 -----------------------------------------
@@ -65,10 +82,12 @@ Adoption roadmap (see ``rebuild.md`` §4.4)
 * P3.2 (✅) — move ``generate_docx_report`` here as
   ``generate_docx(info, out_dir)``.
 * P3.3 (✅) — code generator moved to ``autopwn/report/code.py``.
-* P3.6 (this PR) — ``try/except ImportError`` markdown fallback.
-* P3.4 — refactor ``handle_exploitation_success`` to construct an
+* P3.6 (✅) — ``try/except ImportError`` markdown fallback.
+* P3.4 (✅) — refactor ``handle_exploitation_success`` to construct an
   ``ExploitInfo`` directly and call ``report.record_success`` (no
   more dict bridge).
+* v4.1.7 (🔄) — default output destination = ``Path("writeups")``
+  (cwd-relative); ``out_dir`` parameter ignored.
 """
 from __future__ import annotations
 
@@ -102,12 +121,23 @@ def _generate_markdown(info: ExploitInfo, out_dir: Path) -> Path:
     (Basic Information, Buffer Overflow Information, Key Address
     Information, Exploitation Code, Exploitation Summary) plus a
     footer.
+
+    v4.1.7
+    ------
+    ``out_dir`` is **ignored** — the report is always written to
+    ``Path("writeups") / f"{target_name}_wp.md"`` (cwd-relative).  The
+    ``writeups/`` directory is auto-created if missing.  See
+    ``upgraded.md`` §3.2 v4.1.7 for the rationale and trade-offs.
     """
     target_name = Path(info.target_binary).name
     if target_name.startswith("./"):
         target_name = target_name[2:]
     target_name = Path(target_name).stem
-    report_path = out_dir / f"{target_name}_wp.md"
+    # v4.1.7: hard-coded ``writeups/`` destination; ``out_dir`` is
+    # accepted for caller back-compat but no longer used.
+    writeups_dir = Path("writeups")
+    writeups_dir.mkdir(parents=True, exist_ok=True)
+    report_path = writeups_dir / f"{target_name}_wp.md"
 
     lines: list[str] = []
     lines.append(f"# PWN Exploitation Report — {info.target_binary}\n")
@@ -180,8 +210,11 @@ def generate_docx(info: ExploitInfo, out_dir: Path) -> Optional[Path]:
         are read; ``success`` gate is **not** checked here (caller
         responsibility — P3.4 ``record_success``).
     out_dir : Path
-        Directory to write ``{target}_wp.docx`` (or ``.md`` if
-        ``python-docx`` is missing) into.
+        **v4.1.7: ignored.**  Kept in the signature for caller
+        back-compat (``autopwn.report.__init__.record_success`` still
+        passes ``ctx.report_dir``).  The actual write destination is
+        ``Path("writeups")`` (cwd-relative) — see ``upgraded.md`` §3.2
+        v4.1.7 for rationale and the ``--report-dir`` trade-off.
 
     Returns
     -------
@@ -192,7 +225,8 @@ def generate_docx(info: ExploitInfo, out_dir: Path) -> Optional[Path]:
 
     Side effects
     ------------
-    * Writes ``{target}_wp.docx`` (or ``.md``) to ``out_dir``.
+    * Writes ``{target}_wp.docx`` (or ``.md``) to ``Path("writeups")``
+      (cwd-relative; auto-created if missing).
     * Prints success / error messages via ``core.logging``.
     """
     # P3.6: markdown fallback dispatch.  If python-docx is missing,
@@ -217,7 +251,11 @@ def generate_docx(info: ExploitInfo, out_dir: Path) -> Optional[Path]:
             target_name = target_name[2:]
         target_name = Path(target_name).stem  # strip extension
         report_filename = f"{target_name}_wp.docx"
-        report_path = out_dir / report_filename
+        # v4.1.7: hard-coded ``writeups/`` destination; ``out_dir`` is
+        # accepted for caller back-compat but no longer used.
+        writeups_dir = Path("writeups")
+        writeups_dir.mkdir(parents=True, exist_ok=True)
+        report_path = writeups_dir / report_filename
 
         # Build the document
         doc = Document()

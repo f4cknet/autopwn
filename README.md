@@ -93,12 +93,20 @@ autopwn -l ./binary -v
 
 ### Report control
 
+> **v4.1.7 change**: Reports are now always written to the
+> `writeups/` subdirectory of the current working directory
+> (`./writeups/{target}_wp.docx`).  The `--report-dir` flag is still
+> accepted (backward-compat) but its value is **ignored** at the
+> file-write step — see `upgraded.md` §3.2 v4.1.7 for the rationale
+> and trade-off.  The `writeups/` directory is auto-created if missing.
+
 ```bash
 # Skip DOCX report generation (exploit still runs)
 autopwn -l ./binary --no-report
 
-# Write report to a custom directory
-autopwn -l ./binary --report-dir ./reports/
+# Reports are written to ./writeups/{target}_wp.docx by default
+# (the --report-dir flag is currently ignored — v4.1.7 trade-off)
+autopwn -l ./binary
 ```
 
 ---

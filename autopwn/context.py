@@ -188,6 +188,14 @@ class ExploitContext:
     enable_report: bool = True
     report_dir: Path = field(default_factory=Path.cwd)
 
+    # v4.1.11: SSL/TLS toggle for remote connections.  When True, the
+    # 31 ``io = remote(host, port, ssl=ctx.ssl)`` call sites in
+    # strategies/primitives wrap pwntools ``remote()`` in TLS (per
+    # pwntools 4.x kwarg).  No effect in local mode (where ``process()``
+    # is used instead of ``remote()``).  See ``upgraded.md`` §3.2
+    # v4.1.11 for the rationale and CTF platform coverage.
+    ssl: bool = False
+
     # v4.0.1: shell verification result (set by core.shell_verify.verify_shell
     # in the strategy success path).  ``None`` until a strategy probes the
     # spawned process; populated with the ``id`` command output on success.
@@ -276,6 +284,23 @@ class ExploitContext:
         mode = "remote" if (has_ip and has_port) else "local"
         remote = (args.ip, args.port) if mode == "remote" else None
 
+        # 2b) v4.1.11: SSL toggle.  Must be paired with remote mode
+        # (local ``process()`` has no socket to wrap).  We don't *error*
+        # on ``-ssl`` without remote — we just silently no-op (the
+        # strategies ignore ``ctx.ssl`` in local mode).  But we DO
+        # error if a user combines ``-ssl`` with a local binary +
+        # missing ``-ip/-p`` since that signals a CLI typo (e.g.
+        # user forgot to add ``-ip`` after adding ``-ssl``).
+        ssl_flag = bool(getattr(args, "ssl", False))
+        if ssl_flag and mode == "local":
+            # Local + ssl is a no-op (warn, don't crash).  In practice
+            # this is a user typo — the user wanted SSL remote but
+            # forgot ``-ip``.  We raise so they don't get silent
+            # plaintext fallback.
+            raise ContextError(
+                "-ssl requires -ip and -p (SSL only meaningful for remote mode)"
+            )
+
         # 3) Libc (matches legacy L3318-3326)
         libc = LibcInfo()
         libc_arg = getattr(args, "libc", None)
@@ -334,6 +359,7 @@ class ExploitContext:
             verbose=verbose,
             enable_report=enable_report,
             report_dir=report_dir,
+            ssl=ssl_flag,
         )
 
 

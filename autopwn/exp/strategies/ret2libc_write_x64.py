@@ -183,7 +183,7 @@ class Ret2LibcWriteX64RemoteStrategy(ExploitStrategy):
             print_info("ret2libc-write-x64-remote stage1 primitive returned empty; skipping")
             return False
 
-        io = remote(host, port)
+        io = remote(host, port, ssl=ctx.ssl)  # v4.1.11
         # v4.0.2c4: cap initial banner recv at 0.5s.
         try:
             io.recv(timeout=0.5)

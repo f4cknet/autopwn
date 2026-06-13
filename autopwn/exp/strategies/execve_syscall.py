@@ -192,7 +192,7 @@ class ExecveSyscallX32RemoteStrategy(ExploitStrategy):
             return False
 
         from pwn import remote
-        io = remote(host, port)
+        io = remote(host, port, ssl=ctx.ssl)  # v4.1.11
         io.recv()
         io.sendline(payload)
 

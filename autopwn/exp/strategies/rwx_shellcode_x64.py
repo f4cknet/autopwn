@@ -148,7 +148,7 @@ class RwxShellcodeX64RemoteStrategy(ExploitStrategy):
             print_info("rwx-shellcode-x64-remote primitive returned empty; skipping")
             return False
 
-        io = remote(host, port)
+        io = remote(host, port, ssl=ctx.ssl)  # v4.1.11
         io.recv()
         io.sendline(payload)
 

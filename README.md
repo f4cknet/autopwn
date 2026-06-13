@@ -126,6 +126,25 @@ autopwn -l ./Challenge/level3_x64
 less -R logs/level3_x64/run.log
 ```
 
+### Remote / SSL
+
+> **v4.1.11 change**: Many CTF practice platforms (cyberstages,
+> r3, etc.) wrap the remote binary service in TLS via
+> stunnel/nginx.  Pass `-ssl` to wrap the pwntools `remote()`
+> connection in TLS.  Requires `-ip` + `-p` (local mode is a
+> no-op and raises if combined with `-ssl`).
+
+```bash
+# Plaintext remote (legacy)
+autopwn -l ./vuln -ip 1.2.3.4 -p 31337
+
+# SSL/TLS remote (e.g. cyberstages-style platforms)
+autopwn -l ./vuln -ip 1.2.3.4 -p 31337 -ssl
+
+# Shorter alias
+autopwn -l ./vuln -ip ctf.example.com -p 443 -ssl
+```
+
 ---
 
 ## 💡 Usage Examples

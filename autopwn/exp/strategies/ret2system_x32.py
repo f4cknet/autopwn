@@ -226,7 +226,7 @@ class Ret2SystemX32RemoteStrategy(ExploitStrategy):
             return False
 
         # Step 2: Open remote connection.
-        io = remote(host, port)
+        io = remote(host, port, ssl=ctx.ssl)  # v4.1.11
 
         # Step 3: Sendline the payload.
         io.sendline(payload)

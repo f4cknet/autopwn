@@ -73,6 +73,14 @@ Examples:
                         help="Directory to write the DOCX report into "
                              "(default: current working directory). "
                              "Auto-created if it does not exist.")
+    # v4.1.11: SSL/TLS toggle for remote connections.  Many CTF
+    # platforms (e.g. cyberstages, r3) wrap their remote binary
+    # service in TLS via stunnel/nginx, so pwntools' plain ``remote()``
+    # raises on handshake.  Pass ``-ssl`` to enable TLS on the socket.
+    # Requires ``-ip`` + ``-p`` (local mode ignores this flag).
+    parser.add_argument("-ssl", "--ssl", action="store_true",
+                        help="Use SSL/TLS for the remote connection "
+                             "(requires -ip + -p).  No effect in local mode.")
     return parser
 
 

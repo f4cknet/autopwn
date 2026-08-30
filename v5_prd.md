@@ -36,6 +36,13 @@ AutoPwn v5 面向 CTF / 离线训练场景，目标是把自动化 pwn 从“str
 ## 6. 近期路线
 
 - `v5.0.1`：文档重置
-- `v5.0.2`：事实作用域 / 生命周期
+- `v5.0.2`：事实作用域 / 生命周期（FactScope / FactStore / 首批 producer 接入）
 - `v5.0.3`：交互图
 - `v5.0.4+`：能力层 / planner / verifier
+
+### 6.1 `v5.0.2` 完成标准
+
+- 在 `autopwn/context.py` 建立最小可用的事实存储层
+- 显式区分 `binary / process / session / attempt` 四类作用域
+- 至少让一批现有 producer 把关键检测结果同步进 fact store
+- 保留现有 `ctx.padding` / `ctx.canary` / `ctx.canary_plan` 等兼容视图，避免一次性重写全部 runtime

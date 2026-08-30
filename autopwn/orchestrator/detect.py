@@ -7,7 +7,7 @@ file split, not a refactor.
 """
 from __future__ import annotations
 
-from autopwn.context import ExploitContext
+from autopwn.context import ExploitContext, FactScope
 from autopwn.core.logging import (
     print_info,
     print_section_header,
@@ -52,6 +52,13 @@ def run_detect_phase(ctx: ExploitContext) -> None:
     print_section_header("PADDING CALCULATION")
 
     if ctx.padding:
+        if not ctx.has_fact("overflow.padding", scope=FactScope.BINARY):
+            ctx.set_fact(
+                "overflow.padding",
+                ctx.padding,
+                scope=FactScope.BINARY,
+                source="detect.padding.manual",
+            )
         print_info(f"using manual padding: {ctx.padding} bytes")
     else:
         print_info("performing dynamic stack overflow testing")
@@ -61,6 +68,12 @@ def run_detect_phase(ctx: ExploitContext) -> None:
             asm_padding = recon_asm.asm_stack_overflow(program, ctx.binary.bit)
             if asm_padding:
                 ctx.padding = asm_padding
+                ctx.set_fact(
+                    "overflow.padding",
+                    ctx.padding,
+                    scope=FactScope.BINARY,
+                    source="detect.overflow.asm",
+                )
             results = recon_asm.vuln_func_name(program)
             if results:
                 print_section_header("VULNERABLE FUNCTIONS IDENTIFIED")
@@ -82,17 +95,35 @@ def run_detect_phase(ctx: ExploitContext) -> None:
             static_padding = recon_asm.analyze_vulnerable_functions(program, ctx.binary.bit)
             if static_padding:
                 ctx.padding = static_padding
+                ctx.set_fact(
+                    "overflow.padding",
+                    ctx.padding,
+                    scope=FactScope.BINARY,
+                    source="detect.overflow.static",
+                )
                 print_success(f"static analysis found padding: {ctx.padding} bytes")
 
     print_section_header("STRING ANALYSIS")
     print_info("searching for /bin/sh string in binary")
     detect_binsh.check_binsh(ctx, program)
+    ctx.set_fact(
+        "strings.binsh_in_binary",
+        ctx.binsh_in_binary,
+        scope=FactScope.BINARY,
+        source="detect.binsh",
+    )
 
     if ctx.binary.stack_canary:
         print_section_header("CANARY PROTECTION DETECTED")
         print_warning("canary protection is enabled")
         print_info("testing for format string vulnerability to bypass canary")
         probe = detect_fmtstr.detect_format_string_vulnerability(ctx, program)
+        ctx.set_fact(
+            "fmtstr.vulnerable",
+            probe.vulnerable,
+            scope=FactScope.BINARY,
+            source="detect.fmtstr.probe",
+        )
         _record_hints(
             ctx,
             detect_hints.collect_fmtstr_hints(
@@ -136,12 +167,24 @@ def run_detect_phase(ctx: ExploitContext) -> None:
             # binaries like Challenge/fmtstr1).
             try:
                 ctx.fmtstr_offset = detect_fmtstr.find_offset(ctx, program)
+                ctx.set_fact(
+                    "fmtstr.offset",
+                    ctx.fmtstr_offset,
+                    scope=FactScope.BINARY,
+                    source="detect.fmtstr.offset",
+                )
                 from autopwn.recon import bss as recon_bss
                 bss_syms = recon_bss.find_bss(
                     program, min_size=2, name_filter=lambda n: "_" not in n
                 )
                 if bss_syms:
                     ctx.fmtstr_buf = bss_syms[0].address
+                    ctx.set_fact(
+                        "fmtstr.buf",
+                        ctx.fmtstr_buf,
+                        scope=FactScope.BINARY,
+                        source="detect.fmtstr.bss",
+                    )
                     print_success(
                         f"fmtstr inputs populated: offset={ctx.fmtstr_offset}, "
                         f"buf=0x{ctx.fmtstr_buf:x}"

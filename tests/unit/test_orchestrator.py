@@ -32,7 +32,7 @@ from unittest import mock
 
 import pytest
 
-from autopwn.context import BinaryInfo, ExploitContext, LibcInfo
+from autopwn.context import BinaryInfo, ExploitContext, FactScope, LibcInfo
 from autopwn.exp import ExploitStrategy, candidates, register, reset
 from autopwn.orchestrator import (
     run,
@@ -339,6 +339,8 @@ class TestRunDetectPhase:
 
         binsh_mod.check_binsh.assert_called_once_with(ctx, ctx.binary.path)
         assert ctx.binsh_in_binary is True
+        assert ctx.get_fact("overflow.padding", scope=FactScope.BINARY) == 64
+        assert ctx.get_fact("strings.binsh_in_binary", scope=FactScope.BINARY) is True
 
     def test_canary_branch_runs_canary_fuzz(self, tmp_path):
         """``stack_canary=True`` triggers ``leakage_canary_value`` + ``canary_fuzz``."""
@@ -444,6 +446,9 @@ class TestRunDetectPhase:
         # v4.0.2c1 assertions: ctx fields now populated
         assert ctx.fmtstr_offset == 7
         assert ctx.fmtstr_buf == 0x804a080
+        assert ctx.get_fact("fmtstr.vulnerable", scope=FactScope.BINARY) is True
+        assert ctx.get_fact("fmtstr.offset", scope=FactScope.BINARY) == 7
+        assert ctx.get_fact("fmtstr.buf", scope=FactScope.BINARY) == 0x804a080
         fmtstr_mod.find_offset.assert_called_once()
 
     def test_fmtstr_detection_graceful_on_find_offset_failure(self, tmp_path):

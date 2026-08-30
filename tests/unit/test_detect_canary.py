@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import pytest
 
+from autopwn.context import FactScope
 from tests.conftest import ctx_for
 
 
@@ -120,6 +121,16 @@ class TestCanaryFuzz:
         assert result is None
         assert ctx.canary is None
         assert spawn_count == 1
+        assert ctx.get_fact(
+            "canary.fuzz_budget_exhausted",
+            scope=FactScope.ATTEMPT,
+        ) == {
+            "attempts": 1,
+            "budget_seconds": 0.1,
+            "c": 1,
+            "diff": 1,
+            "padding": 1,
+        }
 
     def test_writes_ctx_canary_on_success(self, challenge_dir, monkeypatch):
         """``ctx.canary`` is set to a ``CanaryInfo`` on successful bypass."""
@@ -160,6 +171,7 @@ class TestCanaryFuzz:
         )
         assert isinstance(result, CanaryInfo)
         assert ctx.canary is result
+        assert ctx.get_fact("canary.info", scope=FactScope.PROCESS) is result
         assert result.diff >= 1
         assert result.value == 0x8000000000000000  # value from leaks[3]
 
@@ -182,6 +194,7 @@ class TestSameSessionCanaryPlan:
 
         assert plan is not None
         assert ctx.canary_plan is plan
+        assert ctx.get_fact("canary.plan", scope=FactScope.BINARY) is plan
         assert plan.method == "fmtstr-sequential-x32"
         assert plan.stack_index > 0
         assert plan.buffer_to_canary == 64

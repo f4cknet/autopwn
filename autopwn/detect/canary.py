@@ -58,7 +58,7 @@ import time
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from autopwn.context import CanaryInfo, CanaryLeakPlan, ExploitContext
+from autopwn.context import CanaryInfo, CanaryLeakPlan, ExploitContext, FactScope
 from autopwn.recon.targets import inspect_functions
 
 
@@ -239,6 +239,18 @@ def canary_fuzz(
 
             for padding in range(0, max_padding + 1):
                 if deadline is not None and time.monotonic() >= deadline:
+                    ctx.set_fact(
+                        "canary.fuzz_budget_exhausted",
+                        {
+                            "attempts": attempts,
+                            "budget_seconds": budget_seconds,
+                            "c": c,
+                            "diff": diff,
+                            "padding": padding,
+                        },
+                        scope=FactScope.ATTEMPT,
+                        source="detect.canary.fuzz",
+                    )
                     ctx.log(
                         "canary fuzz budget exhausted after "
                         f"{attempts} attempts (~{budget_seconds:.1f}s); "
@@ -268,6 +280,11 @@ def canary_fuzz(
                     canary_value = int(leaks[j][1], 16)
                     info = CanaryInfo(value=canary_value, diff=diff)
                     ctx.canary = info
+                    ctx.set_runtime_fact(
+                        "canary.info",
+                        info,
+                        source="detect.canary.fuzz",
+                    )
                     io.close()
                     return info
 
@@ -324,6 +341,12 @@ def discover_same_session_canary_plan(
             reentry_payload=_SAME_SESSION_REENTRY_PAYLOAD,
         )
         ctx.canary_plan = plan
+        ctx.set_fact(
+            "canary.plan",
+            plan,
+            scope=FactScope.BINARY,
+            source="detect.canary.same_session",
+        )
         return plan
 
     return None

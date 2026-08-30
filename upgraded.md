@@ -1,7 +1,7 @@
 # upgraded.md — AutoPwn v5 迭代索引
 
 > **角色**：v5 的**主索引与流程入口**
-> **状态**：`5.0.dev0` 文档基线已建立（最近完成任务：`v5.0.1`，2026-08-30）
+> **状态**：`5.0.dev0` 文档基线已建立（最近完成任务：`v5.0.2`，2026-08-30）
 > **配套文档**：
 > - [`AGENTS.md`](./AGENTS.md) — 项目治理与 AI Agent 约束
 > - [`v5_prd.md`](./v5_prd.md) — v5 当前需求
@@ -37,9 +37,9 @@
 
 ### 1.2 当前主线
 
-- **当前活动任务**：_无（等待 `v5.0.2`）_
-- **最近完成**：`v5.0.1` 已完成 v4 归档与 v5 文档入口切换
-- **当前非目标**：尚未进入 runtime 架构迁移
+- **当前活动任务**：_无（等待 `v5.0.3`）_
+- **最近完成**：`v5.0.2` 已建立事实作用域 / 生命周期基础层并接入首批 producer
+- **当前非目标**：尚未进入 interaction graph / capability / planner 主体迁移
 
 ---
 
@@ -91,6 +91,7 @@ _（无 — 已归档到 `archive/v4/`）_
 
 | ID | 摘要 | 状态 | 实际 | 详情 |
 |---|---|---|---|---|
+| `v5.0.2` | 建立事实作用域 / 生命周期基础层，并接入首批 detect / strategy producer | ✅ | 3h | [`v5.0.2`](./upgraded/v5.0.2.md) |
 | `v5.0.1` | 治理变更实施 + 文档落盘 | ✅ | 1h | [`v5.0.1`](./upgraded/v5.0.1.md) |
 | `v4 archive` | 历史完成任务与 backlog 已统一迁入 `archive/v4/` | ✅ | - | [`archive/v4/README.md`](./archive/v4/README.md) |
 
@@ -149,7 +150,7 @@ Core
 
 ### 5.1 近期参考基线（2026-08-30）
 
-- 单元测试：`757 passed`
+- 单元测试：`761 passed`
 - 相关 integration 子集：`5 passed, 1 skipped`
 - 手工 `Challenge/canary`：detect 阶段会产出 `same-session canary plan`（`stack_index=55 / buffer_to_canary=64 / post_canary_padding=12`），strategy 通过 `whoami` 验证拿到 `root`
 

@@ -58,6 +58,21 @@ Core
 - `autopwn/exp/strategies/*` → fallback / 模板执行器
 - `autopwn/core/shell_verify.py` → verifier policy 实现
 
+### 3.3 作用域模型（`v5.0.2` 首个落地切片）
+
+| Scope | 含义 | 典型事实 | 失效时机 |
+|---|---|---|---|
+| `binary` | 静态目标属性，可跨本次运行复用 | `padding`、`fmtstr.offset`、`canary.plan` | 目标二进制 / 对应 libc 变化 |
+| `process` | 绑定某个本地进程实例 | 本地单次 spawn 中泄露的 canary / puts 地址 | 进程退出、重启、崩溃 |
+| `session` | 绑定某个远端连接或持久交互会话 | 同连接内 menu 状态、认证状态、远端泄露值 | 连接关闭、服务端重置会话 |
+| `attempt` | 单次 detect / execute 尝试的短生命周期诊断 | fuzz budget 耗尽记录、一次性 probe 结果 | 切换下一次尝试 |
+
+### 3.4 `v5.0.2` 迁移约束
+
+- 先建立 `FactStore`，再逐步把 producer 接入
+- 旧字段继续保留为兼容视图，不在本阶段一次性删除
+- 首批接入聚焦 detect/runtime 的高价值事实：`padding`、`binsh`、`fmtstr` 元数据、`canary` 相关事实
+
 ## 4. 迁移约束
 
 - 保持单向依赖，禁止反向 import

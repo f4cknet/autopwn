@@ -21,8 +21,9 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, ClassVar, Optional, Tuple
 
 if TYPE_CHECKING:
     # ``FrameContext`` lives in the recon layer (modeled by P4.7 / v4.0.5);
@@ -44,6 +45,103 @@ class ContextError(RuntimeError):
     exceptions: ReconError / DetectionError / StrategyError").  P4-P7
     will introduce their own subclasses if needed.
     """
+
+
+class FactScope(str, Enum):
+    """Lifecycle scope for structured facts recorded during a run."""
+
+    BINARY = "binary"
+    PROCESS = "process"
+    SESSION = "session"
+    ATTEMPT = "attempt"
+
+
+@dataclass(slots=True, frozen=True)
+class FactRecord:
+    """One structured fact plus its scope/source metadata."""
+
+    key: str
+    value: object
+    scope: FactScope
+    source: str = ""
+
+
+@dataclass(slots=True)
+class FactStore:
+    """A minimal scoped fact store for the v5 runtime migration."""
+
+    _records: dict[tuple[FactScope, str], FactRecord] = field(default_factory=dict)
+    _LOOKUP_ORDER: ClassVar[Tuple[FactScope, ...]] = (
+        FactScope.ATTEMPT,
+        FactScope.PROCESS,
+        FactScope.SESSION,
+        FactScope.BINARY,
+    )
+
+    def set(
+        self,
+        key: str,
+        value: object,
+        *,
+        scope: FactScope,
+        source: str = "",
+    ) -> FactRecord:
+        record = FactRecord(key=key, value=value, scope=scope, source=source)
+        self._records[(scope, key)] = record
+        return record
+
+    def get_record(
+        self,
+        key: str,
+        *,
+        scope: Optional[FactScope] = None,
+    ) -> Optional[FactRecord]:
+        if scope is not None:
+            return self._records.get((scope, key))
+
+        for candidate_scope in self._LOOKUP_ORDER:
+            record = self._records.get((candidate_scope, key))
+            if record is not None:
+                return record
+        return None
+
+    def get(
+        self,
+        key: str,
+        *,
+        scope: Optional[FactScope] = None,
+        default: object = None,
+    ) -> object:
+        record = self.get_record(key, scope=scope)
+        return default if record is None else record.value
+
+    def has(self, key: str, *, scope: Optional[FactScope] = None) -> bool:
+        return self.get_record(key, scope=scope) is not None
+
+    def clear_scope(self, scope: FactScope) -> None:
+        for fact_key in [record_key for record_key in self._records if record_key[0] == scope]:
+            del self._records[fact_key]
+
+    def records(self, *, scope: Optional[FactScope] = None) -> tuple[FactRecord, ...]:
+        if scope is None:
+            values = self._records.values()
+        else:
+            values = (
+                record
+                for (record_scope, _), record in self._records.items()
+                if record_scope == scope
+            )
+        return tuple(sorted(values, key=lambda record: (record.scope.value, record.key)))
+
+    def snapshot(self, *, scope: Optional[FactScope] = None) -> dict[str, object]:
+        if scope is not None:
+            return {record.key: record.value for record in self.records(scope=scope)}
+
+        merged: dict[str, object] = {}
+        for fact_scope in reversed(self._LOOKUP_ORDER):
+            for record in self.records(scope=fact_scope):
+                merged[record.key] = record.value
+        return merged
 
 
 @dataclass(slots=True)
@@ -233,6 +331,7 @@ class ExploitContext:
     target_candidates: list[FunctionCandidate] = field(default_factory=list)
     exploit_hints: list[ExploitHint] = field(default_factory=list)
     preferred_target: Optional[FunctionCandidate] = None
+    facts: FactStore = field(default_factory=FactStore)
 
     # Runtime
     verbose: bool = False
@@ -305,6 +404,50 @@ class ExploitContext:
         """Persist recon-produced target candidates and cache the top hit."""
         self.target_candidates = list(candidates)
         self.preferred_target = self.target_candidates[0] if self.target_candidates else None
+
+    @property
+    def runtime_fact_scope(self) -> FactScope:
+        """Return the default runtime scope for leak-like live facts."""
+        return FactScope.PROCESS if self.mode == "local" else FactScope.SESSION
+
+    def set_fact(
+        self,
+        key: str,
+        value: object,
+        *,
+        scope: FactScope,
+        source: str = "",
+    ) -> FactRecord:
+        return self.facts.set(key, value, scope=scope, source=source)
+
+    def set_runtime_fact(
+        self,
+        key: str,
+        value: object,
+        *,
+        source: str = "",
+    ) -> FactRecord:
+        return self.set_fact(
+            key,
+            value,
+            scope=self.runtime_fact_scope,
+            source=source,
+        )
+
+    def get_fact(
+        self,
+        key: str,
+        *,
+        scope: Optional[FactScope] = None,
+        default: object = None,
+    ) -> object:
+        return self.facts.get(key, scope=scope, default=default)
+
+    def has_fact(self, key: str, *, scope: Optional[FactScope] = None) -> bool:
+        return self.facts.has(key, scope=scope)
+
+    def clear_facts(self, scope: FactScope) -> None:
+        self.facts.clear_scope(scope)
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> "ExploitContext":
@@ -437,7 +580,7 @@ class ExploitContext:
         else:
             report_dir = Path.cwd()
 
-        return cls(
+        ctx = cls(
             binary=binary,
             mode=mode,
             remote=remote,
@@ -449,9 +592,20 @@ class ExploitContext:
             report_dir=report_dir,
             ssl=ssl_flag,
         )
+        if padding:
+            ctx.set_fact(
+                "overflow.padding",
+                padding,
+                scope=FactScope.BINARY,
+                source="cli.fill",
+            )
+        return ctx
 
 
 __all__ = [
+    "FactScope",
+    "FactRecord",
+    "FactStore",
     "BinaryInfo",
     "LibcInfo",
     "RopGadgetsX64",

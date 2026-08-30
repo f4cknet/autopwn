@@ -62,7 +62,7 @@
   - **影响范围**：`v4.0.2` 任务粒度过大（混了 padding 探测 + ret2libc leak + PIE brute force 三个独立根因），已拆分为 v4.0.2a/b/c 三个子任务（per `AGENTS.md §2.4`）。
 - **5/5 SUCCESS 不可达**：canary 暴力枚举需 > 10min，60s/600s timeout 都 PARTIAL；pre-existing v3.1 限制
 - **覆盖率 44%**（行覆盖）：剩 56% 主要是 `_legacy_*` 函数（已 obsolete，按 `check_recon_coverage.py` 原则不测）；public API 覆盖率 95%
-- **单一 Owner**：所有 PR 走 Owner 自审（per `AGENTS.md §2.2`）
+- **单一 Owner**：默认直接 `commit + push` 到 `main`；Owner 自审自行完成，不要求 PR（per `AGENTS.md §2.2`）。
 
 ### 1.3 v4.1 候选方向
 
@@ -86,10 +86,10 @@
 | **AI Agent 发现** | **不直接实施**（per `AGENTS.md §1` 铁律 2）→ 走"需求澄清"提问给 Owner |
 | **重构期任务迁移** | 从 `rebuild.md §3` 提取 ✅ 任务作为新迭代的"已实现功能"基础 |
 
-### 2.2 单任务工作流（4 步）
+### 2.2 单任务工作流（3 步）
 
 ```
-[⏳ Pending] → Owner 决策拍板 → [🔄 In Progress] → 实施 + 6 关验收 → [👀 Review] → [✅ Done]
+[⏳ Pending] → Owner 决策拍板 → [🔄 In Progress] → 实施 + 6 关验收 → [👀 Self Review] → [✅ Done]
                                        ↓
                                    [⚠️ Blocked] / [❌ Cancelled]
 ```
@@ -97,20 +97,21 @@
 **详细步骤**：
 
 1. **⏳ Pending → 🔄 In Progress**
-   - 在 §3 任务行改状态 + 加 Owner + 实际工时
-   - 拉分支：`git checkout main && git pull && git checkout -b fix/v{X}.{Y}.{Z}-{slug}`
-   - 实施前先在 PR 描述引用任务 ID（per `AGENTS.md §5`）
+   - 在 §3 任务行改状态 + 加 Owner + 预估工时
+   - 同步 `main`；若本地工作树很脏，可新建干净 worktree 或临时工作分支，但**最终落点仍是 `origin/main`**
+   - 实施前先确认最终 `commit message` 会引用任务 ID（per `AGENTS.md §5`）
 
-2. **🔄 In Progress → 👀 Review**
+2. **🔄 In Progress → 👀 Self Review**
    - 代码完成 + `pytest -m "not integration"` 全过
-   - 写 PR 描述：`[v{X}.{Y}.{Z}] {动词} {对象}` + 实施要点 + Refs:`upgraded.md §3`
-   - push + 创 PR（per Owner 自审）
+   - 若涉及行为变化，补跑对应 `pytest -m integration` / `Challenge/` 验证
+   - 本地提交：`[v{X}.{Y}.{Z}] {动词} {对象}` + 实施要点 + Refs:`upgraded.md §3`
 
-3. **👀 Review → ✅ Done**
+3. **👀 Self Review → ✅ Done**
    - Owner 自审通过（单 Owner 项目）
-   - 合并到 main
-   - **同一 PR** 更新 §3 任务行状态 = ✅ + 加实际工时 + 加 commit SHA
-   - **同一 PR** 更新 `CHANGELOG.md`（如适用）
+   - 直接 `git push origin HEAD:main`
+   - push 后 working tree clean
+   - **同一任务的最终已 push 提交** 更新 §3 任务行状态 = ✅ + 加实际工时 + 加 commit SHA
+   - **同一任务的最终已 push 提交** 更新 `CHANGELOG.md`（如适用）
 
 ### 2.3 任务 ID 格式（v4.0+）
 
@@ -124,13 +125,15 @@
 ### 2.4 任务粒度
 
 per `AGENTS.md §2.1`：
-- 单 PR ≤ 400 行 diff
-- 单 PR 不跨多个任务 ID
-- 单 PR 只动一层（如 `recon/` 不允许顺手改 `primitives/`）
+- 单个任务 ≤ 400 行 diff
+- 同一批次 `commit/push` 不跨多个任务 ID
+- 单个任务只动一层（如 `recon/` 不允许顺手改 `primitives/`）
 
 ---
 
 ## 3. 任务看板
+
+> **现行流程说明（治理变更 1.10 · 2026-08-30）**：历史任务行中若出现 `fix/...` 分支名、`PR` 描述、`merge` / `Review` 等字样，仅用于审计追溯；当前单 Owner 流程以 `AGENTS.md §2.2` 与本文 §2 为准，默认直接 `commit + push` 到 `main`。
 
 ### 3.1 v4.0 GA 准备（高优先级 · 修复后才发 GA）
 
@@ -172,6 +175,7 @@ per `AGENTS.md §2.1`：
 | `v4.1.11` | **加 `-ssl` flag 支持 SSL/TLS 远程连接**（per Owner 2026-06-13 需求——CTF 练习平台如 [ctf.r2.club.cyberstages.org] 等已用 SSL 包装 binary 远程服务，pwntools `remote()` 默认 plaintext，需显式 `ssl=True`）：(a) **CLI**：`autopwn/cli.py::_build_argparser` 加 `--ssl` (`-ssl`) `action="store_true"`，默认 False；(b) **Context**：`autopwn/context.py::ExploitContext` 加 `ssl: bool = False` 字段，`from_args` 读取 `args.ssl` 并**验证** — `args.ssl=True` 必须配 `-ip`+`-p`（local 模式无意义），否则 `ContextError`；(c) **30 个 `remote()` 调用点**改为 `remote(host, port, ssl=ctx.ssl)`（per pwntools 4.x kwarg 透传；False 走原路径 0 行为变化）：13 个 strategy（ret2system/ret2libc_put/ret2libc_write/execve_syscall/fmtstr/rwx_shellcode × local+remote）+ 7 个 canary_* call sites；(d) **Unit test**：`tests/unit/test_context_ssl.py` 加 5 个测试覆盖 (i) `from_args` 默认 `ssl=False`；(ii) `-ip/-p/-ssl` 联合 → `ctx.ssl=True`；(iii) `-ssl` 配 local 抛 `ContextError`；(iv) `-ip/-p` 不配 `-ssl` 仍走 remote plaintext；(v) CLI parser 接受 `-ssl`/`--ssl` 双形式；(e) **README**：Usage section 加 SSL 段 + 示例（plaintext vs SSL remote）。**理由**：(a) 越来越多 CTF 平台用 `stunnel`/`nginx` 包装 binary service 走 TLS；(b) pwntools `remote()` ssl 是 4.x 标准 kwarg，加透明透传 0 overhead；(c) `-ssl` 是 per-run flag 而非 context 永久状态——local 模式无关。**影响**：(a) 30 个 call site 显式带 `ssl=ctx.ssl`，False 时行为完全等价（pwntools 走 plaintext）；(b) `from_args` 加 1 行校验（`-ssl` 需配 remote）；(c) `_build_argparser` 加 1 个 `add_argument`。**风险**：(a) pwntools 4.x `remote(ssl=True)` 走 `ssl.wrap_socket`（Python <3.12 默认实现），Python 3.12+ 需 `ssl.create_default_context()`——pwntools 内部已处理，本任务不修；(b) CTF 平台常用自签证书，pwntools 默认 `ssl=True` 会做 cert verify（可能 handshake fail）——**对策**：v4.1.11b 加 `--ssl-skip-verify` flag（或在 `ctx.ssl` 上加 `verify` 子字段）；(c) 30 个机械改动若漏一处，**该 strategy 走 plaintext** → user 加 `-ssl` 仍 fail 难诊断——对策：v4.1.11 用 `grep` 全量扫 `io = remote(host, port)` 0 remaining 验证（已实测）。**6 关验收**：① 代码合入分支（17 files modified + 1 new test file）；② `pytest tests/unit -q` 全过（**726 passed**，基线 721 + 5 新 = 726，0 回归）；③ N/A（CI 不连真 SSL server）；④ N/A（pwntools 默认 cert verify 与 self-signed cert 不兼容——CI 用 openssl s_server 起 SSL server 后 pwntools `remote(ssl=True)` 报 cert verify fail；user 真 CTF 平台多用受信任 CA 证书，可走通；5 关 ② + grep 全量验证 30 处 call site 透传足够）；⑤ Owner 自审；⑥ 文档同步（本表 + README 新增 "Remote / SSL" 段）| ✅ | 1h | **Owner**：@Minzhi_Zhou |
 | `v4.1.14` | **修 `ctf_env` 标准容器下的工具链兼容层**（Owner 2026-08-30 现场新立任务）：范围限于 `autopwn/core/runner.py`、`autopwn/recon/checksec.py`、必要的 runner / recon 单测，以及 `tests/unit/test_context_ssl.py` 的容器路径兼容；**不**改 README / writeup / 其他策略逻辑。**目标**：让现有 `recon/*` 与 integration 流程在 `ctf_env` 里继续沿用既有 public API，而不是把容器工具差异向上泄漏到 `strategy` 层。**实施方向**：(a) `run_checksec()` 同时兼容 `checksec <file>` 与 `checksec --file=<file>` 两种 CLI 契约；(b) `recon.checksec.collect()` 兼容新版表格式 `checksec` 输出——当缺少历史 `Arch:` / `Stripped:` 字段时，回退到 `file` 输出补齐 bit / stripped；(c) `run_ropper()` 在 `ropper` 缺失时自动 fallback 到 `ROPgadget`，并把输出归一化成现有 `recon/rop.py` 可直接解析的 ropper-like 行格式；(d) `run_cyclic_create()` / `run_cyclic_find()` 在独立 `cyclic` 缺失时 fallback 到 `pwn cyclic`；(e) `tests/unit/test_context_ssl.py` 不再硬编码 `/ctf/autopwn/…`，改用 `tests.conftest.CHALLENGE_DIR`（或等价 repo 内解析）适配 `/data/autopwn`。**6 关验收**：① 代码合入 `fix/v4.1.14-ctf-env-toolchain-compat`；② `docker exec ctf_env bash -lc 'cd /data/autopwn && python3 -m pytest tests/unit/test_core_runner.py tests/unit/test_context_ssl.py tests/unit/recon/test_recon_public_api.py -q'` 全过；③ `docker exec ctf_env bash -lc 'cd /data/autopwn && python3 -m pytest tests/unit -m "not integration" -q'` 不再因 `checksec` / `ropper` / 路径问题失败；④ 将 integration 失败收敛为**非工具契约**问题：`docker exec ctf_env bash -lc 'cd /data/autopwn && python3 -m pytest tests/integration/test_shell_interaction.py -q'` 不再出现 `checksec` / `ropper` / `/ctf/autopwn` 路径类假红；⑤ Owner 自审；⑥ 文档同步（本表状态 + 如有必要的 `autopwn/pwntools.md` 交叉引用）。**当前进展（2026-08-30）**：关②已过（`34 passed in 2.02s`）；关③已过（`735 passed, 1 warning in 18.98s`），说明原先 `checksec` / `ropper` / 路径三类**工具链假红**已清空；关④已达成——integration 仅剩 `level3_x64` 这一个 exploit/runtime 兼容问题，已单独归类到 `v4.1.15`，不再属于本行 scope；关①/⑤ 需待实际 merge / Owner 收尾后才能改 `✅`。| 👀 | 1h | **风险**：(a) `ROPgadget` 与 `ropper` 搜索语义不完全等价，必须把兼容层收敛在 `core.runner`，避免上层再分叉解析器；(b) fallback 若返回过宽结果，可能把 `ret` 误识别成 `pop reg; ret`——需用单测锁死归一化规则；(c) 新版 `checksec` 表格不再暴露 `Arch:` 标签，bit / stripped 的回退来源必须固定（优先 `file`），避免在不同发行版间继续漂移；(d) 本任务只解决**工具契约兼容**，若 integration 仍失败，应单独定位为 exploit/基线问题，不在本行偷扩 scope。 |
 | `v4.1.15` | **将 `level3_x64` 暴露的失败归类为“x64 三参 leak primitive 缺第三参数控制”并修复**（Owner 2026-08-30 现场新立任务）：**归类理由**：如果把它写成“修 level3_x64”，后续每遇到一个 `write(fd, buf, count)` 型 x64 泄漏题就会继续靠单题热补丁；真正的共性根因是 **`Ret2LibcWriteX64.build_payload()` 把 3 参数函数调用偷简化成只控 `rdi/rsi`，把 `rdx` 留给运行时残值**。这在某些 libc / 调用路径下“碰巧可用”，在 `ctf_env` 当前 runtime 下则直接退化为 0-byte leak。**范围**：限于 `autopwn/primitives/ret2libc_write.py`、相关 x64 write strategy / canary strategy、必要的单元/集成测试，以及本表状态同步；**不**做 challenge-name 特判。**实施方向**：(a) 在 primitive 层引入**通用 x64 三参 call builder**，优先使用直接 `pop rdx`(含 `pop rdx; pop rbx; ret` 变体)；(b) 若无直接 `rdx` gadget，则 fallback 到 **ret2csu**（解析 `__libc_csu_init` 的 pop 链 + call 链）构造 `write(1, write@GOT, 8)`；(c) 让 `Ret2LibcWriteX64` / `CanaryRet2LibcWriteX64*` 共用该 builder，避免再次出现“非 canary 修了、canary 版本漏修”；(d) 把旧的“2 参 write leak”视为不可靠历史实现，不再作为新路径的默认契约；(e) 对这类 **2-stage x64 write leak**，stage2 的 `system("/bin/sh")` 对齐判定必须按“stage1 泄漏后回到 `main` 再次进入漏洞函数”的真实调用路径复核，必要时补 1 个 `ret`，避免把 stage1 修好后又在 verify 前因 MOVAPS/栈对齐倒下。**6 关验收**：① 代码合入 `fix/v4.1.15-x64-write-leak-arg3`；② `docker exec ctf_env bash -lc 'cd /data/autopwn && python3 -m pytest tests/unit/test_primitives_ret2libc_write.py tests/unit/test_primitives_ret2libc_extra_rsi.py tests/unit/test_exp_ret2libc_write.py tests/unit/test_exp_canary.py -q'` 全过；③ `docker exec ctf_env bash -lc 'cd /data/autopwn && python3 -m pytest tests/unit -m "not integration" -q'` 全过；④ `docker exec ctf_env bash -lc 'cd /data/autopwn && python3 -m pytest tests/integration/test_shell_interaction.py -q'` 恢复既有 pass/skip/xfail 基线；⑤ Owner 自审；⑥ 文档同步（本表状态 + 后续 fix 记录索引）。**当前进展（2026-08-30）**：关②已过（`102 passed in 6.24s`）；关③已过（`738 passed, 1 warning in 19.61s`）；关④已过（`4 passed, 1 skipped, 1 xfailed in 37.10s`）；关①/⑤ 需待实际 merge / Owner 收尾后才能改 `✅`。| 👀 | 1.5h | **风险**：(a) `__libc_csu_init` 在不同编译器/优化级别下寄存器搬运顺序可能不同，不能把 `r13/r14/r15` 的语义硬编码成单一版本——需要解析实际反汇编；(b) x64 write-leak stage1 payload 会变长，必须确认不破坏当前可用的 padding / frame 假设；(c) 若某 binary 同时没有 `pop rdx` 也没有可识别的 ret2csu，策略应 fail-closed 而不是继续赌运行时残值；(d) stage2 对齐若仍直接复用“单次进入漏洞函数”的旧判定，可能在 ret2csu leak 修好后把问题后移成第二阶段 SIGSEGV。 |
+| `v4.1.16` | **治理变更：删除单 Owner 项目的默认 PR 流程，改为直接 `commit + push` 到 `main`**（Owner 2026-08-30 明确澄清）：范围限于 `AGENTS.md` + `upgraded.md` 的**现行治理/流程章节**；不回写伪造历史，但删除“默认走 PR”的规范文本，并明确历史任务行中的 `fix/...` / `PR` / `merge` 描述仅用于审计追溯。**目标**：让后续迭代不再把单人项目误执行成 branch + PR 工作流。**实施方向**：(a) `AGENTS.md` 改写铁律 2/3、§2、§3、§4、§5、§6.1、§7 中所有默认 PR 依赖；(b) `upgraded.md` 改写 §1.2、§2.2、§2.4、§5.1、§5.5、§5.6，并新增现行流程说明；(c) 保留任务状态治理与单任务粒度约束，但把载体从 PR 改成 `commit/push`。**6 关验收**：① 治理文档已提交并 push 到 `main`；② N/A（纯文档任务）；③ N/A；④ N/A；⑤ Owner 自审；⑥ 文档同步（本行 + `AGENTS.md §8` changelog）。**备注**：历史任务行中已有的 `fix/...` / `PR` / `merge` 字样保留用于审计，不再视为现行规则。| ✅ | 0.5h | **Owner**：@Minzhi_Zhou |
 
 ### 3.3 open 阻塞（当前 = 0）
 
@@ -234,11 +238,11 @@ Core  (core/*.py)
 
 > **6 关验收（必跑）**：每条都 ✅ 才能把状态从 🔄/👀 改 ✅。
 
-### 5.1 关 1: 代码已合并到 main
+### 5.1 关 1: 代码已 push 到 main
 
-- PR target = main
-- 合并后 working tree clean
-- `git log main --oneline -1` 显示当前 commit
+- 当前提交已进入 `origin/main`
+- push 后 working tree clean
+- `git log origin/main --oneline -1` 显示当前 commit
 
 ### 5.2 关 2: pytest unit 全过
 
@@ -275,13 +279,14 @@ AUTOPWN_VERIFY_TIMEOUT=60 bash scripts/run_verify.sh v<X>.<Y>-smoke canary fmtst
 ### 5.5 关 5: Owner 自审
 
 - 单 Owner 项目（per `AGENTS.md §2.2`），Owner 自审 = Reviewer
-- PR 描述含：任务 ID / 实施要点 / Refs:`upgraded.md §3` 任务行
+- `commit message` 含：任务 ID / 动词 / 对象
+- 如写 `commit body`，含：实施要点 / Refs:`upgraded.md §3` 任务行
 
 ### 5.6 关 6: 文档同步
 
-- **同一 PR** 更新 §3 任务行（状态 + 实际工时 + commit SHA）
-- **同一 PR** 更新 `CHANGELOG.md`（如适用）
-- **同一 PR** 更新 `refactor.md` / `rebuild.md`（如涉及架构变更）
+- **同一任务的最终已 push 提交** 更新 §3 任务行（状态 + 实际工时 + commit SHA）
+- **同一任务的最终已 push 提交** 更新 `CHANGELOG.md`（如适用）
+- **同一任务的最终已 push 提交** 更新 `refactor.md` / `rebuild.md`（如涉及架构变更）
 
 ### 5.7 工具脚本
 

@@ -10,6 +10,8 @@ import argparse
 
 import pytest
 
+from tests.conftest import CHALLENGE_DIR
+
 
 def _ns(**kwargs):
     """Build a minimal argparse.Namespace matching what main() produces.
@@ -19,7 +21,7 @@ def _ns(**kwargs):
     `Path("Challenge/rip").exists()` resolves against cwd).
     """
     base = dict(
-        local="/ctf/autopwn/Challenge/rip",  # absolute — exists in this repo
+        local=str(CHALLENGE_DIR / "rip"),  # absolute — exists in this repo
         ip=None,
         port=None,
         libc=None,

@@ -182,6 +182,7 @@ class ExploitContext:
     binsh_in_binary: bool = False
     fmtstr_offset: Optional[int] = None
     fmtstr_buf: Optional[int] = None
+    canary_max_seconds: float = 20.0
 
     # Runtime
     verbose: bool = False
@@ -240,9 +241,10 @@ class ExploitContext:
           ``-f/--fill``   → ``ctx.padding`` (manual override)
           ``-v/--verbose``→ ``ctx.verbose`` (bool)
 
-        plus forward-compatible defaults via ``getattr`` for the P3.5
+        plus forward-compatible defaults via ``getattr`` for later
         additions (``--report-dir`` → ``ctx.report_dir``;
-        ``--no-report`` → ``ctx.enable_report`` — both now mapped).
+        ``--no-report`` → ``ctx.enable_report``;
+        ``--canary-max-seconds`` → ``ctx.canary_max_seconds``).
 
         Fields NOT derivable from args (``BinaryInfo.bit`` /
         ``stack_canary`` / ``pie`` / ``nx`` / ``relro`` /
@@ -301,6 +303,13 @@ class ExploitContext:
                 "-ssl requires -ip and -p (SSL only meaningful for remote mode)"
             )
 
+        # 2c) v4.1.18: canary brute-force fail-fast budget.
+        # ``0`` means "unbounded" so users can explicitly opt back
+        # into the pre-v4.1.18 long-running behavior for one-off runs.
+        canary_max_seconds = float(getattr(args, "canary_max_seconds", 20.0))
+        if canary_max_seconds < 0:
+            raise ContextError("--canary-max-seconds must be >= 0")
+
         # 3) Libc (matches legacy L3318-3326)
         libc = LibcInfo()
         libc_arg = getattr(args, "libc", None)
@@ -356,6 +365,7 @@ class ExploitContext:
             remote=remote,
             libc=libc,
             padding=padding,
+            canary_max_seconds=canary_max_seconds,
             verbose=verbose,
             enable_report=enable_report,
             report_dir=report_dir,

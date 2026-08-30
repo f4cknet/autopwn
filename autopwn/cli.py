@@ -35,7 +35,7 @@ from autopwn.report import set_current_ctx
 
 
 def _build_argparser() -> argparse.ArgumentParser:
-    """Construct the 8-flag argparse parser.
+    """Construct the modern argparse parser.
 
     The flags are identical to v3.1's :func:`_legacy.main` parser
     (``autopwn/_legacy.py`` L3019-3050) so that the
@@ -81,6 +81,10 @@ Examples:
     parser.add_argument("-ssl", "--ssl", action="store_true",
                         help="Use SSL/TLS for the remote connection "
                              "(requires -ip + -p).  No effect in local mode.")
+    parser.add_argument("--canary-max-seconds", type=float, default=20.0,
+                        help="Maximum seconds to spend in canary brute-force "
+                             "detection before aborting that path "
+                             "(default: 20; use 0 for no limit)")
     return parser
 
 

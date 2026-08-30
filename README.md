@@ -89,7 +89,16 @@ autopwn -l ./binary -libc ./libc-2.19.so -f 112
 
 # Verbose mode
 autopwn -l ./binary -v
+
+# Cap canary brute-force detect to 10 seconds
+autopwn -l ./Challenge/canary --canary-max-seconds 10
 ```
+
+> **v4.1.18 change**: canary detect now has a default fail-fast
+> wall-time budget of **20s**.  This prevents `Challenge/canary`-style
+> brute-force loops from monopolizing an offline batch run.  Use
+> `--canary-max-seconds 0` to restore the old unbounded behavior for
+> a one-off long run.
 
 ### Report control
 
@@ -179,6 +188,7 @@ autopwn -l ./binary -libc /lib/x86_64-linux-gnu/libc.so.6 -f 88 -v
 | `-libc, --libc` | Custom libc file path | `-libc ./libc-2.27.so` |
 | `-f, --fill` | Manual overflow padding size | `-f 112` |
 | `-v, --verbose` | Enable verbose output | `-v` |
+| `--canary-max-seconds` | Max seconds for canary brute-force detect (`0` = no limit) | `--canary-max-seconds 10` |
 
 ---
 

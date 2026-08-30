@@ -220,7 +220,7 @@ def test_fmtstr1_exploit_completes_within_extended_timeout() -> None:
 
 @pytest.mark.xfail(
     reason="canary is pre-existing PARTIAL (v3.1 brute-force limit); "
-           "see upgraded.md §1.2 '5/5 SUCCESS 不可达'",
+           "see upgraded.md §1.2 '5/5 SUCCESS 仍不可达'",
     strict=False,
 )
 def test_canary_is_xfail_pre_existing_partial() -> None:
@@ -241,9 +241,9 @@ def test_canary_is_xfail_pre_existing_partial() -> None:
     if not binary.exists():
         pytest.skip("canary binary not present")
 
-    # Use a short timeout — canary brute force is >10 min, so we
-    # KNOW this won't finish.  TimeoutExpired is the EXPECTED
-    # outcome and should be caught + reported as the xfail reason.
+    # Use a short timeout.  Pre-v4.1.18 this usually ended in the
+    # outer TimeoutExpired path; v4.1.18+ may instead fail-fast
+    # internally once the canary brute-force budget is exhausted.
     try:
         result = _run_autopwn_on(binary, timeout=20)
     except subprocess.TimeoutExpired as e:

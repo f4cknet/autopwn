@@ -94,7 +94,13 @@ def run_detect_phase(ctx: ExploitContext) -> None:
             print_success("format string vulnerability detected")
             print_info("attempting to leak canary value")
             leaks = detect_canary.leakage_canary_value(ctx, program)
-            canary_info = detect_canary.canary_fuzz(ctx, program, ctx.binary.bit, leaks)
+            canary_info = detect_canary.canary_fuzz(
+                ctx,
+                program,
+                ctx.binary.bit,
+                leaks,
+                max_seconds=ctx.canary_max_seconds,
+            )
             if canary_info is None:
                 print_warning("failed to leak canary value (will retry via candidates())")
             else:

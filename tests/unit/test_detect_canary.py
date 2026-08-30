@@ -87,6 +87,40 @@ class TestCanaryFuzz:
         assert result is None
         assert ctx.canary is None
 
+    def test_respects_wall_time_budget(self, challenge_dir, monkeypatch):
+        """v4.1.18: ``max_seconds`` must cut off long brute-force loops."""
+        import pwn
+        from autopwn.detect import canary as canary_mod
+
+        ctx = ctx_for("canary", bit=32)
+        spawn_count = 0
+
+        class FakeIO:
+            def recv(self): return b""
+            def recvline(self): return b"0x41414141"
+            def sendline(self, *a, **kw): pass
+            def wait(self): pass
+            def poll(self): return 0
+            def close(self): pass
+
+        def fake_process(*a, **kw):
+            nonlocal spawn_count
+            spawn_count += 1
+            return FakeIO()
+
+        ticks = iter([0.0, 0.0, 0.2, 0.2, 0.2])
+        monkeypatch.setattr(pwn, "process", fake_process)
+        monkeypatch.setattr(canary_mod.time, "monotonic", lambda: next(ticks, 0.2))
+
+        leaks = [(0, "0x0"), (1, "0x1111"), (2, "0x80000000")]
+        result = canary_mod.canary_fuzz(
+            ctx, challenge_dir / "canary", 32, leaks,
+            max_c=3, max_padding=10, max_seconds=0.1,
+        )
+        assert result is None
+        assert ctx.canary is None
+        assert spawn_count == 1
+
     def test_writes_ctx_canary_on_success(self, challenge_dir, monkeypatch):
         """``ctx.canary`` is set to a ``CanaryInfo`` on successful bypass."""
         from autopwn.context import CanaryInfo

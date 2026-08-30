@@ -30,6 +30,7 @@ def _ns(**kwargs):
         no_report=False,
         report_dir=None,
         ssl=False,
+        canary_max_seconds=20.0,
     )
     base.update(kwargs)
     return argparse.Namespace(**base)
@@ -42,6 +43,7 @@ def test_from_args_default_ssl_is_false(tmp_path, monkeypatch):
     ctx = ExploitContext.from_args(_ns())
     assert ctx.ssl is False
     assert ctx.mode == "local"
+    assert ctx.canary_max_seconds == 20.0
 
 
 def test_from_args_with_ssl_remote_sets_flag(tmp_path, monkeypatch):
@@ -93,4 +95,30 @@ def test_cli_argparser_accepts_dash_ssl():
     # No flag → False
     ns = parser.parse_args(["-l", "/tmp/x"])
     assert ns.ssl is False
+
+
+def test_from_args_canary_budget_override(tmp_path, monkeypatch):
+    """``--canary-max-seconds`` propagates into ``ctx.canary_max_seconds``."""
+    monkeypatch.chdir(tmp_path)
+    from autopwn.context import ExploitContext
+    ctx = ExploitContext.from_args(_ns(canary_max_seconds=7.5))
+    assert ctx.canary_max_seconds == 7.5
+
+
+def test_from_args_negative_canary_budget_raises(tmp_path, monkeypatch):
+    """Negative canary budget is rejected early by ``from_args``."""
+    monkeypatch.chdir(tmp_path)
+    from autopwn.context import ContextError, ExploitContext
+    with pytest.raises(ContextError, match="canary-max-seconds"):
+        ExploitContext.from_args(_ns(canary_max_seconds=-1))
+
+
+def test_cli_argparser_accepts_canary_max_seconds():
+    """The CLI parser must expose ``--canary-max-seconds``."""
+    from autopwn.cli import _build_argparser
+    parser = _build_argparser()
+    ns = parser.parse_args(["-l", "/tmp/x", "--canary-max-seconds", "7.5"])
+    assert ns.canary_max_seconds == 7.5
+    ns = parser.parse_args(["-l", "/tmp/x"])
+    assert ns.canary_max_seconds == 20.0
 

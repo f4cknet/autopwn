@@ -344,6 +344,7 @@ class TestRunDetectPhase:
         """``stack_canary=True`` triggers ``leakage_canary_value`` + ``canary_fuzz``."""
         ctx = _make_ctx(tmp_path, bit=64, canary=True)
         ctx.padding = 64  # skip dynamic overflow test
+        ctx.canary_max_seconds = 7.5
 
         with mock.patch("autopwn.orchestrator.detect.detect_binsh") as binsh_mod, \
              mock.patch("autopwn.orchestrator.detect.detect_overflow"), \
@@ -360,7 +361,9 @@ class TestRunDetectPhase:
 
         fmtstr_mod.detect_format_string_vulnerability.assert_called_once()
         canary_mod.leakage_canary_value.assert_called_once()
-        canary_mod.canary_fuzz.assert_called_once()
+        canary_mod.canary_fuzz.assert_called_once_with(
+            ctx, ctx.binary.path, ctx.binary.bit, [(1, "0x1234")], max_seconds=7.5
+        )
 
     def test_no_canary_skips_canary_branch(self, tmp_path):
         """``stack_canary=False`` skips ``leakage_canary_value`` entirely."""

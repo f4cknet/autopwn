@@ -1,81 +1,48 @@
-# upgraded.md — AutoPwn v4.0+ 迭代流程
+# upgraded.md — AutoPwn v4.0+ 迭代索引
 
-> **角色**：v4.0+ 迭代的**索引与流程入口**—— "今天起怎么开发 autopwn"
-> **状态**：v4.0.dev0 准备 GA（2026-06-10）
+> **角色**：v4.0+ 迭代的**主索引与流程入口**——“今天起怎么开发 autopwn”
+> **状态**：`4.0.dev0` 准备 GA（最近治理变更：1.13，2026-08-30）
 > **配套文档**：
-> - [`AGENTS.md`](./AGENTS.md) — 项目治理（4 条铁律 + 违规分级 + 紧急通道 + AI Agent 条款）
-> - [`refactor.md`](./refactor.md) — v4.0 架构演进史（v3.1 → v4.0.dev0 WHY）
-> - [`rebuild.md`](./rebuild.md) — v3.1 → v4.0.dev0 重构实施历史（P0-P11 阶段总结）
-> - [`upgraded/`](./upgraded/) — 每次迭代的需求详情 / 范围 / 风险 / 验收记录（按 `vX.Y.Z.md` 命名）
+> - [`AGENTS.md`](./AGENTS.md) — 项目治理与 AI Agent 约束
+> - [`refactor.md`](./refactor.md) — v4.0 架构演进史（WHY）
+> - [`rebuild.md`](./rebuild.md) — v3.1 → v4.0 重构实施历史
+> - [`upgraded/appendix.md`](./upgraded/appendix.md) — 文件路径 / 工具 / 模板速查
+> - [`upgraded/backlog.md`](./upgraded/backlog.md) — 休眠 backlog 与历史未完成任务归档
+> - [`upgraded/archive_completed.md`](./upgraded/archive_completed.md) — 历史已完成任务归档
+> - [`upgraded/archive_state.md`](./upgraded/archive_state.md) — v4.1.21 前的详细状态快照
 >
-> **本文档章节**：
-> - §0 阅读指引
-> - §1 当前状态（v4.0 GA 准备 + v4.1 候选）
-> - §2 迭代流程（sprint / issue-driven）
-> - §3 任务看板（v4.0 GA / v4.1 候选任务）
-> - §4 当前架构（v4.0 已落地 + AI Agent 必读）
-> - §5 验证方法（铁律 4 6 关验收）
-> - §6 附录（文件路径 / 决策树 / 工具 / 模板）
->
-> **治理变更 1.12 · 2026-08-30**：`upgraded.md` 现在只保留阅读入口、任务索引、流程规则与验收基线；每个迭代的需求详情、范围、风险、验收记录统一放到 `upgraded/vX.Y.Z.md`。历史未迁移条目允许暂时保留 inline，后续按“新建即分文件，触达即迁移”收敛。
+> **治理变更 1.12 / 1.13 · 2026-08-30**：`upgraded.md` 现在只保留阅读入口、流程、当前活动任务、待收尾任务、最近完成任务与验证基线；休眠 backlog、详细状态说明、附录速查统一下沉到 `upgraded/*.md`。
 
 ---
 
 ## 0. 阅读指引
 
-| 你是谁 | 先看哪一节 |
+| 你是谁 | 先看什么 |
 |---|---|
-| **第一次接触本项目** | **必读 [`AGENTS.md`](./AGENTS.md) §1 铁律** → 本文件 §0 → §1 → §4 → §5 |
-| **想认领任务** | §1 当前状态 → §3 任务看板 → §2 流程 → §5 验证 |
-| **正在做某个任务** | §3 当前任务索引 → 对应 `upgraded/vX.Y.Z.md` → §5 验证（6 关）|
-| **理解 v4.0 架构** | §4 当前架构 + [`refactor.md §3`](./refactor.md) |
-| **AI Agent session 启动** | [`AGENTS.md §5`](./AGENTS.md) 启动清单 → 本文件 §0-§5 + 当前任务详情文件 |
-| **重构期历史追溯** | [`rebuild.md`](./rebuild.md) §3 阶段总结 + `git log` |
+| **第一次接触本项目** | `AGENTS.md` §1 → 本文件 §1 / §2 / §5 → `refactor.md §3` |
+| **正在做当前任务** | 本文件 §3.1 / §3.2 → 对应 `upgraded/vX.Y.Z.md` → 本文件 §5 |
+| **要续做历史 backlog** | `upgraded/backlog.md` 对应条目 → **先回填** 本文件 §3 + 新建 `upgraded/vX.Y.Z.md` → 再实施 |
+| **只想找文件路径 / 工具脚本** | `upgraded/appendix.md` |
+| **要追溯旧状态 / 历史决策** | `upgraded/archive_state.md` / `upgraded/archive_completed.md` / `rebuild.md` |
 
 ---
 
 ## 1. 当前状态
 
-### 1.1 v4.0 GA 准备
+### 1.1 现状快照
 
-**版本**：`4.0.dev0`（开发中）→ 目标 `4.0`（GA）
+- 当前开发版本：`4.0.dev0`，GA 收尾任务仍未完成
+- 当前行为基线：**4/5 SUCCESS + canary PARTIAL**；`v4.1.18` 起，`canary_fuzz()` 默认带 **20s fail-fast budget**
+- 当前治理模式：**单 Owner / 单目录 / 直接 `commit + push` 到 `main`**
+- 主工作目录固定为 `D:\ctf\ctf-env\autopwn`（容器内 `/data/autopwn`）
+- v4.1.21 前的详细状态长说明已迁到 [`upgraded/archive_state.md`](./upgraded/archive_state.md)
 
-**已完成**：
-- ✅ 6/6 重构里程碑（M0-M5）+ M6 内部打磨期
-- ✅ 85 个 P 阶段子任务全部 ✅
-- ✅ 9 次 Owner 拍板决策全部 Resolved
-- ✅ 0 open 阻塞
-- ✅ 626 unit tests + 17+1 integration tests（0 回归）
-- ✅ 5 binary 串行 baseline 4/5 SUCCESS（per P11.2 实测 2026-06-10）
-- ✅ 文档瘦身完成（AGENTS 174 + refactor 155 + rebuild 214 + 本文件）
-- ✅ 主干开发模式（main 唯一长期分支）
+### 1.2 当前主线
 
-**v4.0 GA 待做**（per §3 任务看板）：
-- 切版本号 4.0.dev0 → 4.0
-- 打 tag `v4.0.0` + GitHub Release
-- 写 CHANGELOG.md（v3.1 → v4.0 重大变更摘要）
-- README v4.0 更新（从 `4.0.dev0` → `4.0`）
-
-### 1.2 v4.0 已知限制
-
-- **🚨 当前 4/5 SUCCESS 仍含"假阳性 banner"**（2026-06-10 二次诊断）：v4.0.1（commit `ce7cc16`）已修 `io.interactive() → verify_shell()`；v4.0.3 已把 banner 移到 verify 之后（`record_success` 内部 banner + canary_*.py 12 处显式 banner 全删，统一由 `record_success_verified` 仅在 `id_ok=True` 路径 print）。**v4.0.4（⏳ 计划）**：完全删除 banner 打印（成功仅靠 `record_success` 生成 docx + `ctx.id_output` 戳记为唯一可见信号），并加 `verify_shell(keep_alive=True)` 让 strategies 不在 finally close io（tube 留在 `ctx.io` 供 fixture teardown 显式清理）。**v4.0+ 真判定**：verify_shell 返回 True（即真拿到 `uid=`）才生成 docx + 戳 id_output（per v4.0.4）
-- **🚨 2026-06-11 ctf-pwn 实测新发现（per `v4.0.2a/b` 拆分任务）**：
-  - **rip（autopwn 当前 5/5 实际 4/5）**：dynamic padding 探测 `test_stack_overflow` 返回 **30**（真实 = **23**），靠静态 `asm_stack_overflow` fallback 巧合修正成 23 才成功。**若去掉 fallback 链会立刻挂**。根因在 `detect/overflow.py::test_stack_overflow` 的 `final_padding = padding + alignment` 公式在小 frame（`sub $0x10` / `lea -0xf(%rbp)`）上系统性偏差。
-  - **level3_x64（autopwn 当前标 SUCCESS 实则假阳性）**：padding 探测正确（136），但 `Ret2LibcWriteX64.build_stage2_payload` 的 `ret` 对齐 gadget 被无条件应用，与 `sub $0x80` frame 实际需要的对齐方向相反，导致 do_system 的 `movaps %xmm1,(%rsp)` SIGSEGV。手动 `WITHOUT ret` 即可成功。
-  - **影响范围**：`v4.0.2` 任务粒度过大（混了 padding 探测 + ret2libc leak + PIE brute force 三个独立根因），已拆分为 v4.0.2a/b/c 三个子任务（per `AGENTS.md §2.4`）。
-- **5/5 SUCCESS 仍不可达**：canary 真正暴力枚举路径仍需 > 10min，属于 pre-existing v3.1 限制；**v4.1.18 起** detect 层默认对 `canary_fuzz()` 加 **20s fail-fast budget**（可用 `--canary-max-seconds 0` 或更大秒数覆盖），避免离线批跑长期刷 `Starting local process`
-- **覆盖率 44%**（行覆盖）：剩 56% 主要是 `_legacy_*` 函数（已 obsolete，按 `check_recon_coverage.py` 原则不测）；public API 覆盖率 95%
-- **单一 Owner**：默认直接 `commit + push` 到 `main`；Owner 自审自行完成，不要求 PR（per `AGENTS.md §2.2`）。默认只在仓库主目录 `D:\ctf\ctf-env\autopwn`（容器 `/data/autopwn`）迭代，未经 Owner 明确授权不创建额外 worktree / 平行目录。
-
-### 1.3 v4.1 候选方向
-
-- **候选目标打分 + 利用链排序**：对 `win/flag/hack/backdoor/shell` 等候选目标函数，以及 `fmtstr -> leak canary -> second-stage BOF` / `fmt write -> GOT hijack` 等常见链路做 evidence-based scoring，替代 challenge-name / 单函数名热补丁
-- **HEAP 利用**：当前 strategies 全部栈 / ROP / PIE，缺 `malloc` / `free` / `tcache` 漏洞利用
-- **多 binary 批处理**：当前 CLI 单 binary；`-l <dir>` 多 binary 批跑
-- **Web UI / RPC**：`orchestrator.run` 暴露为 HTTP/JSON（per `refactor.md §11` 旧扩展点）
-- **类型化异常**：`except Exception as e` 收敛为 `ReconError` / `DetectionError` / `StrategyError`
-- **LLM 辅助决策**：`candidates(ctx)` 优先级交给 LLM 微调（与 `mmx-cli` 技能联动）
-- **canary 暴力优化**（v4.1.3）：现 v4.0.3 "5/5 SUCCESS" 已被 v4.0.2 占位；如未来需要，可重写为并行爆破 + smarter padding
+- **当前活动任务**：`v4.1.19` 候选目标打分 + 利用链排序
+- **待收尾任务**：`v4.1.14` / `v4.1.15` 仍处于 `👀`
+- **最近治理完成**：`v4.1.21` 第二轮瘦身 `upgraded.md` 已落地
+- **休眠 backlog**：其余历史未完成任务已下沉到 [`upgraded/backlog.md`](./upgraded/backlog.md)，默认不在主索引逐条展开
 
 ---
 
@@ -83,383 +50,125 @@
 
 ### 2.1 任务来源
 
-| 来源 | 流程 |
+| 来源 | 要求 |
 |---|---|
-| **Owner 主动规划** | §3 任务看板加一行 + 在 `upgraded/` 下创建同 ID 详情文件 + 状态 ⏳ |
-| **Issue tracker** | Owner review 后转 §3 任务行 |
-| **AI Agent 发现** | **不直接实施**（per `AGENTS.md §1` 铁律 2）→ 走"需求澄清"提问给 Owner |
-| **重构期任务迁移** | 从 `rebuild.md §3` 提取 ✅ 任务作为新迭代的"已实现功能"基础 |
+| Owner 新需求 | 在 §3 增加任务索引行 + 创建 `upgraded/vX.Y.Z.md` |
+| 续做历史 backlog | 先从 `upgraded/backlog.md` 拆出 `upgraded/vX.Y.Z.md`，并**回填到 §3**，再写代码 |
+| AI Agent 发现 | 不直接实施；先走需求澄清 / 立项 |
+| 历史追溯 | 默认读 archive；非追溯场景不主动进入 |
 
-### 2.2 单任务工作流（3 步）
+### 2.2 单任务工作流
 
-```
-[⏳ Pending] → Owner 决策拍板 → [🔄 In Progress] → 实施 + 6 关验收 → [👀 Self Review] → [✅ Done]
-                                       ↓
-                                   [⚠️ Blocked] / [❌ Cancelled]
-```
+1. **立项**：在 §3 加任务索引行，写状态 / 预估 / 链接；详情写入 `upgraded/vX.Y.Z.md`
+2. **实施**：在主目录 `D:\ctf\ctf-env\autopwn` / `/data/autopwn` 完成改动，并跑对应验收
+3. **收尾**：`commit + push` 后，同提交更新 §3 索引行与详情文件完成记录
 
-**详细步骤**：
+### 2.3 详情文件规则
 
-1. **⏳ Pending → 🔄 In Progress**
-   - 在 §3 任务行改状态 + 加 Owner + 预估工时
-   - 创建或更新对应的 `upgraded/vX.Y.Z.md`，写清背景 / 目标 / 范围 / 风险 / 验收
-   - 同步 `main`，并确认当前就在仓库主目录 `D:\ctf\ctf-env\autopwn`（容器 `/data/autopwn`）迭代
-   - 若主目录工作树不干净，先备份 / 提交 / 回滚 / 与 Owner 澄清；**未经 Owner 明确授权不得创建额外 `git worktree`、`autopwn-*` 平行目录或旁路工作树**
-   - 实施前先确认最终 `commit message` 会引用任务 ID（per `AGENTS.md §5`）
-
-2. **🔄 In Progress → 👀 Self Review**
-   - 代码完成 + `pytest -m "not integration"` 全过
-   - 若涉及行为变化，补跑对应 `pytest -m integration` / `Challenge/` 验证
-   - 本地提交：`[v{X}.{Y}.{Z}] {动词} {对象}` + 实施要点 + Refs:`upgraded.md §3`, `upgraded/vX.Y.Z.md`
-
-3. **👀 Self Review → ✅ Done**
-   - Owner 自审通过（单 Owner 项目）
-   - 直接 `git push origin HEAD:main`
-   - push 后 working tree clean
-   - **同一任务的最终已 push 提交** 更新 §3 任务行状态 = ✅ + 加实际工时 + 加 commit SHA
-   - **同一任务的最终已 push 提交** 更新 `CHANGELOG.md`（如适用）
-
-### 2.3 任务 ID 格式（v4.0+）
-
-格式：`v{X}.{Y}.{Z}` — 例如 `v4.0.1` / `v4.1.0`
-- `X` 主版本（不兼容变更）
-- `Y` 次版本（新功能，向后兼容）
-- `Z` 修订版本（bug 修复）
-
-> **与重构期 P 阶段 ID 区别**：`P{X}.{Y}` 是重构期 P 阶段任务（如 `P4.4b` = P4 阶段第 4 个子任务第 2 次修订）；`v{X}.{Y}.{Z}` 是 v4.0+ 迭代版本号任务（如 `v4.0.1` = v4.0 第 1 个修订）。
+- **当前活动 / 待收尾任务**：必须有专属 `upgraded/vX.Y.Z.md`，或有明确的 backlog 长记录可追溯
+- **休眠 backlog**：允许先留在 `upgraded/backlog.md`，但**重新开工前必须拆出专属详情文件并回填主索引**
+- 详情文件至少包含：背景、目标、范围、实施方向、风险、6 关验收
+- `commit body` 若存在，需同时引用 `upgraded.md §3` 与对应详情文件
 
 ### 2.4 任务粒度
 
-per `AGENTS.md §2.1`：
-- 单个任务 ≤ 400 行 diff
+- 单个任务 ≤ 400 行 diff（不含 lock 文件）
 - 同一批次 `commit/push` 不跨多个任务 ID
-- 单个任务只动一层（如 `recon/` 不允许顺手改 `primitives/`）
-
-### 2.5 迭代详情文件（治理变更 1.12 · 2026-08-30）
-
-- `upgraded.md` 只保留任务索引、状态、摘要、链接，不再承载整段长需求
-- 每个新任务立项时，必须同时创建 `upgraded/vX.Y.Z.md`
-- 详情文件至少包含：背景、目标、范围、实施方向、风险、6 关验收；已完成任务还应补完成记录
-- 历史未迁移的旧任务允许暂时保留 inline；遵循“**新建即分文件，触达即迁移**”
+- 纯治理 / 文档任务也必须有索引行与状态
 
 ---
 
 ## 3. 任务看板
 
-> **现行流程说明（治理变更 1.10 / 1.11 / 1.12 · 2026-08-30）**：历史任务行中若出现 `fix/...` 分支名、`PR` 描述、`merge` / `Review` 等字样，仅用于审计追溯；当前单 Owner 流程以 `AGENTS.md §2.2` 与本文 §2 为准，默认直接 `commit + push` 到 `main`，且最新已验证版本必须留在仓库主目录 `D:\ctf\ctf-env\autopwn`（容器 `/data/autopwn`）。自 **1.12** 起，**新任务只在本表保留摘要 / 状态 / 链接**，详细需求写入 `upgraded/vX.Y.Z.md`；历史未迁移条目按需逐步迁移。
+> **现行规则**：主索引只保留**当前活动任务**、**待收尾任务**与**最近完成任务**。休眠 backlog 与更早历史统一放在 `upgraded/*.md`；若某个历史 backlog 要续做，必须先回填到本节。
 
-### 3.1 v4.0 GA 准备（高优先级 · 修复后才发 GA）
+### 3.1 当前活动任务
 
-| ID | 任务 | 状态 | 预估 | 备注 |
+| ID | 摘要 | 状态 | 预估 | 详情 |
 |---|---|---|---|---|
-| `v4.0.0` | **v4.0 GA 收尾**：切版本号 4.0.dev0 → 4.0 + tag `v4.0.0` + GitHub Release + CHANGELOG.md + README v4.0 更新 | ⏳ | 1.5h | **阻塞**：等 v4.0.1 / v4.0.2 修复后再做（per 2026-06-10 诊断）。**2026-06-12 状态**：v4.0.1 / v4.0.2a / v4.0.2b / v4.0.3 / v4.0.4 / v4.0.5 / v4.0.6 / v4.0.7 / v4.0.2c1 / v4.0.2c3 / v4.0.2c4 全部 ✅，**GA 阻塞** 仅剩 **v4.0.2c2 (5-binary 6 关验收收尾)** + v4.0.2c5 (3 个防御性 follow-up) + 自身切版本号 |
-| `v4.0.8` | **修 `scripts/run_verify.sh` 的 `-v` flag 污染 pwntools tube**（per 2026-06-12 v4.0.2c1 merge report 副作用发现）：`run_verify.sh` 用 `python3 -m autopwn -l <bin> -v` 跑 5-binary 验证，**`autopwn -v` (verbose) 打开的 DEBUG 输出污染 pwntools tube**——实测 level3_x64 用 `-v` 跑 `verify_shell` 返 `(False, "no PWNED in shell output")`（即使无 `-v` 跑返 `(True, "PWNED...")` + 真 SUCCESS）。根因：`autopwn/core/logging.py::print_debug` / `print_info` 走 `print(..., file=sys.stdout)`，pwntools `tube.recv()` 把 stdout 也算 tube 输入，shell 的 PWNED token 被 DEBUG 输出挤掉/打乱。**修复方向**：(A) 修 `logging.py` 把 `print_*` 走 `sys.stderr`（pwntools 不读 stderr）；(B) `run_verify.sh` 跑时 `2>&1` 重定向到 stderr + log 仍捕 stdout；(C) `verify_shell` 改用 `io.clean(timeout=0.1)` 在 recv PWNED 前清掉 tube 缓冲（防御性）。**与 v4.0.2c1 关系**：v4.0.2c1 实测 level3_x64 真 SUCCESS，但**用 `run_verify.sh` 的 `-v` flag 跑同样 binary 会假 fail**——baseline 测量不一致，per `upgraded.md §5.4` "5-binary 应 4/5 SUCCESS" 的 `run_verify.sh` 跑法**不可信**。**6 关验收**：① 代码合入 `fix/v4.0.8-run-verify-verbose` 分支；② `pytest tests/unit -q` 全过；③ `pytest tests/integration -q` 全过；④ `run_verify.sh v4.0.8-verify` 不带 `-v` + 带 `-v` 都 4/5 SUCCESS（**两侧 baseline 一致**）；⑤ Owner 自审；⑥ 文档同步（本表 + `upgraded.md §5.4` baseline 描述 + 对应 `bugs/fix_run_verify_verbose.md`）| ⏳ | 1.5h | **风险**：(a) 改 logging.py 走 stderr 可能破坏现有 unit test（test 用 `capsys` 捕 stdout）—— 需审 test 全部用 `capsys.readouterr()` 同时捕 stderr + stdout；(b) `io.clean(timeout=0.1)` 是 pwntools API 但语义是"清空 tube 缓冲直到 timeout"，可能误清掉早期 shell 启动 banner——需 manual review level3_x64 / rip 实测；(c) **可推迟**：v4.0.2c1 + 2c3 + 2c4 修完，**不带 `-v` 跑** baseline 已 4/5 SUCCESS，CI 可改 `run_verify.sh` 不带 `-v` 暂缓本 fix 到 v4.0.8+ |
-| `v4.0.1` | **修复 SUCCESS 判定 = 真 shell (id)**（v3.1 历史问题）：`autopwn/exp/strategies/*.py` + `autopwn/primitives/*.py` 把 `io.interactive()` 替换为 `io.sendline(b"id") + io.recvuntil(b"uid=", timeout=2)` 验证；orchestrator 接 "id_verified" 布尔信号；record_success 加 `id_output` 字段 | ✅ | 4h | **高优先级**：当前 4/5 SUCCESS 是"假阳性"——runner 环境无 stdin，io.interactive() 立即 EOF，但 "EXPLOITATION SUCCESSFUL" banner 已在 io.interactive() 之前 print，造成 record_success 误触发。详见 /tmp/diagnosis.md（2026-06-10 诊断）|
-| `v4.0.2` | **5 binary 实测修 padding / leak 路径**（**已拆分**为 v4.0.2a/b/c per `AGENTS.md §2.4` 任务粒度）：原 2.5h 估算偏低，因 ctf-pwn 2026-06-11 实测 rip + level3_x64 暴露**两个独立根因**（不是简单 padding 错），需分别修 | ⏳ | — | **依赖 v4.0.1 + v4.0.3**（verify_shell 真判定必须先就位）|
-| `v4.0.2a` | **修 `detect/overflow.py::test_stack_overflow` 动态 padding `+alignment` 偏移 bug**：当前实现 `final_padding = padding + alignment`（alignment = 8 for x64），在 `sub $0x10` / `lea -0xf(%rbp)` 的小 frame 上**系统性 +7~+8 偏差**。ctf-pwn 实测 rip 返回 30（真实 = 23），level3_x64 巧合正确（136）。修复思路二选一：(A) 改为 `final_padding = padding`（依赖静态 `asm_stack_overflow` 二次校正）；(B) 加 frame-size 启发式：若 lea 偏移 ≤ 0x20 则不加 alignment。**方案 A 实施（2026-06-11）**：`final_padding = padding`（去掉 `+alignment`），动态值变为 lower-bound 信号（rip=22，level3_x64=128）；orchestrator/detect.py 的 `ctx.padding = asm_padding` 静态覆盖逻辑**保持不变**，仍由 `recon/asm.asm_stack_overflow` 给出权威值（rip=23，level3_x64=136）。docstring 加 Note 段说明 `padding` 含义变化 + 历史 bug。**6 关验收**：① 代码合入（待 Owner 推 commit）；② `pytest tests/unit -q`：**626 passed**（0 回归，含 `test_detect_overflow.py` 5 个测试全绿）；③ N/A（v4.0.2a 只修 dynamic 探测的 lower-bound，integration test 由 v4.0.2c 覆盖）；④ `autopwn -l Challenge/rip` 实测：padding=23（静态覆盖生效）、verify_shell 返 `(True, "uid=0(root) gid=0(root) groups=0(root)\n")`、生成 `rip_wp.docx` 含完整 ret2system payload；独立 pwntools 复现 payload → 真实 `uid=0(root)` shell；`autopwn -l Challenge/level3_x64` 仍 SIGSEGV —— 但根因是 **v4.0.2b 的 `ret` gadget 误对齐**，与 v4.0.2a 修复**正交**（level3_x64 padding 136 始终正确，autopwn 的 `ctx.padding = 136` 不受本次 fix 影响）；⑤ Owner 自审（单 Owner 项目）；⑥ 文档同步（本表已加实施记录）。**2026-06-12 状态同步**：行状态 👀 → ✅，因 commit `5a3bf9d` (v4.0.5 squash merge) 把 v4.0.2a 代码一起带入 main（前次 session 没及时更新 row state，本 session 补）| ✅ | 0.5h | **风险**：本 fix 假设 static 覆盖永远发生（per `orchestrator/detect.py:60`）—— 若未来有人在 orchestrator 里去掉 static 覆盖，dynamic 的 lower-bound 22/128 会直接进 payload 导致 exploit 失败。**对策**：保留 docstring Note 段，明确 dynamic 仅为 canary check 信号 |
-| `v4.0.2b` | **修 `primitives/ret2libc_write.py::Ret2LibcWriteX64.build_stage2_payload` 的 `ret` 对齐 gadget 无条件应用**：当前 stage 2 固定 `padding + pop_rdi + sh + ret + system`，但 `ret` gadget 是否需要对齐取决于**调用方 frame 大小**——rip（`sub $0x10`，buffer rbp-0xf）需要 ret，level3_x64（`sub $0x80`，buffer rbp-0x80）加 ret 反而**误对齐**导致 do_system 的 `movaps %xmm1,(%rsp)` SIGSEGV。ctf-pwn 实测：level3_x64 `WITH ret` → SIGSEGV；`WITHOUT ret` → `PWN_OK`。**修复方向**：(A) 让 `ctx.gadgets_x64.ret` 改可空（None=不插），`extra_rdi == 0` 默认不插 ret（让 stage 2 = `padding + pop_rdi + sh + system`）；(B) 引入 frame 探测：若 vuln_func 入口 `sub $N, rsp` 满足 `(N + 8) % 16 == 0` 则不插 ret。**6 关验收**：`autopwn -l Challenge/level3_x64` 实测 verify_shell 返 `(True, "uid=0(root)...")` 并生成 `level3_x64_wp.docx`。**2026-06-12 状态同步**：行状态 🔄 → ✅，因 commit `5a3bf9d` (v4.0.5 squash merge) 把 v4.0.2b 代码一起带入 main（commit 2d8be5e 含 `padding < 32` 启发式 threshold + v4.0.5 后续用 `FrameContext.required_ret_count` principled 替代之）| ✅ | 1.5h | **风险**：方案 A 可能让 rip 退步（需回归测试）；方案 B 需新加 ctx 字段 `frame_alignment` 记录 (N+8)%16。**Owner**：@Minzhi_Zhou |
-| `v4.0.2c1` | **修 fmtstr1 端到端 exploit 路径**（**v4.0.2c 拆分 per `AGENTS.md §2.4` 任务粒度**，2026-06-12 Owner 拍板 + 实施完成）：原 v4.0.2c 描述混了"修 hang"和"5 binary 验收"两件事，按 ≤400 行/PR 拆为 c1（修 hang + 路由 fmtstr1 到 fmtstr strategy）/ c2（验收收尾）。**诊断（2026-06-12 复现后）**：`Challenge/fmtstr1` 是 **format string + canary** 而非 stack overflow；`recon/asm.asm_stack_overflow` 错把 frame size 算成 12（实际是 0x80 = 128 bytes 因 `and $0xfffffff0, %esp; add $0xffffff80, %esp` 双指令），导致 `ctx.padding = 12`；FmtstrX32LocalStrategy 的 `matches()` 守门 `ctx.padding == 0`（per v3.1 main() L3316）→ fmtstr strategy **被过滤掉**；落到 ret2system-x32（canary 拦截，verify_shell fail）和 ret2libc-put-x32（`io.recv()` 无 timeout 卡死 + `io.recvuntil(b"\xf7")` 也无 timeout → 这俩组合就是用户报的"60s+ hang"根因）。**实施记录（2026-06-12）**：(a) `autopwn/orchestrator/detect.py:88-122` 在 fmtstr 检测后**填充** `ctx.fmtstr_offset` (调 `find_offset`) + `ctx.fmtstr_buf` (调 `bss.find_bss` 找 min_size=2 BSS 符号)；(b) `autopwn/exp/strategies/fmtstr.py` 5 个 strategy class 的 `matches()` 加 fallback `or (ctx.fmtstr_offset is not None and ctx.fmtstr_buf is not None)` 让 fmtstr 路径在 padding>0 也被选；(c) `autopwn/exp/strategies/ret2libc_put_x32.py` 修 2 处 hang：line 107 `io.recv()` 加 `timeout=0.5`（cap initial banner recv 避免 binary 无 prompt 卡死），line 113 `io.recvuntil(b"\xf7")` 加 `timeout=2.0`（avoid leak hang）；(d) `autopwn/exp/strategies/ret2libc_write_x32.py` 同步修：line 101 `io.recv()` 加 `timeout=0.5`，line 106 `io.recv(4)` 加 `timeout=2.0`；(e) 4 个新 unit test：`test_exp_fmtstr.py::test_x32_local_matches_padding_nonzero_when_fmtstr_fields_set` + `test_candidates_padding_nonzero_with_fmtstr_fields_includes_fmtstr`（验 v4.0.2c1 新增 routing 路径），`test_exp_ret2libc_put.py::test_x32_local_recvuntil_called_with_timeout_2` + `test_x32_local_initial_recv_called_with_timeout`（验 recvuntil/recv 用了 timeout）；(f) 2 个新 orchestrator test：`test_orchestrator.py::test_fmtstr_detection_populates_ctx_fields` + `test_fmtstr_detection_graceful_on_find_offset_failure`（验 detect 阶段正确 populate 字段 + find_offset 抛 ValueError 时 graceful）。**6 关验收**：① 代码合入 `fix/v4.0.2c1-fmtstr1-hang` 分支（squash 1 commit）；② `pytest tests/unit -q`：**687 passed**（基线 681 + 4 新 v4.0.2c1 tests + 2 已有 fmtstr tests 因 matches() 行为变更更新，0 回归）；③ `pytest tests/integration -q`：**21 passed + 2 skipped + 1 xfailed**（106s）；④ 5-binary smoke (`AUTOPWN_VERIFY_TIMEOUT=60 bash scripts/run_verify.sh v4.0.2c1-verify`): **4/5 SUCCESS** (fmtstr1 + level3_x64 + pie + rip 真拿到 root shell + docx + interactive，**fmtstr1 从 hang 升级为真 SUCCESS**；canary 仍 pre-existing PARTIAL)；⑤ Owner 自审（单 Owner 项目）；⑥ 文档同步（本表 + `logs/v4.0.2c1-verify/fmtstr1.log` + §5.4 baseline 升级 3/5 → 4/5）| ✅ | 2h | **风险**：(a) 改 `matches()` fallback 让 fmtstr strategy 在不该选的 binary 上被选 → 守门 `ctx.fmtstr_offset is not None and ctx.fmtstr_buf is not None` 双字段，primitive 的 `build_payload` 会在缺字段时返空并打 `print_info` skip（已有逻辑）；(b) `io.recvuntil(timeout=2)` 异常处理可能让原本能 leak 成功的 binary 现在被误判为 fail → 设 2s 偏保守，可后续 v4.0.2c3 调参；(c) `asm_stack_overflow` 把 12 算成 padding 是 pre-existing bug，**不在本任务范围**（v4.0.2a 改 dynamic 公式时是 `+alignment` → `+0`，对 `and+add` 形式仍未识别），列 v4.0.2c3 或 v4.0.8 立任务；(d) x64 版本的 `ret2libc_put_x64.py:97` 和 `ret2libc_write_x64.py:98/187` 仍有同样无-timeout 的 recvuntil/recv 问题（**不在本任务范围**），列 v4.0.2c3 立任务 |
-| `v4.0.2c2` | **5 binary 6 关验收收尾**（v4.0 GA 阻塞最后一步；**原 v4.0.2c 拆分后保留验收部分**）：跑 `autopwn -l Challenge/{rip,level3_x64,fmtstr1,canary,pie}` 五个 binary，对比 `verify_shell` 返 `(True, "PWNED...")` 路径全部一致；canary 仍 PARTIAL（per `v4.0.2 备注` v3.1 pre-existing 限制，不阻 GA）；把 v4.0.2a/b/c1 的修复纳入 `logs/v4.0.2c2/binary_<name>.log` 对比基线（用 `scripts/baseline_lock.sh lock` 锁 hash）；更新 `upgraded.md §5.4` baseline（3/5 → 4/5 SUCCESS 当 fmtstr1 hang 修完）| ⏳ | 1h | **依赖 v4.0.2a + v4.0.2b + v4.0.2c1**（3 个修 hang/padding/ret-gadget bug 完成后才能 6 关验收）|
-| `v4.0.2c3` | **修 `recon/asm.py::asm_stack_overflow` 误把函数 epilogue 的 `lea -0x8(%ebp),%esp` 当 buffer offset**（per `bugs/fix.md` v4.0.2c1 复盘，2026-06-12 Owner 拍板方向 A + 实施完成）：当前 `_LEA_RE.search(func_body)` 抓的是**函数内第一个** `lea -N(%ebp)`，对 fmtstr1 抓到了 main 末尾的 `lea -0x8(%ebp),%esp`（epilogue 恢复 esp，-0x8 = saved regs 8 字节）+ 4 (x32) = **12 字节**（**完全错**）。真 buffer lea 是 `lea 0x2c(%esp),%eax`（用 %esp，因 `and $0xfffffff0,%esp; add $0xffffff80,%esp` 破坏了 %ebp→%esp 对应），**当前 _LEA_RE 不抓**。**实施记录（2026-06-12）**：(a) `autopwn/recon/asm.py` 抽出 helper `_extract_buffer_lea_padding(func_body, bit)` —— 算法 = (1) 找 func_body 内**第一个** `call <read|gets|fgets|scanf>(?![A-Za-z0-9_])`（**负向前瞻**防 `getegid` 误匹配 `gets`）位置；(2) 找**最后一个**位置 < first_dangerous_pos 的 `lea -N(%ebp/rbp)`（跳过 epilogue 段）；(3) 返回 `abs(N) + 8 (x64) or + 4 (x32)`；(b) `recon/asm.py::asm_stack_overflow` + `analyze_vulnerable_functions` 改用 helper；(c) `detect/overflow.py::analyze_vulnerable_functions` 也改用 helper（避免 detect 层有独立 _LEA_RE 重复实现）；(d) **13 个新 unit test** (`tests/unit/recon/test_asm_extract_buffer_lea.py`)：8 个 synthetic (simple_buffer_lea x64/x32, skips_epilogue_lea, picks_last_lea_before_dangerous_call, no_dangerous_call_returns_none, no_lea_returns_none, getegid_does_not_match_gets, negative_offset_in_lea) + 5 个 real binary (rip=23, level3_x64=136, pie=36, canary=80, fmtstr1=None)。**实测结果**：(a) fmtstr1 padding 12 → **None**（无 buffer lea 匹配 %ebp/rbp），orchestrator 走 dynamic=0 → ctx.padding=0 → FmtstrX32LocalStrategy v3.1 `padding==0` gate 命中 → fmtstr strategy 路由（**fmtstr1 仍 4/5 真 SUCCESS**）；(b) canary padding 之前是 None（v3.1 substring `gets` 误匹配 `getegid`），现在返回 **80**（`lea -0x4c(%ebp),%eax` 在 `call gets@plt` 之前）—— 更准确，canary 仍 pre-existing PARTIAL（canary 暴力枚举 > 10min），不影响 v4.0 GA 阻塞；(c) rip / level3_x64 / pie **0 回归**（buffer lea 在 dangerous call 之前，epilogue 是 `leave; ret` 无 lea）。**6 关验收**：① 代码合入 `fix/v4.0.2c3-asm-and-add-padding` 分支（squash 1 commit）；② `pytest tests/unit -q`：**700 passed**（基线 687 + 13 新 v4.0.2c3 tests，0 回归）；③ `pytest tests/integration -q`：**21 passed + 2 skipped + 1 xfailed** (114s)；④ 5-binary smoke `run_verify.sh v4.0.2c3-verify`：**4/5 SUCCESS** (fmtstr1 + level3_x64 + pie + rip 真拿到 root shell + docx + interactive；canary 仍 pre-existing PARTIAL)；⑤ Owner 自审（单 Owner 项目）；⑥ 文档同步（本表 + `logs/v4.0.2c3-verify/` 对比基线）| ✅ | 1.5h | **风险**：(a) fmtstr1 仍是 padding=None 而非真实 92 字节（buffer offset 0x2c + frame 0x80 + saved regs 8）—— `_LEA_RE` 不抓 %esp-based lea 是 pre-existing 限制，**本任务不修**（per 方向 A 只动 epilogue 误匹配）；(b) canary padding 现在是 80 而非 None — **新副作用**：canary 之前是 dynamic=0, static=None, ctx.padding=0 → 200ms 内报 "no overflow" 并降到 candidates()；现在 dynamic=0, static=80, ctx.padding=80 → orchestrator 会等 dynamic 测试（~1s）+ 走 static 80 的 ret2system/ret2libc 路径 → 多了 ~1s 延迟但仍 PARTIAL timeout，对 v4.0 GA 无影响；(c) `_legacy_*` 函数**不修**（OBSOLETE，spec parity only）|
-| `v4.0.2c4` | **修 x64 ret2libc strategies 无 timeout hang**（per `bugs/fix.md` v4.0.2c1 复盘 x64 mirror，2026-06-12 Owner 拍板）：v4.0.2c1 修了 x32 的 4 处 hang（ret2libc_put_x32 / ret2libc_write_x32 的 `io.recv()` + `io.recv(4)` / `io.recvuntil(b"\xf7")`），**x64 版本有完全相同的 hang risk**（ret2libc_put_x64.py:97 `io.recvuntil(b"\x7f")` + ret2libc_write_x64.py:98 `io.recv(8)` 都是 size-known read 但**无 timeout**；ret2libc_put_x64.py:182 + ret2libc_write_x64.py:182 的 `io.recv()` banner read 也无 timeout）。**实施记录（2026-06-12）**：(a) `autopwn/exp/strategies/ret2libc_put_x64.py` line 92 + 182 加 `try: io.recv(timeout=0.5) except: pass`（banner cap），line 97 `io.recvuntil(b"\x7f", timeout=2)` + line 187 `io.recv(8, timeout=2)`（leak cap）；(b) `autopwn/exp/strategies/ret2libc_write_x64.py` line 93 + 182 加 banner cap，line 98 + 187 加 leak cap；(c) 2 个新 unit test (`tests/unit/test_exp_ret2libc_put.py::test_x64_local_recvuntil_called_with_timeout_2` + `test_x64_local_initial_recv_called_with_timeout`)。**6 关验收**：① 代码合入 `fix/v4.0.2c4-x64-recv-timeout` 分支；② `pytest tests/unit -q`：**702 passed**（基线 700 + 2 新 v4.0.2c4 tests，0 回归）；③ `pytest tests/integration -q`：**21 passed + 2 skipped + 1 xfailed** (108s)；④ 5-binary smoke `run_verify.sh v4.0.2c4-verify`：**4/5 SUCCESS** (fmtstr1 + level3_x64 + pie + rip 真拿到 root shell + docx + interactive；canary 仍 pre-existing PARTIAL)；⑤ Owner 自审；⑥ 文档同步（本表 + `logs/v4.0.2c4-verify/`）| ✅ | 0.5h | **风险**：(a) x64 hang risk 实际未在 real binary 上触发（level3_x64 4/5 SUCCESS 因 padding 准确 + canary 走了 fmtstr/ret2libc_put 路径，x64 版的 `io.recv(8)` 是 size-known read 通常 OK）—— 本 fix 是**防御性**（mirror x32 已验证 fix）；(b) timeout=2 对 x64 leak 可能不够（libc 地址 leak 涉及 `write(1, ..., 8)` syscall，binary 内调用开销 1-3s 正常）—— 若 CI 出现 leak parse fail，可后续 v4.0.2c5 调到 timeout=5；(c) **未动 canary_ret2libc_*.py** —— canary x32/x64 4 个 strategy 用同样 pattern 但 canary 是 pre-existing PARTIAL，列 v4.0.2c5 立任务 |
-| `v4.0.2c5` | **3 个已知防御性 follow-up**（per `bugs/fix_fmtstr1_routing.md` §5 + `bugs/fix_asm_and_add_padding.md` §5 + `bugs/fix_x64_recv_timeout.md` §5 风险与遗留，2026-06-12 立任务）：v4.0.2c1/c3/c4 修了 3 个 root cause 后，剩 3 个边缘情况列同一任务统一收：(I) **canary_ret2libc_*.py 4 strategy 同样无 timeout**（`canary_ret2libc_put.py` + `canary_ret2libc_write.py` × x32/x64）；(II) **fmtstr1 真实 padding 92 字节未识别**（`%esp`-based lea + `and+add` frame size 推断，需新增 regex `lea\s+(-?0x[0-9a-f]+)\(%esp\)` + `and 0xfffffff0, %esp; add 0xffffff80, %esp` → frame 0x80 启发式）；(III) **`io.recv()` 0.5s timeout 是拍脑袋**（需 empirical 测 level3_x64 / rip 真实 banner 出现时间调优到 0.1-0.2s 范围——banner 一出现就 1st print，0.5s 偏长）。**6 关验收**：① 代码合入 `fix/v4.0.2c5-defensive-fixes` 分支；② `pytest tests/unit -q` 全过；③ `pytest tests/integration -q` 全过；④ 5-binary smoke 仍 4/5 SUCCESS（**0 回归**——canary 仍 pre-existing PARTIAL）；⑤ Owner 自审；⑥ 文档同步（本表 + 对应 `fix_*.md` 引用 + `logs/v4.0.2c5-verify/`）| ⏳ | 1h | **风险**：(a) 三 fix 范围跨 strategy + recon + core 三层，per `AGENTS.md §2.4` 任务粒度可能要再拆 v4.0.2c5a/b/c（先拍板粒度）；(b) (II) 需新加 `%esp` lea regex 进 `_LEA_RE` —— `recon/asm.py` 的 `_LEA_RE` 需扩展为同时匹配 %ebp + %esp，可能要新增 `(lea|lea).*%esp` 分支；(c) (III) timeout 调优需 empirical 数据，可先放宽 v4.0.2c5 拍 0.3s，CI 跑 5-binary 看回归再定 |
-| `v4.0.3` | **消除 SUCCESS 假阳性源（banner 必须在 verify 成功后才 print）**：`autopwn/report/__init__.py` `record_success()` 删 `print_critical("EXPLOITATION SUCCESSFUL!...")`；canary_*.py 4 个 strategy 把显式 `print_critical("EXPLOITATION SUCCESSFUL!...")` 移到 `verify_shell(io)` 返回 True 之后；新建 `autopwn/core/shell_verify.py::record_success_verified(info, id_ok, id_output, ctx)` 助手封装"先 verify 再 banner 再 record_success"，15 个 strategy 改用此助手（顺序：build_payload → io.sendline → verify_shell → 若 ok 才 record_success + print banner）| ✅ | 1.5h | **实施记录（2026-06-10）**：新增 `core/shell_verify.py::record_success_verified(info, id_ok, id_output, ctx)` 助手（先 verify → 若 id_ok 才 print banner + record_success + 写 id_output 到 ctx）；删 `report/__init__.py::record_success` 内部 `print_critical` banner；15 个 strategy 改造为 `verify_shell → record_success_verified` 顺序（38 处替换）。**验收**：`autopwn -l Challenge/rip` 实际 verify_shell 返回 `(True, "uid=0(root) gid=0(root) groups=0(root)\n")` → 真打印 banner + 生成 `rip_wp.docx`（traceback 确认 banner 来源是 `shell_verify.py:150`，仅在 id_ok=True 路径）。**6 关验收**：① 代码合入分支 fix/v4.0.3-banner-after-verify；② 626 unit pass（0 回归）；③ N/A（v4.0.3 不改行为判定阈值，只改判定顺序）；④ Challenge/rip 实测：真拿到 `uid=0(root)` 后才打印 banner；⑤ Owner 自审（单 Owner 项目）；⑥ 文档同步（本表 + §1.2 描述升级）|
-| `v4.0.4` | **SUCCESS 唯一判定 = `echo PWNED` 唯一可见信号 + 完全静默 + shell 必须可交互**（**2026-06-11 Owner 二次拍板**：v4.0.4 第一稿误把 verify_shell finally 里 close 掉 io，Owner 立即指出 "不对，我需要 `autopwn -l binary` 拿到的是可交互 shell 而不是 Stopped process"）。**新方案**：(1) `core/shell_verify.py::verify_shell(io, timeout=2.0, *, keep_alive=False)` 加 `keep_alive` 关键字参数（**默认 False 保 backward compat**；`keep_alive=True` 时**不**在 finally close io，tube 留给 strategy 调 `io.interactive()`）；(2) verify 命令仍是 `echo PWNED` + 等待 `b"PWNED"` token；(3) `record_success_verified` 仍删除 `print_critical` banner；(4) **15 个 strategy 在 verify 成功后调 `io.interactive()`**（而非 return）—— 用户在 shell 里输入 `exit` / `Ctrl-D` 后 `interactive()` 返回，autopwn 正常 exit。**15 处 call site 改 2 行**：`(a) verify_shell(io, keep_alive=True)` 加 kwarg；(b) 成功路径末尾 `io.interactive()` 替代 `return True`。**与 v4.0.3 区别**：v4.0.3 把 banner 移到 verify 之后（仍 print）+ verify 用 `id` + `verify_shell` finally close io → 进程秒退；v4.0.4 删 banner + verify 用 `echo PWNED` + `keep_alive=True` + strategy 调 `io.interactive()` → 真正可交互 shell。**实施记录（2026-06-11）**：(a) `core/shell_verify.py::verify_shell` 加 `keep_alive` 关键字参数（默认 False，True 时跳过 finally `io.close()`），docstring 更新；(b) `record_success_verified` 保持静默（v4.0.4 第二稿已实施）；(c) **30 个 strategy call site**（15 文件 × local + remote）用 python 脚本批量改 5 个 pattern：`verify_shell(io)` → `verify_shell(io, keep_alive=True)` / `id_ok,id_output` → `verify_ok,verify_output` / `record_success_verified(info,id_ok,id_output,ctx)` → `record_success_verified(info,verify_ok,verify_output,ctx)` / `ctx.id_output = id_output` → `ctx.id_output = verify_output` / `return True` 前插 `io.interactive()  # v4.0.4: drop user into shell; returns when user exits`；(d) `tests/unit/test_core_shell_verify.py` 加 3 个 keep_alive 测试（True 保活 / False 关闭 / 失败时也保活）。**6 关验收**：① 代码合入（待 Owner 推）；② `pytest tests/unit -q`：**636 passed**（+3 新 keep_alive 测试，0 新增回归）；③ integration test 中 14 failed 是 pre-existing（stash 验证），与本次 fix 无关；④ `autopwn -l Challenge/rip` 实测输出**真正可交互 shell** —— `[+] Exploitation report generated` → `[*] Switching to interactive mode` → 用户命令输出（`uid=0(root)` / `SHELL_OK_MARKER` 等）→ `[*] Stopped process`（**仅在 user exit 后才出现**）；`autopwn -l Challenge/level3_x64` 仍 SIGSEGV（v4.0.2b 独立 bug），输出 `shell verification failed (no PWNED in shell output)`，**不进入 interactive mode**（因为 verify 失败）；⑤ Owner 自审（单 Owner 项目）；⑥ 文档同步（本行已加实施记录）。**2026-06-12 状态同步**：行状态 👀 → ✅，因 commit `5a3bf9d` (v4.0.5 squash merge) 把 v4.0.4 代码一起带入 main（前次 session 没及时更新 row state，本 session 补）| ✅ | 1h | **风险**：(a) `io.interactive()` 在无 tty 的 CI 环境会抛 `OSError`（CI 已用 `keep_alive=False` 跳过；mock tests 也不进 interactive）；(b) docx 没显式记录 verify_command（`echo PWNED`）——后续 v4.0.5 task 补 `info.extra["verify_command"]`；(c) `keep_alive=True` 路径下 io 不自动 close，CI teardown 需显式 close 防止 process 泄漏    （v4.0.4 不动 conftest，由 strategy 在 `interactive()` 返回后由 OS 兜底） |
-| `v4.0.5` | **引入 `FrameContext` 抽象 + 模拟器，根除 ret2libc 启发式 magic number**（per `fix.md §3.1`，2026-06-12 Owner 拍板）：ctf-pwn 2026-06-11 实测暴露的 v4.0.2b magic 阈值 `padding < 32` 是 ad-hoc 方案——碰到 padding=20-31 范围的新 binary 会复现同类 bug。本任务用**架构级** FrameContext 抽象替代：**架构变更**（per `AGENTS.md 铁律 2 步骤 1`）：(a) 新增 `autopwn/recon/frame.py::extract_frame_context(binary, vuln_func)` + `compute_required_ret_count(frame_context) -> Literal[0,1]`；(b) `autopwn/context.py::ExploitContext` 新增 `frame_context: FrameContext` 字段（含 `lea_offset`/`frame_size`/`vuln_func_addr`/`required_ret_count`）；(c) `recon/asm.py::asm_stack_overflow` 同时填充 frame_context（**与现有 padding 返回并行**，不破坏 v4.0.2a 的 static-overrides-dynamic 逻辑）；(d) `primitives/ret2libc_write.py::Ret2LibcWriteX64.build_stage2_payload` 删 magic 阈值，改用 `ctx.frame_context.required_ret_count`；(e) **同步** ret2system + ret2libc_put 的 stage 2 链统一用 `required_ret_count`；(f) 3 个新 unit test 覆盖 rip (需 ret) + level3_x64 (不需 ret) + canary 边界 case。**与 v4.0.2b 关系**：v4.0.2b commit 留作 history；v4.0.5 PR 提供 principled 替代——ctx.frame_context 若已填充用 required_ret_count（principled），否则 fallback 到 `padding < 32`（向后兼容 v4.0.2b PR 单独 merge 的场景）。**6 关验收**：① 代码合入 fix/v4.0.5-frame-architecture；② `pytest tests/unit -q`：**665 passed**（+39 新 frame 测试，0 回归）；③ N/A（v4.0.5 不改 dynamic 行为阈值，只改 decision source）；④ `autopwn -l rip` + `autopwn -l level3_x64` 实测：均拿到 root shell + docx 报告生成（rip → ret2system-x64 / level3_x64 → ret2libc-write-x64 stage 2 OK，**无回归**）；⑤ Owner 自审（单 Owner 项目）；⑥ 文档同步（本表 + fix.md）。**实施记录（2026-06-12）**：(a) `recon/frame.py` 新增 `FrameContext` dataclass + `extract_frame_context` + `compute_required_ret_count(lea_offset)` —— 决策信号是 `lea_offset % 16 == 0` → 0, else 1（**empirically validated** by ctf-pwn 2026-06-11: rip `lea -0xf` → 1, level3_x64 `lea -0x80` → 0）；(b) `context.py` 加 `frame_context: Optional[FrameContext] = None` 字段（TYPE_CHECKING import 避免循环依赖）；(c) `orchestrator/recon.py::run_recon_phase` 调用 `frame.extract_frame_context` 填充 ctx（fallback 到 `FrameContext(required_ret_count=1)` 保守默认）；(d) `ret2libc_write.py` + `ret2libc_put.py` + `ret2system.py` 三处 primitive 删 `p64(g.ret)` 硬编码，改用 `include_ret = bool(ctx.frame_context.required_ret_count if ctx.frame_context else 1)` + `ret_gadget = p64(g.ret) if include_ret else b""`；(e) `tests/unit/recon/test_frame.py` 39 个 unit test 覆盖 `compute_required_ret_count` 24 个 residue case + `FrameContext` 5 个 dataclass case + `extract_frame_context` 6 个 binary case + 1 个 ctx wiring case + 3 个 backward compat case。**bug 修复记录**：实现时发现 3 处 bug —— (i) `compute_required_ret_count` 原本基于 `frame_size`（错），实际信号是 `lea_offset`（rip 0x10 % 16 = 0x80 % 16 = 0，无法区分；lea_offset 0xf % 16 ≠ 0x80 % 16 = 0 才能区分）；(ii) `extract_frame_context` 的非贪婪 regex `r"^[0-9a-f]+ <(\w+)>:(.*?)(?=^\d+ <\w+>:|\Z)"` 中 `\d+` lookahead 无法匹配 hex a-f 地址，导致只找到 4/11 functions；(iii) `add $0xffffffffffffff80, %rsp` 形式（AT&T 编码的 `sub $0x80, %rsp`）未被 sub regex 匹配，导致 `frame_size=0`。3 处 bug 全部修复 + 对应回归测试 | ✅ | 4h | **风险**：(a) `compute_required_ret_count` 计算错 → 39 个 unit test 强制覆盖 rip/level3/canary 三种 frame size + 24 个 residue case；(b) ExploitContext 新增字段是公共 API 变更 → dataclass 用 `field(default_factory=...)` 保 backward compat；(c) v4.0.5 PR 与 v4.0.2b 在 primitive 上功能重叠（都用 padding 启发式）→ 推荐顺序 A（先 merge v4.0.2 PR unblock 用户，再 merge v4.0.5） |
-| `v4.0.6` | **端到端 shell 交互测试**（防 v4.0.4 类回归，per `fix.md §3.2`，2026-06-12）：新增 `tests/integration/test_shell_interaction.py`，对 `Challenge/{rip,level3_x64,fmtstr1,canary,pie}` 5 个 binary 跑全流程 `autopwn -l binary`。**实施记录（2026-06-12）**：(a) 4 个 parametrize 测试覆盖 rip/level3_x64/pie（**fmtstr1 跳过**——v4.0.4 fmtstr1 ret2libc_put 阶段挂起 >180s，与 v4.0.6 任务正交，归 v4.0.2c 类 bug）；(b) canary 标 `xfail`（v3.1 pre-existing PARTIAL）；(c) `test_autopwn_rejects_missing_binary` 负向 sanity 测试；(d) 用 subprocess.run 启动 `python -m autopwn -l <binary>` + DEVNULL stdin（无 tty CI 环境）+ 捕获 stdout/err，断言 `Exploitation report generated` 在 output（v4.0.3 record_success_verified 真实 verify 通过的 orchestrator 信号）。**为什么不断言 `PWNED` token**：v4.0.4 verify 协议用 `echo PWNED` + `io.recvuntil(b"PWNED")` 直接读 pwntools tube，shell stdout 不到 autopwn stdout。autopwn 的 stdout 只含 orchestrator 自己的 print；shell I/O 不可见。**6 关验收**：① 代码合入 fix/v4.0.5-frame-architecture 第二个 commit；② `pytest tests/integration -q test_shell_interaction.py`：**4 passed, 1 skipped (fmtstr1), 1 xfailed (canary)**，运行时间 39s；③ integration test 中 fmtstr1 skip 已在测试中 document 原因；④ 手动 `autopwn -l rip` + `autopwn -l level3_x64` 拿 shell（实测通过）；⑤ Owner 自审（单 Owner 项目）；⑥ 文档同步（本表 + fix.md）。**风险缓解记录**：(a) 单 binary 45s timeout，fmtstr1 180s timeout，**fmtstr1 整体 skip**（hang not in v4.0.4 contract scope）；(b) canary 仍 `xfail`（pre-existing v3.1 限制）；(c) `subprocess.run` 隔离进程防 zombie；(d) 用 `python -m autopwn` 而非 `autopwn` 脚本（确保 packaged 入口）| ✅ | 3h | **风险**：(a) 测试 flaky（autopwn + piped 交互）→ 单测试 45s timeout；(b) canary/pie 已知 PARTIAL → `xfail` 标记而非 skip（保留失败信号）；(c) `io.interactive()` 在无 tty CI 抛 `OSError` → 测试用 DEVNULL stdin |
-| `v4.0.7` | **Padding 探测跨检**（防 v4.0.2a 类回归，per `fix.md §3.3`，2026-06-12）：新增 `tests/unit/test_padding_crosscheck.py`，对 5 个 binary 跑 `asm_stack_overflow`（static）+ `test_stack_overflow`（dynamic），断言 `|static - dynamic| ∈ {0, 1, 8, 16, 24, 32}`（合法 delta：exact match / null terminator off-by-one / saved-rbp 8 字节边界 / 帧大小 16 字节边界 / etc.）。**实施记录（2026-06-12）**：(a) 引入**per-architecture legal-delta set**（修复 v4.0.2a 类 single-set 错误）：x64 用 `{0,1,8,16,24,32}`（saved rbp 8 字节），x32 用 `{0,1,4,8,12,16,24,32}`（saved ebp 4 字节，pie 的 delta=4 才合法）；(b) `test_static_dynamic_delta_is_legal[rip/level3_x64/pie]` 3 个 PASS（rip=1, level3_x64=8, pie=4 都合法）；(c) `test_dynamic_zero_handled_gracefully[canary/fmtstr1]`：dynamic=0 时**SKIP** 而非误判——原 fix.md 设计会让 `|static-0|=static`（如 canary=80）被误认为合法；(d) `test_legal_delta_set_covers_ctfpwn_observations` meta-test 钉住 3 个 ctf-pwn 实测 delta 在对应集合；(e) **import 陷阱修复**：`from autopwn.detect.overflow import test_stack_overflow` 会被 pytest 误收集为 test function → 改 `_test_stack_overflow` 别名。**6 关验收**：① 代码合入 fix/v4.0.5-frame-architecture 第三个 commit；② `pytest tests/unit test_padding_crosscheck.py`：**6 passed**；③ N/A（unit test）；④ rip + level3_x64 + pie 全过（canary + fmtstr1 SKIP with documented reason）；⑤ Owner 自审；⑥ 文档同步。**实测 v4.0.2/3/4 之后**：rip(23 vs 22 = 1 ✓) / level3_x64(136 vs 128 = 8 ✓) / pie(36 vs 40 = 4 ✓ in x32 set) / canary(skip, dynamic=0) / fmtstr1(skip, dynamic=0)。**风险记录**：(a) "合法 delta 集合"可能漏掉新 binary 的特殊对齐 → 已分 per-architecture set，x32 ⊇ x64；(b) dynamic 测试本身慢（per-binary ~1s 跑 256 次） | ✅ | 1h | **风险**：(a) "合法 delta 集合"可能漏掉新 binary 的特殊对齐 → 集合保守（多含几个常见值如 0/1/8/16/24/32/40）；(b) dynamic 测试本身慢（per-binary ~1s 跑 256 次）→ 复用 v4.0.2a 改的 `padding` 而非 `padding+alignment` 公式（lower-bound 速度更快）；(c) v3.1 _legacy 测试已经覆盖 5 binary 真实 delta，本测试只加 crosscheck assertion 不重复 |
+| `v4.1.19` | 候选目标打分 + 利用链排序（含 `vuln/vulnerable` 弱信号） | ⏳ | 2h | [`v4.1.19`](./upgraded/v4.1.19.md) |
 
-### 3.2 v4.1 sprint 候选（按优先级排）
+### 3.2 待收尾 / 待自审
 
-### 3.2 v4.1 sprint 候选（按优先级排）
-
-| ID | 任务 | 状态 | 预估 | 备注 |
+| ID | 摘要 | 状态 | 预估 | 详情 |
 |---|---|---|---|---|
-| `v4.1.0` | **HEAP 利用层**：`primitives/heap.py` + `exp/strategies/heap_*.py` 至少 3 个新 strategy（malloc_hook / tcache / unsorted bin）| ⏳ | 12h | 大需求，Owner review 时机 |
-| `v4.1.1` | **类型化异常**：`ReconError` / `DetectionError` / `StrategyError` 替代 `except Exception` | ⏳ | 1.5h | 重构期遗留，含 `orchestrator.run_strategy_phase` 等 |
-| `v4.1.2` | **多 binary 批处理**：CLI `-L <dir>` 跑 `Challenge/*.bin` 全集，输出 `logs/batch/` summary | ⏳ | 3h | 跑 5 binary 当前要 5 次 `python -m autopwn` |
-| `v4.1.4` | **Web UI / RPC**：`orchestrator.run` 暴露为 FastAPI，POST `/exploit` 返回 JSON | ⏳ | 6h | per `refactor.md §11` 旧扩展点 |
-| `v4.1.5` | **LLM 辅助决策**：`candidates(ctx)` 接受外部 LLM override（与 `mmx-cli` 技能联动）| ⏳ | 4h | 实验性 |
-| `v4.1.6` | **canary 暴力优化**（如 v4.0.2 未达标）：优化 canary 策略让 canary 60s timeout 内可解（parallel / smarter padding）| ⏳ | 8h | 需算法层重设计；可放弃走 ❌ |
-| `v4.1.7` | **默认 writeup 输出到 `writeups/` 目录**（per Owner 2026-06-13 需求）：(a) 项目根新建 `writeups/` 目录（含 `.gitkeep` 占位）；(b) 修改 `autopwn/report/docx.py::generate_docx` + `_generate_markdown` 输出路径从 `out_dir / f"{target}_wp.{ext}"` 改为 `Path("writeups") / f"{target}_wp.{ext}"`（**`out_dir` 参数忽略**——`record_success` 仍传 `ctx.report_dir`，但 `docx.py` 不再使用）。**理由**：(a) 报告散落 cwd 难归档；(b) writeup 概念与 binary 报告分离更清晰。**影响**：`autopwn -l binary` 默认输出从 cwd 改到 `writeups/`，`--report-dir` 仍被 `ctx.report_dir` 接收但**被 `docx.py` 忽略**（**已知 trade-off**——v4.1.7 范围内不保留 `--report-dir` 行为；如需恢复可走 v4.1.7b）。**风险**：(a) 现有 unit test 可能 assert 报告在 cwd 需 grep affected test 改 expected path；(b) `writeups/` 需 `.gitkeep` 进版本控制避免 git 忽略。**6 关验收**：① 代码合入 `fix/v4.1.7-writeups-dir` 分支；② `pytest tests/unit -q` 全过；③ `pytest tests/integration -q` 全过；④ `autopwn -l Challenge/rip` 实测报告生成在 `writeups/rip_wp.docx`（**不**在 cwd）；⑤ Owner 自审（单 Owner 项目）；⑥ 文档同步（本表 + `README.md` "Report control" 段）| 🔄 | 0.5h | **Owner**：@Minzhi_Zhou |
-| `v4.1.8` | **运行日志自动保存到 `logs/{challenge_name}/`**（per Owner 2026-06-13 需求，紧接 v4.1.7 报告归档思路）：(a) 新增 `autopwn/core/tee.py::Tee` 类（file-like 写多 stream，包装 `sys.stdout` + log file）；(b) `autopwn/cli.py::main()` 在解析 args 后根据 `args.local` 提取 challenge name（`Path(args.local).stem`），自动建 `logs/{challenge_name}/` 目录并打开 `run.log`（覆盖模式，ANSI 颜色码保留以便 cat 复现），把 `sys.stdout` / `sys.stderr` 替换为 `Tee` 实例——捕获 autopwn `print_*` + pwntools tube 全部 stdout/stderr 输出到 `run.log`，同时仍显示在终端；(c) 退出时在 `finally` 恢复 `sys.stdout`/`sys.stderr` 并 `log_file.close()`；(d) `--no-report` 类的 log toggle 暂不实现（v4.1.8 范围**只**开 log，不开 log-skip flag）。**理由**：报告（`writeups/{target}_wp.docx`）是结果产物，日志（`logs/{challenge}/run.log`）是过程 trace——两者职责分离，便于回放 + 调试 + baseline diff。**影响**：(a) 每次 `autopwn -l <binary>` 自动在 `logs/{binary_name}/run.log` 落盘一份完整终端输出；(b) 旧 `logs/v3.1/`, `logs/v4.0/`, `logs/_debug/`, `logs/comparison/` 目录**不**变（属于历史 baseline + 工具输出，语义不同）；(c) unit test 中 `capsys` 仍可捕 stdout（`Tee` 把 `sys.stdout` 替换后 capsys 拿到的是 tee 写入的 buffer，写入行为不变）。**风险**：(a) `Tee` 替换 `sys.stdout` 后 pwntools `tube.recv()` 不受影响（pwntools 用 fd 而非 Python-level sys.stdout），但 `print(..., file=sys.stdout)` 仍走 tee；(b) log 文件在多次跑同 binary 时被覆盖——若需保留历史，可后续 v4.1.8b 加 `run_{timestamp}.log`；(c) 远程模式 `args.local` 可能为 None → fallback 到 `logs/remote_{ip}_{port}/run.log`；(d) `logs/*.log` 进 `.gitignore` 避免污染仓库。**6 关验收**：① 代码合入 `fix/v4.1.8-logs-dir` 分支；② `pytest tests/unit -q` 全过（无新回归）；③ `pytest tests/integration -q` 全过；④ `autopwn -l Challenge/level3_x64` 实测：日志写入 `logs/level3_x64/run.log`（含 "Exploitation report generated" + pwntools "[+] Starting local process" 等关键行），同时终端仍正常显示；⑤ Owner 自审；⑥ 文档同步（本表 + `README.md` 新增 "Log output" 段）| ⏳ | 1h | **Owner**：@Minzhi_Zhou |
-| `v4.1.9` | **治理变更：fix 记录从 root 迁移到 `bugs/` 目录**（per Owner 2026-06-13 需求；与 v4.1.7 报告归档 + v4.1.8 日志归档一致思路——`writeups/`/`logs/`/`bugs/` 三个目录分别承载结果产物 / 过程 trace / bug 修复记录，root 保持"代码 + 索引文档"清爽）：(a) **新规**：所有 v4.0+ 修复单文件 `fix_<bug_name>.md` 写到 `bugs/` 子目录，索引 `fix.md` 也搬到 `bugs/fix.md`；(b) **迁移**：现有 4 个文件 `fix.md` + `fix_fmtstr1_routing.md` + `fix_asm_and_add_padding.md` + `fix_x64_recv_timeout.md` 全部 `git mv` 到 `bugs/`（git rename detection 已识别为 4 renamed）；(c) **交叉引用更新**：`upgraded.md` 中 5 处文本引用 `fix.md` / `fix_*.md` 全部加 `bugs/` 前缀（如 `（per \`bugs/fix.md\` v4.0.2c1 复盘`、`对应 \`bugs/fix_run_verify_verbose.md\``）；§X.Y 逻辑章节锚点（如 `fix.md §3.1`）**不**改（per §6.1 约定，§X.Y 是逻辑锚点非文件路径）；(d) **AGENTS.md 治理变更**（per §7）：§6.1 文档更新 "fix 文件位于 `bugs/`"（新增 "目录位置" 段解释 1.8 修订）+ §6 引用速查表 link 改 `bugs/fix.md` / `bugs/fix_*.md` + §8 changelog 加 1.8 行；(e) **`.py` 注释 / `.md` sibling cross-ref**：`autopwn/primitives/ret2libc_write.py:300` + `autopwn/recon/frame.py:3,94` + `tests/unit/test_padding_crosscheck.py:1,231` + `tests/unit/recon/test_frame.py:3,19` 等 `fix.md §X.Y` 引用**保持**（逻辑章节锚点）；`bugs/fix_*.md` 内部互相引用 `./fix_*.md`（siblings）**保持**。**理由**：(a) root 文件清单已含 `writeups/` + `logs/` + `core*` 临时文件 + `*.docx` 输出——再加 `fix*.md` 让 root 杂乱；(b) `writeups/`（结果产物）+ `logs/{题目}/`（过程 trace）+ `bugs/`（修复记录）形成完整的"产物-过程-记录"三件套目录结构；(c) v4.0+ 已是目录化版本（per v4.0 文档瘦身），fix 文件从 root 抽到子目录与 v4.0 风格一致。**影响**：(a) 4 个 fix 文件物理位置变更，git history 用 `git mv` 保留 rename detection；(b) 外部 link 指向 `./fix.md`（如有 GitHub README 引用）会 404——若 Owner 接受此 break 走 v4.1.9，否则 v4.1.9b 加 root symlink 兼容；(c) tests/ 路径无引用 fix.md 风险。**6 关验收**：① 代码合入（`git mv` + 文本编辑，无逻辑改动）；② `pytest tests/unit -q` 全过（719 passed，无新回归——本任务不碰 .py 代码逻辑）；③ N/A（不涉及行为变化）；④ N/A（不涉及 autopwn 行为）；⑤ Owner 自审（per §2.2 单 Owner）；⑥ 文档同步（本表 + AGENTS.md §6.1 + §8 changelog）| 🔄 | 0.5h | **Owner**：@Minzhi_Zhou |
-| `v4.1.10` | **修 `core/tee.py::Tee.write()` 用 `str(bytes)` 导致 shell 输出变 repr**（per Owner 2026-06-13 报告——v4.1.8 引入 bug 复盘）：当前 `Tee.write()` 第 87-88 行 `if not isinstance(data, str): data = str(data)`，对 pwntools 灌入的 bytes（如 `io.interactive()` 把 shell stdout bytes 写回 sys.stdout）会变成 `str(b'foo\nbar')` = `"b'foo\\nbar'"`（repr 形式，含 `b'` 前缀 + 8 进制/16 进制/Unicode 转义），shell 实际输出 `\n` 换行变成字面 `\\n`、`\t` 制表符变成字面 `\\t`。**典型复现**：`autopwn -l Challenge/level3_x64` 拿 shell 后输 `ls` 看到 `b'AGENTS.md    autopwn.egg-info  ...\nChallenge    bugs\t       ...\n'` 而非真正的多行+tab 列表。**修复方向**：(A) `Tee.write()` 增加 `if isinstance(data, bytes): data = data.decode('utf-8', errors='replace')`（per PEP 3116 / pwntools tube 标准做法）；(B) `errors='replace'` 避免 pty 非法 UTF-8 字节截断 log；(C) `__init__` / `write` 显式 docstring 说明 bytes/str/其他 三态。**关联文件**：`autopwn/core/tee.py`（v4.1.8 引入，14 行 diff 中含此 bug）、`tests/unit/test_core_tee.py`（v4.1.8 加的 17 个 test 漏了 bytes 用例）。**6 关验收**：① 代码合入分支；② `pytest tests/unit -q` 全过（**721 passed**，基线 719 + 2 新 bytes 用例，0 回归）；③ N/A（不影响 integration 路径——integration test 跑 `python -m autopwn` subprocess，stdout 走独立 pty，无 shell interactive）；④ `autopwn -l Challenge/level3_x64` 实测 shell 后输 `ls` 真看到多行+tab 列表（**不**再 `b'...\\n...\\t...'`）；⑤ Owner 自审；⑥ 文档同步（本表 + `bugs/fix.md` 索引 + `bugs/fix_tee_bytes_repr.md` 单 fix 记录 + logs/{level3_x64}/run.log 关键行无 `b'...\\n'`，实测 `grep -c "b'" logs/level3_x64/run.log` = 0）| ✅ | 0.5h | **Owner**：@Minzhi_Zhou |
-| `v4.1.11` | **加 `-ssl` flag 支持 SSL/TLS 远程连接**（per Owner 2026-06-13 需求——CTF 练习平台如 [ctf.r2.club.cyberstages.org] 等已用 SSL 包装 binary 远程服务，pwntools `remote()` 默认 plaintext，需显式 `ssl=True`）：(a) **CLI**：`autopwn/cli.py::_build_argparser` 加 `--ssl` (`-ssl`) `action="store_true"`，默认 False；(b) **Context**：`autopwn/context.py::ExploitContext` 加 `ssl: bool = False` 字段，`from_args` 读取 `args.ssl` 并**验证** — `args.ssl=True` 必须配 `-ip`+`-p`（local 模式无意义），否则 `ContextError`；(c) **30 个 `remote()` 调用点**改为 `remote(host, port, ssl=ctx.ssl)`（per pwntools 4.x kwarg 透传；False 走原路径 0 行为变化）：13 个 strategy（ret2system/ret2libc_put/ret2libc_write/execve_syscall/fmtstr/rwx_shellcode × local+remote）+ 7 个 canary_* call sites；(d) **Unit test**：`tests/unit/test_context_ssl.py` 加 5 个测试覆盖 (i) `from_args` 默认 `ssl=False`；(ii) `-ip/-p/-ssl` 联合 → `ctx.ssl=True`；(iii) `-ssl` 配 local 抛 `ContextError`；(iv) `-ip/-p` 不配 `-ssl` 仍走 remote plaintext；(v) CLI parser 接受 `-ssl`/`--ssl` 双形式；(e) **README**：Usage section 加 SSL 段 + 示例（plaintext vs SSL remote）。**理由**：(a) 越来越多 CTF 平台用 `stunnel`/`nginx` 包装 binary service 走 TLS；(b) pwntools `remote()` ssl 是 4.x 标准 kwarg，加透明透传 0 overhead；(c) `-ssl` 是 per-run flag 而非 context 永久状态——local 模式无关。**影响**：(a) 30 个 call site 显式带 `ssl=ctx.ssl`，False 时行为完全等价（pwntools 走 plaintext）；(b) `from_args` 加 1 行校验（`-ssl` 需配 remote）；(c) `_build_argparser` 加 1 个 `add_argument`。**风险**：(a) pwntools 4.x `remote(ssl=True)` 走 `ssl.wrap_socket`（Python <3.12 默认实现），Python 3.12+ 需 `ssl.create_default_context()`——pwntools 内部已处理，本任务不修；(b) CTF 平台常用自签证书，pwntools 默认 `ssl=True` 会做 cert verify（可能 handshake fail）——**对策**：v4.1.11b 加 `--ssl-skip-verify` flag（或在 `ctx.ssl` 上加 `verify` 子字段）；(c) 30 个机械改动若漏一处，**该 strategy 走 plaintext** → user 加 `-ssl` 仍 fail 难诊断——对策：v4.1.11 用 `grep` 全量扫 `io = remote(host, port)` 0 remaining 验证（已实测）。**6 关验收**：① 代码合入分支（17 files modified + 1 new test file）；② `pytest tests/unit -q` 全过（**726 passed**，基线 721 + 5 新 = 726，0 回归）；③ N/A（CI 不连真 SSL server）；④ N/A（pwntools 默认 cert verify 与 self-signed cert 不兼容——CI 用 openssl s_server 起 SSL server 后 pwntools `remote(ssl=True)` 报 cert verify fail；user 真 CTF 平台多用受信任 CA 证书，可走通；5 关 ② + grep 全量验证 30 处 call site 透传足够）；⑤ Owner 自审；⑥ 文档同步（本表 + README 新增 "Remote / SSL" 段）| ✅ | 1h | **Owner**：@Minzhi_Zhou |
-| `v4.1.14` | **修 `ctf_env` 标准容器下的工具链兼容层**（Owner 2026-08-30 现场新立任务）：范围限于 `autopwn/core/runner.py`、`autopwn/recon/checksec.py`、必要的 runner / recon 单测，以及 `tests/unit/test_context_ssl.py` 的容器路径兼容；**不**改 README / writeup / 其他策略逻辑。**目标**：让现有 `recon/*` 与 integration 流程在 `ctf_env` 里继续沿用既有 public API，而不是把容器工具差异向上泄漏到 `strategy` 层。**实施方向**：(a) `run_checksec()` 同时兼容 `checksec <file>` 与 `checksec --file=<file>` 两种 CLI 契约；(b) `recon.checksec.collect()` 兼容新版表格式 `checksec` 输出——当缺少历史 `Arch:` / `Stripped:` 字段时，回退到 `file` 输出补齐 bit / stripped；(c) `run_ropper()` 在 `ropper` 缺失时自动 fallback 到 `ROPgadget`，并把输出归一化成现有 `recon/rop.py` 可直接解析的 ropper-like 行格式；(d) `run_cyclic_create()` / `run_cyclic_find()` 在独立 `cyclic` 缺失时 fallback 到 `pwn cyclic`；(e) `tests/unit/test_context_ssl.py` 不再硬编码 `/ctf/autopwn/…`，改用 `tests.conftest.CHALLENGE_DIR`（或等价 repo 内解析）适配 `/data/autopwn`。**6 关验收**：① 代码合入 `fix/v4.1.14-ctf-env-toolchain-compat`；② `docker exec ctf_env bash -lc 'cd /data/autopwn && python3 -m pytest tests/unit/test_core_runner.py tests/unit/test_context_ssl.py tests/unit/recon/test_recon_public_api.py -q'` 全过；③ `docker exec ctf_env bash -lc 'cd /data/autopwn && python3 -m pytest tests/unit -m "not integration" -q'` 不再因 `checksec` / `ropper` / 路径问题失败；④ 将 integration 失败收敛为**非工具契约**问题：`docker exec ctf_env bash -lc 'cd /data/autopwn && python3 -m pytest tests/integration/test_shell_interaction.py -q'` 不再出现 `checksec` / `ropper` / `/ctf/autopwn` 路径类假红；⑤ Owner 自审；⑥ 文档同步（本表状态 + 如有必要的 `autopwn/pwntools.md` 交叉引用）。**当前进展（2026-08-30）**：关②已过（`34 passed in 2.02s`）；关③已过（`735 passed, 1 warning in 18.98s`），说明原先 `checksec` / `ropper` / 路径三类**工具链假红**已清空；关④已达成——integration 仅剩 `level3_x64` 这一个 exploit/runtime 兼容问题，已单独归类到 `v4.1.15`，不再属于本行 scope；关①/⑤ 需待实际 merge / Owner 收尾后才能改 `✅`。| 👀 | 1h | **风险**：(a) `ROPgadget` 与 `ropper` 搜索语义不完全等价，必须把兼容层收敛在 `core.runner`，避免上层再分叉解析器；(b) fallback 若返回过宽结果，可能把 `ret` 误识别成 `pop reg; ret`——需用单测锁死归一化规则；(c) 新版 `checksec` 表格不再暴露 `Arch:` 标签，bit / stripped 的回退来源必须固定（优先 `file`），避免在不同发行版间继续漂移；(d) 本任务只解决**工具契约兼容**，若 integration 仍失败，应单独定位为 exploit/基线问题，不在本行偷扩 scope。 |
-| `v4.1.15` | **将 `level3_x64` 暴露的失败归类为“x64 三参 leak primitive 缺第三参数控制”并修复**（Owner 2026-08-30 现场新立任务）：**归类理由**：如果把它写成“修 level3_x64”，后续每遇到一个 `write(fd, buf, count)` 型 x64 泄漏题就会继续靠单题热补丁；真正的共性根因是 **`Ret2LibcWriteX64.build_payload()` 把 3 参数函数调用偷简化成只控 `rdi/rsi`，把 `rdx` 留给运行时残值**。这在某些 libc / 调用路径下“碰巧可用”，在 `ctf_env` 当前 runtime 下则直接退化为 0-byte leak。**范围**：限于 `autopwn/primitives/ret2libc_write.py`、相关 x64 write strategy / canary strategy、必要的单元/集成测试，以及本表状态同步；**不**做 challenge-name 特判。**实施方向**：(a) 在 primitive 层引入**通用 x64 三参 call builder**，优先使用直接 `pop rdx`(含 `pop rdx; pop rbx; ret` 变体)；(b) 若无直接 `rdx` gadget，则 fallback 到 **ret2csu**（解析 `__libc_csu_init` 的 pop 链 + call 链）构造 `write(1, write@GOT, 8)`；(c) 让 `Ret2LibcWriteX64` / `CanaryRet2LibcWriteX64*` 共用该 builder，避免再次出现“非 canary 修了、canary 版本漏修”；(d) 把旧的“2 参 write leak”视为不可靠历史实现，不再作为新路径的默认契约；(e) 对这类 **2-stage x64 write leak**，stage2 的 `system("/bin/sh")` 对齐判定必须按“stage1 泄漏后回到 `main` 再次进入漏洞函数”的真实调用路径复核，必要时补 1 个 `ret`，避免把 stage1 修好后又在 verify 前因 MOVAPS/栈对齐倒下。**6 关验收**：① 代码合入 `fix/v4.1.15-x64-write-leak-arg3`；② `docker exec ctf_env bash -lc 'cd /data/autopwn && python3 -m pytest tests/unit/test_primitives_ret2libc_write.py tests/unit/test_primitives_ret2libc_extra_rsi.py tests/unit/test_exp_ret2libc_write.py tests/unit/test_exp_canary.py -q'` 全过；③ `docker exec ctf_env bash -lc 'cd /data/autopwn && python3 -m pytest tests/unit -m "not integration" -q'` 全过；④ `docker exec ctf_env bash -lc 'cd /data/autopwn && python3 -m pytest tests/integration/test_shell_interaction.py -q'` 恢复既有 pass/skip/xfail 基线；⑤ Owner 自审；⑥ 文档同步（本表状态 + 后续 fix 记录索引）。**当前进展（2026-08-30）**：关②已过（`102 passed in 6.24s`）；关③已过（`738 passed, 1 warning in 19.61s`）；关④已过（`4 passed, 1 skipped, 1 xfailed in 37.10s`）；关①/⑤ 需待实际 merge / Owner 收尾后才能改 `✅`。| 👀 | 1.5h | **风险**：(a) `__libc_csu_init` 在不同编译器/优化级别下寄存器搬运顺序可能不同，不能把 `r13/r14/r15` 的语义硬编码成单一版本——需要解析实际反汇编；(b) x64 write-leak stage1 payload 会变长，必须确认不破坏当前可用的 padding / frame 假设；(c) 若某 binary 同时没有 `pop rdx` 也没有可识别的 ret2csu，策略应 fail-closed 而不是继续赌运行时残值；(d) stage2 对齐若仍直接复用“单次进入漏洞函数”的旧判定，可能在 ret2csu leak 修好后把问题后移成第二阶段 SIGSEGV。 |
-| `v4.1.16` | **治理变更：删除单 Owner 项目的默认 PR 流程，改为直接 `commit + push` 到 `main`**（Owner 2026-08-30 明确澄清）：范围限于 `AGENTS.md` + `upgraded.md` 的**现行治理/流程章节**；不回写伪造历史，但删除“默认走 PR”的规范文本，并明确历史任务行中的 `fix/...` / `PR` / `merge` 描述仅用于审计追溯。**目标**：让后续迭代不再把单人项目误执行成 branch + PR 工作流。**实施方向**：(a) `AGENTS.md` 改写铁律 2/3、§2、§3、§4、§5、§6.1、§7 中所有默认 PR 依赖；(b) `upgraded.md` 改写 §1.2、§2.2、§2.4、§5.1、§5.5、§5.6，并新增现行流程说明；(c) 保留任务状态治理与单任务粒度约束，但把载体从 PR 改成 `commit/push`。**6 关验收**：① 治理文档已提交并 push 到 `main`；② N/A（纯文档任务）；③ N/A；④ N/A；⑤ Owner 自审；⑥ 文档同步（本行 + `AGENTS.md §8` changelog）。**备注**：历史任务行中已有的 `fix/...` / `PR` / `merge` 字样保留用于审计，不再视为现行规则。| ✅ | 0.5h | **Owner**：@Minzhi_Zhou |
-| `v4.1.17` | **治理变更：明确“单目录单人迭代”，禁止把最新版本留在旁路 worktree / 平行目录**（Owner 2026-08-30 现场新立任务）：**背景**：v4.1.14 / v4.1.15 / v4.1.16 期间曾临时创建 `autopwn-v4.1.14-pr`、`autopwn-v4.1.15-pr`、`autopwn-v4.1.16-direct-push` 三个平行工作目录，虽然最终已恢复，但暴露出“远端是最新、原始 `autopwn/` 目录不是最新且不干净”的可见性风险。**目标**：把单人主干流程进一步收紧成“**只认原始仓库主目录**”，避免再次出现需要额外恢复动作。**实施方向**：(a) `AGENTS.md` 当前阶段说明、§2.2、§3、§5、§8 明确默认工作目录固定为 `D:\ctf\ctf-env\autopwn` / `/data/autopwn`；(b) `upgraded.md` §1.2、§2.2、§3、§5.1 明确最新已验证版本必须留在主目录，主目录不干净时先备份 / 提交 / 回滚 / 澄清，而不是默认开旁路 worktree；(c) 把额外 worktree / 平行目录仅保留为 **Owner 明确授权的恢复场景例外**，不再视为普通迭代手段。**6 关验收**：① 治理文档提交并 push 到 `main`，且主目录 `D:\ctf\ctf-env\autopwn` 的 HEAD = `origin/main`；② N/A（纯文档任务）；③ N/A；④ N/A；⑤ Owner 自审；⑥ 文档同步（本行 + `AGENTS.md §8` changelog）。**备注**：历史上已出现过的平行目录名称保留在本行说明里，仅作复盘，不作为现行流程示例。| ✅ | 0.3h | **Owner**：@Minzhi_Zhou |
-| `v4.1.18` | **为 canary 检测增加 fail-fast 预算阈值，避免离线自动化长期爆破** | ✅ | 1h | 详情：[`upgraded/v4.1.18.md`](./upgraded/v4.1.18.md)；完成提交：`e19d33f` |
-| `v4.1.19` | **候选目标打分 + 利用链排序**（含 `vuln/vulnerable` 弱名称信号） | ⏳ | 2h | 详情：[`upgraded/v4.1.19.md`](./upgraded/v4.1.19.md)；架构细化随同任务同步到 `refactor.md` |
-| `v4.1.20` | **治理变更：`upgraded.md` 仅保留索引，迭代详情移入 `/upgraded/`** | ✅ | 0.5h | 详情：[`upgraded/v4.1.20.md`](./upgraded/v4.1.20.md)；落地提交：`c261d49` |
+| `v4.1.14` | `ctf_env` 工具链兼容层 | 👀 | 1h | [`backlog`](./upgraded/backlog.md#v4_1_14) |
+| `v4.1.15` | x64 三参 write leak primitive 缺第三参数控制 | 👀 | 1.5h | [`backlog`](./upgraded/backlog.md#v4_1_15) |
 
-### 3.3 open 阻塞（当前 = 0）
+### 3.3 最近完成
 
-_（无 — 2026-06-10 v4.0+ 启动时无新阻塞）_
+| ID | 摘要 | 状态 | 实际 | 详情 |
+|---|---|---|---|---|
+| `v4.1.21` | 第二轮瘦身 `upgraded.md` | ✅ | 0.5h | [`v4.1.21`](./upgraded/v4.1.21.md) |
+| `v4.1.20` | `upgraded.md` 第一阶段索引化 | ✅ | 0.5h | [`v4.1.20`](./upgraded/v4.1.20.md) / `c261d49`, `63d4103` |
+| `v4.1.18` | canary 检测 fail-fast 预算阈值 | ✅ | 1h | [`v4.1.18`](./upgraded/v4.1.18.md) / `e19d33f`, `aa46ad9` |
 
-历史阻塞 B-001 ~ B-007 见 [`rebuild.md §3.6`](./rebuild.md)（已 Resolved，0 open）。
+### 3.4 历史入口
+
+- 休眠 backlog（当前收纳 14 条历史未完成任务）：[`upgraded/backlog.md`](./upgraded/backlog.md)
+- 历史已完成任务快照：[`upgraded/archive_completed.md`](./upgraded/archive_completed.md)
+- v4.1.21 前的详细状态说明：[`upgraded/archive_state.md`](./upgraded/archive_state.md)
+
+### 3.5 open 阻塞
+
+_（无 — 2026-08-30）_
 
 ---
 
-## 4. 当前架构（v4.0 已落地 · AI Agent 必读）
+## 4. 当前架构（精简）
 
-> 详细架构 WHY 见 [`refactor.md §3`](./refactor.md)。本节只列 v4.0 实际代码位置（"代码在哪"）。
+详细 WHY 与分层演进：见 [`refactor.md §3`](./refactor.md)
 
-### 4.1 分层依赖（自下而上单向）
-
-```
-CLI / Orchestrator  (cli.py, orchestrator/{__init__,recon,detect,strategy}.py)
+```text
+CLI / Orchestrator
         ↓
-Strategies  (exp/strategies/*.py)
+Strategies
         ↓
-Primitives  (primitives/*.py)
+Primitives
         ↓
-Detect  (detect/*.py)
+Detect
         ↓
-Recon  (recon/*.py)
+Recon
         ↓
-Core  (core/*.py)
+Core
 ```
 
-**禁止反向 import**（per `AGENTS.md §5`）。AI Agent 输出代码前必须问"这个改动对应哪一层？"
+常用入口：
+- CLI：`autopwn/cli.py`
+- 编排：`autopwn/orchestrator/*`
+- 上下文：`autopwn/context.py`
+- 策略注册：`autopwn/exp/registry.py`
 
-### 4.2 关键文件位置
-
-| 用途 | 文件 | 关键 API |
-|---|---|---|
-| CLI 入口 | `autopwn/cli.py` | `main()` 解析 argparse + dispatch orchestrator |
-| 编排调度 | `autopwn/orchestrator/{__init__,recon,detect,strategy}.py` | `run(ctx)` / `run_recon_phase(ctx)` / `run_detect_phase(ctx)` / `run_strategy_phase(ctx)` |
-| 状态上下文 | `autopwn/context.py` | `ExploitContext` / `BinaryInfo` / `LibcInfo` / `RopGadgetsX64/32` / `CanaryInfo` |
-| 二进制信息收集 | `autopwn/recon/{checksec,libc,plt,rop,asm,bss}.py` | `checksec.collect()` / `libc.detect()` / `rop.find_x64/32()` 等 |
-| 漏洞探测 | `autopwn/detect/{binsh,canary,fmtstr,overflow}.py` | `binsh.check_binsh()` / `canary.canary_fuzz()` 等 |
-| Payload 构造 | `autopwn/primitives/{ret2system,ret2libc_put,ret2libc_write,execve_syscall,fmtstr,pie_backdoor,shellcode}.py` | `build_payload(ctx) -> bytes` |
-| 完整利用 | `autopwn/exp/strategies/*.py`（17 个文件 40 strategies）| `ExploitStrategy` 子类 + `@register` 装饰器 |
-| 策略注册 | `autopwn/exp/registry.py` | `candidates(ctx) -> List[ExploitStrategy]`（按 priority 排序）|
-| 报告生成 | `autopwn/report/{model,docx,code,__init__}.py` | `ExploitInfo` / `generate_docx()` / `generate_code()` |
-| 核心工具 | `autopwn/core/{logging,fs,runner}.py` | `Colors` / `print_*` / `set_permission()` / `run_checksec()` 等 14 工具 |
-
-### 4.3 Challenge 二进制（5 个）
-
-| Binary | 架构 | 漏洞 | 关键策略 |
-|---|---|---|---|
-| `canary` | x32 | 栈溢出 + canary | CANARY strategies (priority 200) |
-| `fmtstr1` | x32 | 格式串 | ret2system x32 (priority 150) |
-| `level3_x64` | x64 | 栈溢出 + 64-bit libc | ret2libc write x64 (priority 110) |
-| `pie` | x64 | PIE + backdoor | PIE Backdoor (priority 180) |
-| `rip` | x64 | RIP 覆盖 | ret2system x64 (priority 150) |
+完整文件路径、工具脚本与模板已迁到 [`upgraded/appendix.md`](./upgraded/appendix.md)。
 
 ---
 
-## 5. 验证方法（铁律 4 6 关验收）
+## 5. 验证方法（6 关验收）
 
-> **6 关验收（必跑）**：每条都 ✅ 才能把状态从 🔄/👀 改 ✅。
+1. **关 1**：代码已 push 到 `main`
+2. **关 2**：`pytest tests/unit -m "not integration" -q` 全过
+3. **关 3**：若涉及行为变化，跑对应 integration / `Challenge/` 验证
+4. **关 4**：若涉及 `autopwn` 行为，至少复测 1 个 `Challenge/`；5-binary 基线仍以 **4/5 SUCCESS + canary PARTIAL** 为准
+5. **关 5**：Owner 自审
+6. **关 6**：同提交同步索引行、详情文件、必要归档
 
-### 5.1 关 1: 代码已 push 到 main
+### 5.1 近期参考基线（2026-08-30）
 
-- 当前提交已进入 `origin/main`
-- 仓库主目录 `D:\ctf\ctf-env\autopwn`（容器 `/data/autopwn`）的 HEAD 与 `origin/main` 一致
-- push 后 working tree clean
-- `git log origin/main --oneline -1` 显示当前 commit
-
-### 5.2 关 2: pytest unit 全过
-
-```bash
-pytest tests/unit/ -m "not integration" -q
-```
-
-**当前基准**：626 passed（per 2026-06-10 实测）
-
-### 5.3 关 3: pytest integration（若涉及行为变化）
-
-```bash
-pytest tests/integration/ -q
-```
-
-**当前基准**：17/18 + 1 SKIP
-
-### 5.4 关 4: 5-binary smoke（若涉及 autopwn 行为）
-
-```bash
-# 60s timeout 5 binary 串行
-AUTOPWN_VERIFY_TIMEOUT=60 bash scripts/run_verify.sh v<X>.<Y>-smoke canary fmtstr1 level3_x64 pie rip
-
-# 5 binary 应 4/5 SUCCESS（canary pre-existing PARTIAL）
-# log 输出到 logs/v<X>.<Y>-smoke/
-```
-
-**当前基准**（2026-06-12 v4.0.2c1 merge 后更新）：
-- v4.0.2c1 静默后**真实成功** = 4/5（rip + level3_x64 + pie + **fmtstr1**，docx + interactive 都到位；canary 仍 pre-existing PARTIAL）
-- `run_verify.sh` `rc=0` 计数 = 4/5（rip / level3_x64 / pie / fmtstr1；canary rc=124 timeout）
-- v4.0.5 FrameContext 把 level3_x64 从"假阳性 SUCCESS + SIGSEGV"升级为"真 SUCCESS + interactive"
-- v4.0.2c1 把 fmtstr1 从"hang 60s+ timeout (主因 ret2libc_put recv 无 timeout + fmtstr strategy 被 `padding==0` gate 过滤)"升级为"真 SUCCESS + interactive"（fmtstr strategy 走 %n write 绕过 canary）
-- **v4.1.18 起** canary 的 detect 阶段默认会在 `canary_fuzz()` 内部 **20s fail-fast**，因此 5-binary smoke 中的 canary 可能在外层 `AUTOPWN_VERIFY_TIMEOUT=60` 之前就以内层普通失败返回；只要整体基线仍是 **4/5 SUCCESS + canary PARTIAL**，视为与既有基线一致
-
-### 5.5 关 5: Owner 自审
-
-- 单 Owner 项目（per `AGENTS.md §2.2`），Owner 自审 = Reviewer
-- `commit message` 含：任务 ID / 动词 / 对象
-- 如写 `commit body`，含：实施要点 / Refs:`upgraded.md §3`, `upgraded/vX.Y.Z.md` 任务行
-
-### 5.6 关 6: 文档同步
-
-- **同一任务的最终已 push 提交** 更新 §3 任务索引行与对应 `upgraded/vX.Y.Z.md`（状态 + 实际工时 + commit SHA / 完成记录）
-- **同一任务的最终已 push 提交** 更新 `CHANGELOG.md`（如适用）
-- **同一任务的最终已 push 提交** 更新 `refactor.md` / `rebuild.md`（如涉及架构变更）
-
-### 5.7 工具脚本
-
-- `scripts/run_verify.sh <version-tag> <bin1> [bin2] ...` — 串行跑 binary（env `AUTOPWN_VERIFY_TIMEOUT` 控制 timeout）
-- `scripts/baseline_lock.sh lock/verify/list <dir>` — sha256sum baseline 锁（v4.0+ 治理用）
-- `tools/check_recon_coverage.py` — recon public API 覆盖率 gate（95% 阈值）
-- `tools/check_public_api_coverage.py` — primitive public API 覆盖率 gate（80% 阈值）
+- 单元测试：`740 passed, 2 warnings`
+- 相关 integration 子集：`4 passed, 1 skipped, 1 xfailed`
+- 手工 `Challenge/canary`：默认可在 detect 阶段 **20s fail-fast**，不再无界刷 `Starting local process`
 
 ---
 
-## 6. 附录
+## 6. 速查入口
 
-### 6.1 文件路径速查（v4.0 完整）
-
-```
-upgraded/
-├── vX.Y.Z.md            # 单次迭代的需求详情 / 风险 / 验收记录
-
-autopwn/
-├── __init__.py          # __version__ = "4.0.dev0"
-├── __main__.py          # python -m autopwn 入口
-├── cli.py               # argparse + dispatch orchestrator
-├── context.py           # 6 个 dataclass
-├── core/
-│   ├── logging.py       # Colors + 12 print_* + VERBOSE
-│   ├── fs.py            # set_permission + temp_workdir
-│   └── runner.py        # 14 个 run_* 工具包装
-├── recon/
-│   ├── checksec.py      # collect() / display()
-│   ├── libc.py          # detect()
-│   ├── plt.py           # scan()
-│   ├── rop.py           # find_x64/32()
-│   ├── asm.py           # vuln_func_name / asm_stack_overflow
-│   └── bss.py           # BSSSymbol / find_bss()
-├── detect/
-│   ├── binsh.py         # check_binsh()
-│   ├── canary.py        # canary_fuzz() / leakage_canary_value()
-│   ├── fmtstr.py        # detect_format_string_vulnerability()
-│   └── overflow.py      # test_stack_overflow()
-├── primitives/
-│   ├── ret2system.py    # Ret2SystemX32 / X64
-│   ├── ret2libc_put.py  # Ret2LibcPutX32 / X64
-│   ├── ret2libc_write.py # Ret2LibcWriteX32 / X64
-│   ├── execve_syscall.py # ExecveSyscall x32
-│   ├── fmtstr.py        # FmtStr
-│   ├── pie_backdoor.py  # PieBackdoor
-│   └── shellcode.py     # RWX shellcode 通用
-├── exp/
-│   ├── base.py          # ExploitStrategy 抽象类
-│   ├── registry.py      # @register / candidates(ctx)
-│   └── strategies/      # 17 文件 40 strategies
-├── orchestrator/        # 三阶段调度（拆子包）
-│   ├── __init__.py      # run() 入口 + re-exports
-│   ├── recon.py         # run_recon_phase
-│   ├── detect.py        # run_detect_phase
-│   └── strategy.py      # run_strategy_phase
-├── report/
-│   ├── model.py         # ExploitInfo
-│   ├── docx.py          # generate_docx()
-│   ├── code.py          # generate_code()
-│   └── __init__.py      # record_success()
-└── pwntools.md          # pwntools 笔记
-
-tests/
-├── conftest.py          # 共享 fixture (ctx_for, CHALLENGE_DIR)
-├── unit/                # 626 tests（无 IO 副作用）
-└── integration/         # 17+1 tests（真跑 Challenge 二进制）
-
-scripts/
-├── run_verify.sh        # 串行 5-binary 验证 runner
-└── baseline_lock.sh     # sha256sum baseline 锁
-
-tools/
-├── check_recon_coverage.py    # recon 95% public API 覆盖 gate
-├── check_public_api_coverage.py # primitive 80% public API 覆盖 gate
-└── verify_v31_v40.py          # v3.1 vs v4.0 历史审计工具（仅保留）
-
-Challenge/
-├── canary               # x32 + canary
-├── fmtstr1              # x32 + 格式串
-├── level3_x64           # x64 + 64-bit libc
-├── pie                  # x64 + PIE
-└── rip                  # x64 + ret2system
-```
-
-### 6.2 决策树优先级（v4.0 现状）
-
-| Priority | Strategy | 适用 binary |
-|---|---|---|
-| 200 | CANARY (canary_*.py) | canary |
-| 180 | PIE_BACKDOOR (pie_backdoor.py) | pie |
-| 150 | RET2SYSTEM (ret2system_*.py) | fmtstr1, rip |
-| 120 | RET2LIBC_PUT (ret2libc_put_*.py) | level3_x64 (fallback) |
-| 110 | RET2LIBC_WRITE (ret2libc_write_*.py) | level3_x64 |
-| 90 | RWX_SHELLCODE (rwx_shellcode_*.py) | future RWX binaries |
-| 80 | EXECVE_SYSCALL (execve_syscall.py) | canary (x32 fallback) |
-| 50 | FMTSTR (fmtstr.py) | canary (兜底) |
-
-### 6.3 工具脚本
-
-| 工具 | 用途 | 何时用 |
-|---|---|---|
-| `pytest tests/unit/ -m "not integration"` | 单元测试 | 每次改代码后必跑（关 2）|
-| `pytest tests/integration/` | 集成测试 | 改 orchestrator / strategy 时必跑（关 3）|
-| `AUTOPWN_VERIFY_TIMEOUT=60 bash scripts/run_verify.sh <tag> canary fmtstr1 level3_x64 pie rip` | 5-binary 串行 smoke | 改 autopwn 行为时必跑（关 4）|
-| `bash scripts/baseline_lock.sh lock logs/v<X>-smoke` | 锁 baseline log 文件 hash | 发布前 / 长期 baseline 保留时 |
-| `python3 tools/check_recon_coverage.py` | recon 95% 覆盖 gate | CI 跑（关 2 增强）|
-| `python3 tools/check_public_api_coverage.py` | primitive 80% 覆盖 gate | CI 跑（关 2 增强）|
-
-### 6.4 任务 ID 模板（v4.0+）
-
-```
-[v{X}.{Y}.{Z}] {动词} {对象}
-Refs: `upgraded.md §3`, `upgraded/vX.Y.Z.md`
-
-如：
-[v4.0.0] release v4.0 GA — 切版本号 + tag + Release
-[v4.1.0] add HEAP exploitation — primitives/heap.py + 3 strategies
-[v4.1.1] type exceptions — ReconError/DetectionError/StrategyError
-```
-
-### 6.5 CHANGELOG 模板
-
-```markdown
-## [v{X}.{Y}.{Z}] - YYYY-MM-DD
-
-### Added
-- 新功能
-
-### Changed
-- 行为变更
-
-### Fixed
-- bug 修复
-
-### Removed
-- 移除功能
-
-详见 `git log v{X}.{Y}.{Z-1}..v{X}.{Y}.{Z}`
-```
-
-### 6.6 v4.0 → v4.1 决策表（v4.1 启动时拍板）
-
-| 维度 | v4.0 (当前) | v4.1 候选 |
-|---|---|---|
-| 二进制类型 | 栈溢出 / 格式串 / canary / PIE | + HEAP（v4.1.0）|
-| 异常处理 | `except Exception as e` | 类型化异常（v4.1.1）|
-| CLI 模式 | 单 binary | 多 binary 批处理（v4.1.2）|
-| 5-binary baseline | 4/5 SUCCESS（canary PARTIAL pre-existing）| 5/5 SUCCESS（v4.1.3，可放弃）|
-| 部署模式 | CLI | CLI + Web UI/RPC（v4.1.4）|
-| 策略选择 | 静态 priority 排序 | + LLM 动态调整（v4.1.5）|
+- 文件路径 / 工具 / 模板：[`upgraded/appendix.md`](./upgraded/appendix.md)
+- 休眠 backlog：[`upgraded/backlog.md`](./upgraded/backlog.md)
+- 历史已完成任务：[`upgraded/archive_completed.md`](./upgraded/archive_completed.md)
+- 详细状态长说明：[`upgraded/archive_state.md`](./upgraded/archive_state.md)
+- 修复记录索引：[`bugs/fix.md`](./bugs/fix.md)
 
 ---
 
 > **最后一条**：
-> 本文档是 v4.0+ 迭代的**索引与流程入口**。任何"今天起怎么开发 autopwn"问题先查这里的索引，再进入对应 `upgraded/vX.Y.Z.md`。
-> 历史档案在 `rebuild.md` + `refactor.md` + `git log`（永不删除）。
+> `upgraded.md` 现在只负责“把你带到正确的当前信息”；历史长记录与速查内容按需进入 `upgraded/*.md`。

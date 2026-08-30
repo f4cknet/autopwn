@@ -2,24 +2,26 @@
 
 > 本文档保留**核心治理规则**（4 条铁律 + AI Agent 条款 + 治理变更流程）
 >
-> **当前阶段说明（治理变更 1.10 / 1.11 / 1.12 · 2026-08-30）**：
+> **当前阶段说明（治理变更 1.10 / 1.11 / 1.12 / 1.13 · 2026-08-30）**：
 > 本项目当前为**个人独立开发**，默认流程 = **直接 `commit + push` 到 `main`**，**不要求 PR**。
 > 默认工作目录固定为 **`D:\ctf\ctf-env\autopwn`**（容器内对应 **`/data/autopwn`**）；除非 Owner 明确授权的恢复 / 取证场景，**不创建额外 `autopwn-*` 平行目录、`git worktree` 或旁路工作树**。
 > 自治理变更 **1.12** 起，`upgraded.md` **只保留索引 / 状态 / 流程入口**；每次迭代的**需求详情、范围、风险、验收记录**统一放到 `upgraded/vX.Y.Z.md`。
+> 自治理变更 **1.13** 起，`upgraded.md` 进一步瘦身为**当前活动任务 + 待收尾任务 + 最近完成 + 历史入口**；休眠 backlog / 详细状态 / 文件路径附录默认下沉到 `upgraded/*.md`，非追溯场景不必主动读取。
 >
 > **AI Agent session 启动必读**：
 >
 > 1. 完整读 `AGENTS.md`（本文件）
-> 2. 读 `upgraded.md`（索引）
+> 2. 读 `upgraded.md`（主索引）
 > 3. 读 `refactor.md §3`（目标架构）
 > 4. 读当前任务对应的 `upgraded/vX.Y.Z.md`（需求详情）
+> 5. 仅在历史追溯 / 旧 backlog 续做时，再读 `upgraded/backlog.md` / `upgraded/archive_*.md`
 
 ---
 
 ## 1. 铁律（不可绕过）
 
 ### 铁律 1：实施以 `refactor.md §3` 为准
-- 任何代码改动必须对应 `upgraded.md` §3 中的一个任务索引行（或 Owner 现场新立任务行），且该任务的详情写在 `upgraded/vX.Y.Z.md`
+- 任何代码改动必须对应 `upgraded.md` §3 中的一个任务索引行（或 Owner 现场新立任务行）；新任务与当前任务的详情写在 `upgraded/vX.Y.Z.md`，历史 backlog 任务若要重新开工，必须先从 `upgraded/backlog.md` 拆出专属详情文件并回填到 `upgraded.md §3`
 - 在 `upgraded.md` §3 找不到对应项 ⇒ **该任务不存在**
 - 如果你觉得要做的事在 `upgraded.md` 中没有：先 grep 关键字（确认不是漏看）⇒ 该项是**新需求** ⇒ 立即停手，走铁律 2
 
@@ -113,9 +115,10 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 任何参与本项目的 AI Agent **在每个 session 启动时必须按序执行**：
 
 1. 读取本文件（`AGENTS.md`）——完整
-2. 读取 `upgraded.md` 整个 §0-§5 —— 完整（索引 / 流程 / 基线）
+2. 读取 `upgraded.md` 整个 §0-§5 —— 完整（主索引 / 流程 / 基线）
 3. 读取 `refactor.md §3 目标架构` —— 完整（理解 v4.0 已落地的架构）
-4. 读取 `upgraded.md §3` 中**当前任务**索引行 + 对应 `upgraded/vX.Y.Z.md` 详情文件
+4. 读取 `upgraded.md §3` 中**当前活动 / 待收尾任务**对应索引行 + 相关 `upgraded/vX.Y.Z.md` / backlog 长记录
+5. 只有在处理休眠 backlog / 审计追溯时，才额外读取 `upgraded/backlog.md` / `upgraded/archive_*.md`
 
 > **环境约束补充**（治理变更 1.9 · 2026-08-30）：`ctf-env` 对应的 Docker 环境容器名是 **`ctf_env`**，宿主机 **`D:\ctf\ctf-env\`** 挂载到容器 **`/data`**。仓库工作目录 **`D:\ctf\ctf-env\autopwn`** 在容器中对应 **`/data/autopwn`**。
 
@@ -126,7 +129,7 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 | 主动修改 `upgraded.md` 之外的文件 | 对未识别的需求做“需求澄清”提问（不实施，先问） |
 | 跳过 `upgraded.md` 直接生成代码 | 建议“这看起来是新需求，建议走铁律 2” |
 | 在 `commit message` 中遗漏任务 ID | 引用 `upgraded.md §3` 任务行 |
-| 推测 / 编造文件路径、函数名、任务 ID | 引用 `upgraded.md §6 附录 A` 文件路径速查 |
+| 推测 / 编造文件路径、函数名、任务 ID | 引用 `upgraded/appendix.md §1` 文件路径速查 |
 | 跨多个任务 ID 同时改代码 | 一次只动一个任务 ID |
 | 擅自创建额外 `git worktree` / `autopwn-*` 平行目录继续迭代 | 先在主目录 `D:\ctf\ctf-env\autopwn` / `/data/autopwn` 执行 `git status`，必要时先备份 / 回滚 / 澄清 |
 | 把现有代码逻辑“复述”而不抽到新层 | 严格遵守 `refactor.md §3` 的分层依赖方向 |
@@ -142,9 +145,12 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 | 怎么开发 autopwn | `upgraded.md` §0-§5 + 当前任务 `upgraded/vX.Y.Z.md` |
 | 找当前任务 | `upgraded.md §3` + 对应 `upgraded/vX.Y.Z.md` |
 | 看某次迭代需求详情 | `upgraded/vX.Y.Z.md` |
+| 看历史 backlog | `upgraded/backlog.md` |
+| 看历史状态长说明 | `upgraded/archive_state.md` |
+| 文件路径 / 工具 / 模板速查 | `upgraded/appendix.md` |
 | 理解 v4.0 架构 | `refactor.md §3 目标架构` |
 | 历史决策 / v3.1 → v4.0 演进 | `refactor.md §13` + `rebuild.md` 阶段总结表 |
-| Review 检查清单 | `upgraded.md §4` |
+| Review 检查清单 | `upgraded.md §5` |
 | **修复记录索引** | [`bugs/fix.md`](./bugs/fix.md)（v4.0+ 治理变更 1.7 起，**只**列已进入 `main` 的 fix） |
 | **单 fix 详细记录** | [`bugs/fix_<bug_name>.md`](./bugs/)（per §6.1） |
 
@@ -226,6 +232,7 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 | 2026-08-30 | **1.10** | **删除单 Owner 项目的默认 PR 流程**：现行规范改为直接 `commit + push` 到 `main`；同步改写铁律 2/3、§2、§3、§4、§5、§6.1、§7 中所有默认 PR 依赖，并注明历史任务行中的 PR / merge / Review 字样仅用于审计追溯 |
 | 2026-08-30 | **1.11** | **明确单目录单人迭代约束**：默认工作目录固定为 `D:\ctf\ctf-env\autopwn` / `/data/autopwn`；未经 Owner 明确授权，不创建额外 `autopwn-*` 平行目录、`git worktree` 或旁路工作树；若发生恢复场景，最新已验证版本必须回到主目录 |
 | 2026-08-30 | **1.12** | **`upgraded.md` 索引化**：`upgraded.md` 只保留阅读入口 / 任务索引 / 验收基线；每次迭代的需求详情、范围、风险、验收记录下沉到 `upgraded/vX.Y.Z.md`；历史未迁移条目按“新建即分文件，触达即迁移”逐步收敛 |
+| 2026-08-30 | **1.13** | **`upgraded.md` 第二轮瘦身**：主文档只保留当前活动任务、待收尾任务、最近完成任务、流程与验证基线；休眠 backlog 下沉到 `upgraded/backlog.md`，详细状态说明下沉到 `upgraded/archive_state.md`，文件路径/工具/模板下沉到 `upgraded/appendix.md`；AI Agent 非追溯场景默认不读历史归档 |
 
 > 完整 changelog 1.0-1.6 见 git log。
 
@@ -237,3 +244,6 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 > **签字栏**：
 > - 项目 Owner：@Minzhi_Zhou（2026-06-07 由 @Ba1_Ma0 改名）
 > - 首次发布：2026-06-06
+
+
+

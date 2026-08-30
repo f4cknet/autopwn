@@ -73,6 +73,24 @@ Core
 - 旧字段继续保留为兼容视图，不在本阶段一次性删除
 - 首批接入聚焦 detect/runtime 的高价值事实：`padding`、`binsh`、`fmtstr` 元数据、`canary` 相关事实
 
+### 3.5 交互图模型（`v5.0.3` 首个落地切片）
+
+- **InteractionGraph**：描述一条 exploit 路线需要经过的交互步骤与依赖边
+- **InteractionStep**：描述单步动作，如 `leak` / `execute` / `reentry` / `verify`
+- **InteractionEdge**：表达“必须先完成哪一步，才能进入下一步”
+- **InteractionEvent**：记录运行时实际走过的步骤与关键结果
+
+本阶段先覆盖两类高价值交互：
+
+1. **same-session canary 链**：`fmt leak canary → bof leak puts → reentry → bof shell → whoami verify`
+2. **普通 2-stage ret2libc 链**：`leak libc addr → stage2 shell → shell verify`
+
+### 3.6 `v5.0.3` 迁移约束
+
+- binary scope 可存交互模板，runtime scope 存实际执行轨迹
+- 不在本阶段引入完整 planner，只做可执行路线的显式表达
+- 不把 challenge 特判塞进 interaction graph；图只描述交互结构，不描述题名
+
 ## 4. 迁移约束
 
 - 保持单向依赖，禁止反向 import

@@ -144,6 +144,99 @@ class FactStore:
         return merged
 
 
+class InteractionKind(str, Enum):
+    """High-level interaction step kind for multi-stage exploit routes."""
+
+    LEAK = "leak"
+    EXECUTE = "execute"
+    REENTRY = "reentry"
+    VERIFY = "verify"
+
+
+@dataclass(slots=True, frozen=True)
+class InteractionStep:
+    """One declarative step inside an interaction graph."""
+
+    step_id: str
+    kind: InteractionKind
+    requires: Tuple[str, ...] = ()
+    produces: Tuple[str, ...] = ()
+    same_instance: bool = False
+    notes: str = ""
+
+
+@dataclass(slots=True, frozen=True)
+class InteractionEdge:
+    """A dependency edge between two interaction steps."""
+
+    source: str
+    target: str
+    reason: str = ""
+
+
+@dataclass(slots=True, frozen=True)
+class InteractionEvent:
+    """A runtime event saying one graph step actually executed."""
+
+    step_id: str
+    detail: str = ""
+
+
+@dataclass(slots=True)
+class InteractionGraph:
+    """A minimal interaction graph for v5 multi-step exploit routes."""
+
+    name: str
+    steps: dict[str, InteractionStep] = field(default_factory=dict)
+    edges: list[InteractionEdge] = field(default_factory=list)
+    events: list[InteractionEvent] = field(default_factory=list)
+
+    def add_step(
+        self,
+        step_id: str,
+        kind: InteractionKind,
+        *,
+        requires: Tuple[str, ...] = (),
+        produces: Tuple[str, ...] = (),
+        same_instance: bool = False,
+        notes: str = "",
+    ) -> InteractionStep:
+        step = InteractionStep(
+            step_id=step_id,
+            kind=kind,
+            requires=requires,
+            produces=produces,
+            same_instance=same_instance,
+            notes=notes,
+        )
+        self.steps[step_id] = step
+        return step
+
+    def connect(self, source: str, target: str, *, reason: str = "") -> InteractionEdge:
+        edge = InteractionEdge(source=source, target=target, reason=reason)
+        if edge not in self.edges:
+            self.edges.append(edge)
+        return edge
+
+    def record_event(self, step_id: str, detail: str = "") -> InteractionEvent:
+        if step_id not in self.steps:
+            raise KeyError(f"undefined interaction step: {step_id}")
+        event = InteractionEvent(step_id=step_id, detail=detail)
+        self.events.append(event)
+        return event
+
+    def event_step_ids(self) -> Tuple[str, ...]:
+        return tuple(event.step_id for event in self.events)
+
+    def clone(self) -> "InteractionGraph":
+        return InteractionGraph(
+            name=self.name,
+            steps=dict(self.steps),
+            edges=list(self.edges),
+            events=list(self.events),
+        )
+
+
 @dataclass(slots=True)
 class BinaryInfo:
     """Static properties of the target ELF, populated by ``recon/checksec.py`` (P4.1)."""
@@ -449,6 +542,30 @@ class ExploitContext:
     def clear_facts(self, scope: FactScope) -> None:
         self.facts.clear_scope(scope)
 
+    def set_interaction_graph(
+        self,
+        graph: InteractionGraph,
+        *,
+        scope: Optional[FactScope] = None,
+        source: str = "",
+    ) -> InteractionGraph:
+        self.set_fact(
+            f"interaction.{graph.name}",
+            graph,
+            scope=self.runtime_fact_scope if scope is None else scope,
+            source=source,
+        )
+        return graph
+
+    def get_interaction_graph(
+        self,
+        name: str,
+        *,
+        scope: Optional[FactScope] = None,
+    ) -> Optional[InteractionGraph]:
+        graph = self.get_fact(f"interaction.{name}", scope=scope)
+        return graph if isinstance(graph, InteractionGraph) else None
+
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> "ExploitContext":
         """Build an ``ExploitContext`` from an ``argparse.Namespace``.
@@ -606,6 +723,11 @@ __all__ = [
     "FactScope",
     "FactRecord",
     "FactStore",
+    "InteractionKind",
+    "InteractionStep",
+    "InteractionEdge",
+    "InteractionEvent",
+    "InteractionGraph",
     "BinaryInfo",
     "LibcInfo",
     "RopGadgetsX64",

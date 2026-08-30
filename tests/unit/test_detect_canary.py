@@ -195,6 +195,14 @@ class TestSameSessionCanaryPlan:
         assert plan is not None
         assert ctx.canary_plan is plan
         assert ctx.get_fact("canary.plan", scope=FactScope.BINARY) is plan
+        graph = ctx.get_interaction_graph(
+            "same-session-canary-ret2libc-put-x32",
+            scope=FactScope.BINARY,
+        )
+        assert graph is not None
+        assert graph.event_step_ids() == ()
+        assert "fmt_leak_canary" in graph.steps
+        assert any(edge.source == "reenter_main" and edge.target == "bof_spawn_shell" for edge in graph.edges)
         assert plan.method == "fmtstr-sequential-x32"
         assert plan.stack_index > 0
         assert plan.buffer_to_canary == 64

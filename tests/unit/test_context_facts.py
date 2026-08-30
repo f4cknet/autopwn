@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from autopwn.context import BinaryInfo, ExploitContext, FactScope
+from autopwn.context import BinaryInfo, ExploitContext, FactScope, InteractionGraph, InteractionKind
 
 
 def _make_ctx(tmp_path, *, mode: str = "local") -> ExploitContext:
@@ -45,3 +45,17 @@ def test_clear_scope_removes_only_target_scope(tmp_path):
     ctx.clear_facts(FactScope.ATTEMPT)
     assert ctx.get_fact("strings.binsh_in_binary", scope=FactScope.BINARY) is True
     assert not ctx.has_fact("canary.fuzz_budget_exhausted", scope=FactScope.ATTEMPT)
+
+
+def test_interaction_graph_can_be_stored_and_record_events(tmp_path):
+    ctx = _make_ctx(tmp_path)
+    graph = InteractionGraph(name="two-stage-demo")
+    graph.add_step("leak", InteractionKind.LEAK, produces=("libc.puts_addr",))
+    graph.add_step("exec", InteractionKind.EXECUTE, requires=("libc.puts_addr",))
+    graph.connect("leak", "exec", reason="need libc leak before stage 2")
+    graph.record_event("leak", "puts=0xf7d638e0")
+    ctx.set_interaction_graph(graph, scope=FactScope.PROCESS, source="test.graph")
+    stored = ctx.get_interaction_graph("two-stage-demo", scope=FactScope.PROCESS)
+    assert stored is graph
+    assert stored.event_step_ids() == ("leak",)
+    assert stored.edges[0].reason == "need libc leak before stage 2"

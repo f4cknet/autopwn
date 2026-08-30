@@ -794,6 +794,15 @@ class TestCanaryRunInvokesRecordSuccess:
         assert info_arg.exploit_type == "same-session canary ret2libc-put - x32"
         assert info_arg.id_output == "root\n"
         assert info_arg.addresses["stack_index"] == 2
+        graph = ctx.get_interaction_graph("same-session-canary-ret2libc-put-x32")
+        assert graph is not None
+        assert graph.event_step_ids() == (
+            "fmt_leak_canary",
+            "bof_leak_puts",
+            "reenter_main",
+            "bof_spawn_shell",
+            "verify_shell",
+        )
         assert mock_io.sendline.call_count == 4
 
     def test_ret2libc_write_x64_local_reads_8_byte_leak(self):

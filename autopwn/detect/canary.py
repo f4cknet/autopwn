@@ -58,7 +58,14 @@ import time
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from autopwn.context import CanaryInfo, CanaryLeakPlan, ExploitContext, FactScope
+from autopwn.context import (
+    CanaryInfo,
+    CanaryLeakPlan,
+    ExploitContext,
+    FactScope,
+    InteractionGraph,
+    InteractionKind,
+)
 from autopwn.recon.targets import inspect_functions
 
 
@@ -347,6 +354,11 @@ def discover_same_session_canary_plan(
             scope=FactScope.BINARY,
             source="detect.canary.same_session",
         )
+        ctx.set_interaction_graph(
+            _build_same_session_interaction_graph(),
+            scope=FactScope.BINARY,
+            source="detect.canary.same_session",
+        )
         return plan
 
     return None
@@ -488,6 +500,50 @@ def _split_hex_words(line: bytes) -> list[bytes]:
 
 def _looks_like_canary_word(word: bytes) -> bool:
     return len(word) >= 4 and word.endswith(b"00")
+
+
+def _build_same_session_interaction_graph() -> InteractionGraph:
+    graph = InteractionGraph(name="same-session-canary-ret2libc-put-x32")
+    graph.add_step(
+        "fmt_leak_canary",
+        InteractionKind.LEAK,
+        produces=("canary.live_value",),
+        same_instance=True,
+        notes="sequential format-string walk in the current process",
+    )
+    graph.add_step(
+        "bof_leak_puts",
+        InteractionKind.LEAK,
+        requires=("canary.live_value",),
+        produces=("libc.puts_addr",),
+        same_instance=True,
+        notes="reuse the live canary to send stage-1 BOF",
+    )
+    graph.add_step(
+        "reenter_main",
+        InteractionKind.REENTRY,
+        requires=("libc.puts_addr",),
+        same_instance=True,
+        notes="return to the input state without respawning the process",
+    )
+    graph.add_step(
+        "bof_spawn_shell",
+        InteractionKind.EXECUTE,
+        requires=("canary.live_value", "libc.puts_addr"),
+        same_instance=True,
+        notes="send stage-2 payload in the same process",
+    )
+    graph.add_step(
+        "verify_shell",
+        InteractionKind.VERIFY,
+        same_instance=True,
+        notes="validate shell via whoami",
+    )
+    graph.connect("fmt_leak_canary", "bof_leak_puts", reason="need current-process canary")
+    graph.connect("bof_leak_puts", "reenter_main", reason="return to second input sink")
+    graph.connect("reenter_main", "bof_spawn_shell", reason="send final payload after reentry")
+    graph.connect("bof_spawn_shell", "verify_shell", reason="confirm shell after stage 2")
+    return graph
 
 
 # =====================================================================

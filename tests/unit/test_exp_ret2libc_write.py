@@ -599,6 +599,9 @@ class TestRet2LibcWriteRunInvokesRecordSuccess:
         assert info_arg.exploit_type == "ret2libc (write) - x64"
         assert info_arg.architecture == "x64"
         assert "write_addr" in info_arg.addresses
+        graph = ctx.get_interaction_graph("ret2libc-write-x64")
+        assert graph is not None
+        assert graph.event_step_ids() == ("leak_write", "spawn_shell", "verify_shell")
         assert mock_io.sendline.call_count == 2
         assert mock_verify_shell.call_count == 1
 

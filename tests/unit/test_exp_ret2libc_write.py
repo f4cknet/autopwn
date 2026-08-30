@@ -415,21 +415,38 @@ class TestRet2LibcWriteRunGracefulSkip:
         ctx.gadgets_x64 = None
         assert s.run(ctx) is False
 
-    def test_x64_local_run_returns_false_when_pop_rsi_missing(self):
-        """Defensive: pop_rsi=0 (missing) is a graceful skip."""
-        from autopwn.context import RopGadgetsX64
+    def test_x64_local_run_returns_true_when_pop_rsi_missing_but_primitive_fallback_exists(self):
+        """Missing pop_rsi must not be rejected before primitive fallback runs."""
+        from autopwn.context import LibcInfo, RopGadgetsX64
         from autopwn.exp.strategies.ret2libc_write_x64 import (
             Ret2LibcWriteX64LocalStrategy,
         )
 
         s = Ret2LibcWriteX64LocalStrategy()
         ctx = _ctx_64()
+        ctx.libc = LibcInfo(path=Path("/lib/x86_64-linux-gnu/libc.so.6"))
         ctx.gadgets_x64 = RopGadgetsX64(
             pop_rdi=0x401234,
             pop_rsi=0,  # missing
             ret=0x40123c,
         )
-        assert s.run(ctx) is False
+
+        mock_io = MagicMock()
+        mock_io.recv.side_effect = [b"Input:\n", b"\x10\x20\x30\x40\x50\x60\x70\x80"]
+        mock_primitive = MagicMock()
+        mock_primitive.build_payload.return_value = b"\x90" * 64
+        mock_primitive.build_stage2_payload.return_value = b"\x90" * 64
+
+        with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.ret2libc_write_x64.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
+             patch("autopwn.report.record_success") as mock_record, \
+             patch("autopwn.exp.strategies.ret2libc_write_x64.Ret2LibcWriteX64", return_value=mock_primitive):
+            assert s.run(ctx) is True
+
+        assert mock_record.call_count == 1
+        assert mock_io.sendline.call_count == 2
+        assert mock_verify_shell.call_count == 1
 
     def test_x64_local_run_returns_false_when_pop_rdi_missing(self):
         """Defensive: pop_rdi=0 (missing) is a graceful skip."""

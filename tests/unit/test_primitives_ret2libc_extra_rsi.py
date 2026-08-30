@@ -35,6 +35,18 @@ pytestmark = pytest.mark.primitive
 LIBC_64 = "/lib/x86_64-linux-gnu/libc.so.6"
 
 
+def _force_direct_rdx(monkeypatch, *, extra_pop_count: int = 0) -> None:
+    """Force ``Ret2LibcWriteX64.build_payload`` onto the direct-rdx path."""
+    from autopwn.primitives import ret2libc_write as write_mod
+
+    monkeypatch.setattr(
+        write_mod,
+        "_find_x64_pop_rdx_gadget",
+        lambda _program: write_mod._X64PopGadget(addr=0xDDDD, extra_pop_count=extra_pop_count),
+    )
+    monkeypatch.setattr(write_mod, "_find_x64_ret2csu_plan", lambda _program: None)
+
+
 # ---------------------------------------------------------------------------
 # Ret2LibcWriteX64.build_payload: 3-variant cascade (P6.4b / B-007)
 # ---------------------------------------------------------------------------
@@ -60,89 +72,108 @@ class TestRet2LibcWriteX64BuildPayloadVariants:
         )
         return ctx
 
-    def test_extra_rsi_1_inserts_0_after_write_got(self, challenge_dir):
-        """extra_rsi=1 → 6-arg pop chain with 0 placeholder after write_got.
-
-        v3.1 L927-937:
-          [pop_rdi, fd=1, pop_rsi, write_got, **0**, write_plt, main]
-        Total 7 p64 + 8 padding = 64 bytes.
-        """
+    def test_extra_rsi_1_inserts_0_after_write_got(self, challenge_dir, monkeypatch):
+        """extra_rsi=1 consumes the trailing RSI pop before loading ``rdx``."""
         from autopwn.primitives.ret2libc_write import Ret2LibcWriteX64
 
+        _force_direct_rdx(monkeypatch)
         ctx = self._make_ctx(extra_rdi=0, extra_rsi=1)
         payload = Ret2LibcWriteX64().build_payload(ctx)
-        assert len(payload) == 8 + 7 * 8  # padding + 7 p64 = 64
-        pop_rdi, fd, pop_rsi, write_got, placeholder, write_plt, main = (
-            struct.unpack("<7Q", payload[8:])
+        assert len(payload) == 8 + 9 * 8
+        pop_rdi, fd, pop_rsi, write_got, placeholder, pop_rdx, count, write_plt, main = (
+            struct.unpack("<9Q", payload[8:])
         )
         assert pop_rdi == 0xAAAA
         assert fd == 1
         assert pop_rsi == 0xBBBB
         assert write_got != 0
-        assert placeholder == 0   # the 0 placeholder (key assertion)
+        assert placeholder == 0
+        assert pop_rdx == 0xDDDD
+        assert count == 8
         assert write_plt != 0
         assert main != 0
 
-    def test_extra_rdi_1_inserts_0_after_fd(self, challenge_dir):
-        """extra_rdi=1 → 6-arg pop chain with 0 placeholder after fd.
-
-        v3.1 L938-948:
-          [pop_rdi, fd=1, **0**, pop_rsi, write_got, write_plt, main]
-        Total 7 p64 + 8 padding = 64 bytes.
-        """
+    def test_extra_rdi_1_inserts_0_after_fd(self, challenge_dir, monkeypatch):
+        """extra_rdi=1 consumes the trailing RDI pop before the rest of the chain."""
         from autopwn.primitives.ret2libc_write import Ret2LibcWriteX64
 
+        _force_direct_rdx(monkeypatch)
         ctx = self._make_ctx(extra_rdi=1, extra_rsi=0)
         payload = Ret2LibcWriteX64().build_payload(ctx)
-        assert len(payload) == 8 + 7 * 8
-        pop_rdi, fd, placeholder, pop_rsi, write_got, write_plt, main = (
-            struct.unpack("<7Q", payload[8:])
+        assert len(payload) == 8 + 9 * 8
+        pop_rdi, fd, placeholder, pop_rsi, write_got, pop_rdx, count, write_plt, main = (
+            struct.unpack("<9Q", payload[8:])
         )
         assert pop_rdi == 0xAAAA
         assert fd == 1
-        assert placeholder == 0   # the 0 placeholder (key assertion)
+        assert placeholder == 0
         assert pop_rsi == 0xBBBB
         assert write_got != 0
+        assert pop_rdx == 0xDDDD
+        assert count == 8
         assert write_plt != 0
         assert main != 0
 
-    def test_both_extra_0_is_5_arg_chain(self, challenge_dir):
-        """both extra=0 → 5-arg pop chain (P6.4 default, preserved)."""
+    def test_both_extra_0_is_direct_3arg_chain(self, challenge_dir, monkeypatch):
+        """With clean gadgets, direct x64 leak control is 3 explicit arguments."""
         from autopwn.primitives.ret2libc_write import Ret2LibcWriteX64
 
+        _force_direct_rdx(monkeypatch)
         ctx = self._make_ctx(extra_rdi=0, extra_rsi=0)
         payload = Ret2LibcWriteX64().build_payload(ctx)
-        assert len(payload) == 8 + 6 * 8  # padding + 6 p64 = 56
-        pop_rdi, fd, pop_rsi, write_got, write_plt, main = (
-            struct.unpack("<6Q", payload[8:])
+        assert len(payload) == 8 + 8 * 8
+        pop_rdi, fd, pop_rsi, write_got, pop_rdx, count, write_plt, main = (
+            struct.unpack("<8Q", payload[8:])
         )
         assert pop_rdi == 0xAAAA
         assert fd == 1
         assert pop_rsi == 0xBBBB
         assert write_got != 0
+        assert pop_rdx == 0xDDDD
+        assert count == 8
         assert write_plt != 0
         assert main != 0
 
-    def test_extra_rsi_1_wins_over_extra_rdi_1(self, challenge_dir):
-        """extra_rsi=1 takes precedence over extra_rdi=1 (v3.1 L927 ordering).
-
-        v3.1 main() L927 checks ``other_rsi_registers == 1`` BEFORE
-        ``other_rdi_registers == 1``.  This test guards the
-        if/elif/else ordering in P6.4b — must NOT collapse to a
-        single combined branch.
-        """
+    def test_both_extra_slots_are_consumed_when_both_gadgets_pop_extra(self, challenge_dir, monkeypatch):
+        """Generic direct builder consumes both extra slots when both gadgets need them."""
         from autopwn.primitives.ret2libc_write import Ret2LibcWriteX64
 
+        _force_direct_rdx(monkeypatch)
         ctx = self._make_ctx(extra_rdi=1, extra_rsi=1)
         payload = Ret2LibcWriteX64().build_payload(ctx)
-        # Same shape as extra_rsi=1 (not extra_rdi=1) — the 0 placeholder
-        # is AFTER write_got, not after fd.
-        pop_rdi, fd, pop_rsi, write_got, placeholder, write_plt, main = (
-            struct.unpack("<7Q", payload[8:])
+        pop_rdi, fd, rdi_placeholder, pop_rsi, write_got, rsi_placeholder, pop_rdx, count, write_plt, main = (
+            struct.unpack("<10Q", payload[8:])
         )
-        assert placeholder == 0
-        # fd is right after pop_rdi (no 0 placeholder in between)
+        assert pop_rdi == 0xAAAA
         assert fd == 1
+        assert rdi_placeholder == 0
+        assert pop_rsi == 0xBBBB
+        assert write_got != 0
+        assert rsi_placeholder == 0
+        assert pop_rdx == 0xDDDD
+        assert count == 8
+        assert write_plt != 0
+        assert main != 0
+
+    def test_pop_rdx_extra_slot_inserts_0_after_count(self, challenge_dir, monkeypatch):
+        """Support ``pop rdx; pop <reg>; ret`` by consuming the extra slot."""
+        from autopwn.primitives.ret2libc_write import Ret2LibcWriteX64
+
+        _force_direct_rdx(monkeypatch, extra_pop_count=1)
+        ctx = self._make_ctx(extra_rdi=0, extra_rsi=0)
+        payload = Ret2LibcWriteX64().build_payload(ctx)
+        pop_rdi, fd, pop_rsi, write_got, pop_rdx, count, placeholder, write_plt, main = (
+            struct.unpack("<9Q", payload[8:])
+        )
+        assert pop_rdi == 0xAAAA
+        assert fd == 1
+        assert pop_rsi == 0xBBBB
+        assert write_got != 0
+        assert pop_rdx == 0xDDDD
+        assert count == 8
+        assert placeholder == 0
+        assert write_plt != 0
+        assert main != 0
 
 
 # ---------------------------------------------------------------------------

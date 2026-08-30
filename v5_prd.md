@@ -29,16 +29,18 @@ AutoPwn v5 面向 CTF / 离线训练场景，目标是把自动化 pwn 从“str
 
 ## 5. 继承基线（2026-08-30）
 
-- unit：`761 passed`
+- unit：`763 passed`
 - integration 子集：`5 passed, 1 skipped`
 - 手工：`Challenge/canary` 可通过 `whoami` 拿到 `root`
+- 手工：`Challenge/level3_x64` 可稳定完成 2-stage ret2libc-write，并返回 `ID_OUTPUT='PWNED\n'`
 
 ## 6. 近期路线
 
 - `v5.0.1`：文档重置
 - `v5.0.2`：事实作用域 / 生命周期（FactScope / FactStore / 首批 producer 接入）
 - `v5.0.3`：交互图（same-session / multi-stage route 显式化）
-- `v5.0.4+`：能力层 / planner / verifier
+- `v5.0.4`：能力层（Capability IR / route 可执行性表达）
+- `v5.0.5+`：planner / verifier
 
 ### 6.1 `v5.0.2` 完成标准
 
@@ -53,3 +55,9 @@ AutoPwn v5 面向 CTF / 离线训练场景，目标是把自动化 pwn 从“str
 - 能显式表达多阶段 leak → reentry → execute → verify 顺序
 - 至少接入 1 条 same-session 链路和 1 条普通 2-stage ret2libc 链路
 - 与 `v5.0.2` 的 fact store 协同，不破坏当前 5/5 SUCCESS 基线
+
+### 6.3 `v5.0.4` 完成标准
+
+- 在 runtime 中建立最小可用的 `Capability` 建模层
+- capability 必须绑定 `FactScope`、`InteractionGraph` 与首批 `leak / control / exec / verify` 能力表达
+- 至少接入 1 条 same-session canary 路线和 1 条普通 2-stage ret2libc 路线，并保持当前 5/5 SUCCESS 基线

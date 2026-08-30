@@ -31,7 +31,15 @@ from __future__ import annotations
 
 import datetime
 
-from autopwn.context import ExploitContext, InteractionGraph, InteractionKind
+from autopwn.context import (
+    Capability,
+    CapabilityKind,
+    ExploitContext,
+    FactScope,
+    InteractionGraph,
+    InteractionKind,
+    make_capability,
+)
 from autopwn.core.logging import print_info, print_payload, print_section_header, print_success, print_warning
 from autopwn.exp.base import ExploitStrategy
 from autopwn.exp.priorities import RET2LIBC_WRITE
@@ -69,6 +77,35 @@ class Ret2LibcWriteX64LocalStrategy(ExploitStrategy):
     requires_arch = 64
     requires_remote = False
     requires = ("has_write",)
+
+    def describe_capabilities(self, ctx: ExploitContext) -> tuple[Capability, ...]:
+        graph = _ensure_template_graph(ctx)
+        graph_name = graph.name
+        live_scope = ctx.runtime_fact_scope
+        attrs = ("has_write",)
+        specs = (
+            ("ret2libc_write.stack_control", CapabilityKind.CONTROL, ("overflow.padding",), FactScope.BINARY, ("leak_write", "spawn_shell"), ("rip.control",), ("overflow.padding",), "stack overflow reaches stage-1 and stage-2 ret2libc chains"),
+            ("ret2libc_write.libc_leak", CapabilityKind.LEAK, ("overflow.padding",), FactScope.BINARY, ("leak_write",), ("libc.write_addr",), ("overflow.padding",), "write@plt leaks a libc pointer from GOT"),
+            ("ret2libc_write.shell_exec", CapabilityKind.EXEC, ("libc.write_addr",), live_scope, ("spawn_shell",), ("shell.spawned",), (), "stage 2 resolves system('/bin/sh') from the leaked libc base"),
+            ("ret2libc_write.shell_verify", CapabilityKind.VERIFY, ("libc.write_addr",), live_scope, ("verify_shell",), ("shell.verified",), (), "shell success is verified after stage 2"),
+        )
+
+        return tuple(
+            make_capability(
+                capability_id,
+                kind,
+                strategy_name=self.name,
+                graph_name=graph_name,
+                fact_keys=fact_keys,
+                scope=scope,
+                step_ids=step_ids,
+                provides=provides,
+                evidence_facts=evidence_facts,
+                attributes=attrs,
+                notes=notes,
+            )
+            for capability_id, kind, fact_keys, scope, step_ids, provides, evidence_facts, notes in specs
+        )
 
     def run(self, ctx: ExploitContext) -> bool:
         """Execute the 64-bit 2-stage ret2libc locally."""
@@ -248,20 +285,34 @@ __all__ = [
 
 
 def _bind_interaction_graph(ctx: ExploitContext) -> InteractionGraph:
-    graph = InteractionGraph(name="ret2libc-write-x64")
-    graph.add_step("leak_write", InteractionKind.LEAK, produces=("libc.write_addr",))
-    graph.add_step(
-        "spawn_shell",
-        InteractionKind.EXECUTE,
-        requires=("libc.write_addr",),
-        notes="stage-2 ret2libc system('/bin/sh')",
-    )
-    graph.add_step("verify_shell", InteractionKind.VERIFY)
-    graph.connect("leak_write", "spawn_shell", reason="need leaked libc write address")
-    graph.connect("spawn_shell", "verify_shell", reason="verify shell after stage 2")
+    graph = _ensure_template_graph(ctx).clone()
     ctx.set_interaction_graph(
         graph,
         scope=ctx.runtime_fact_scope,
         source="strategy.ret2libc_write_x64",
     )
     return graph
+
+
+def _ensure_template_graph(ctx: ExploitContext) -> InteractionGraph:
+    template = ctx.get_interaction_graph("ret2libc-write-x64", scope=FactScope.BINARY)
+    if template is not None:
+        return template
+
+    template = InteractionGraph(name="ret2libc-write-x64")
+    template.add_step("leak_write", InteractionKind.LEAK, produces=("libc.write_addr",))
+    template.add_step(
+        "spawn_shell",
+        InteractionKind.EXECUTE,
+        requires=("libc.write_addr",),
+        notes="stage-2 ret2libc system('/bin/sh')",
+    )
+    template.add_step("verify_shell", InteractionKind.VERIFY)
+    template.connect("leak_write", "spawn_shell", reason="need leaked libc write address")
+    template.connect("spawn_shell", "verify_shell", reason="verify shell after stage 2")
+    ctx.set_interaction_graph(
+        template,
+        scope=FactScope.BINARY,
+        source="strategy.ret2libc_write_x64.template",
+    )
+    return template

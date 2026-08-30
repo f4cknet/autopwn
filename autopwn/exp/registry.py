@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Union
 
-from autopwn.context import ExploitContext, ExploitHint
+from autopwn.context import Capability, ExploitContext, ExploitHint, FactScope
 from autopwn.exp.base import ExploitStrategy
 
 
@@ -22,6 +22,7 @@ class RankedCandidate:
     strategy: ExploitStrategy
     effective_priority: int
     adjustments: tuple[str, ...] = ()
+    capability_ids: tuple[str, ...] = ()
 
 
 def register(
@@ -41,6 +42,7 @@ def ranked_candidates(ctx: ExploitContext) -> List[RankedCandidate]:
     for strategy in _REGISTRY:
         if not strategy.matches(ctx):
             continue
+        capability_ids = _collect_capability_ids(ctx, strategy)
         effective = strategy.priority
         adjustments: list[str] = []
         for hint in getattr(ctx, "exploit_hints", ()):
@@ -49,11 +51,14 @@ def ranked_candidates(ctx: ExploitContext) -> List[RankedCandidate]:
                 continue
             effective += delta
             adjustments.append(f"{hint.kind} {delta:+d}")
+        if capability_ids:
+            adjustments.append(f"caps {' -> '.join(capability_ids)}")
         ranked.append(
             RankedCandidate(
                 strategy=strategy,
                 effective_priority=effective,
                 adjustments=tuple(adjustments),
+                capability_ids=capability_ids,
             )
         )
     return sorted(ranked, key=lambda item: item.effective_priority, reverse=True)
@@ -108,6 +113,28 @@ def _hint_adjustment(
         return 0
 
     return 0
+
+
+def _collect_capability_ids(
+    ctx: ExploitContext,
+    strategy: ExploitStrategy,
+) -> tuple[str, ...]:
+    describe = getattr(strategy, "describe_capabilities", None)
+    if not callable(describe):
+        return ()
+
+    described = tuple(
+        capability
+        for capability in (describe(ctx) or ())
+        if isinstance(capability, Capability)
+    )
+    for capability in described:
+        ctx.set_capability(
+            capability,
+            scope=FactScope.BINARY,
+            source=f"registry.{strategy.name}",
+        )
+    return tuple(capability.capability_id for capability in described)
 
 
 __all__ = [

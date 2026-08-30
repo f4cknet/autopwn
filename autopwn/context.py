@@ -237,6 +237,71 @@ class InteractionGraph:
         )
 
 
+class CapabilityKind(str, Enum):
+    LEAK = "leak"
+    WRITE = "write"
+    CONTROL = "control"
+    EXEC = "exec"
+    VERIFY = "verify"
+
+
+@dataclass(slots=True, frozen=True)
+class CapabilityPrereq:
+    fact_keys: Tuple[str, ...] = ()
+    scope: Optional[FactScope] = None
+    graph_name: str = ""
+    step_ids: Tuple[str, ...] = ()
+
+
+@dataclass(slots=True, frozen=True)
+class CapabilityBinding:
+    strategy_name: str = ""
+    graph_name: str = ""
+    step_ids: Tuple[str, ...] = ()
+
+
+@dataclass(slots=True, frozen=True)
+class CapabilityEvidence:
+    fact_keys: Tuple[str, ...] = ()
+    attributes: Tuple[str, ...] = ()
+    notes: str = ""
+
+
+@dataclass(slots=True, frozen=True)
+class Capability:
+    capability_id: str
+    kind: CapabilityKind
+    prereq: CapabilityPrereq = field(default_factory=CapabilityPrereq)
+    provides: Tuple[str, ...] = ()
+    binding: CapabilityBinding = field(default_factory=CapabilityBinding)
+    evidence: Tuple[CapabilityEvidence, ...] = ()
+    notes: str = ""
+
+
+def make_capability(
+    capability_id: str,
+    kind: CapabilityKind,
+    *,
+    strategy_name: str,
+    graph_name: str,
+    fact_keys: Tuple[str, ...] = (),
+    scope: Optional[FactScope] = None,
+    step_ids: Tuple[str, ...] = (),
+    provides: Tuple[str, ...] = (),
+    evidence_facts: Tuple[str, ...] = (),
+    attributes: Tuple[str, ...] = (),
+    notes: str = "",
+) -> Capability:
+    return Capability(
+        capability_id=capability_id,
+        kind=kind,
+        prereq=CapabilityPrereq(fact_keys=fact_keys, scope=scope, graph_name=graph_name, step_ids=step_ids),
+        provides=provides,
+        binding=CapabilityBinding(strategy_name=strategy_name, graph_name=graph_name, step_ids=step_ids),
+        evidence=(CapabilityEvidence(fact_keys=evidence_facts, attributes=attributes, notes=notes),),
+    )
+
+
 @dataclass(slots=True)
 class BinaryInfo:
     """Static properties of the target ELF, populated by ``recon/checksec.py`` (P4.1)."""
@@ -566,6 +631,30 @@ class ExploitContext:
         graph = self.get_fact(f"interaction.{name}", scope=scope)
         return graph if isinstance(graph, InteractionGraph) else None
 
+    def set_capability(
+        self,
+        capability: Capability,
+        *,
+        scope: Optional[FactScope] = None,
+        source: str = "",
+    ) -> Capability:
+        self.set_fact(
+            f"capability.{capability.capability_id}",
+            capability,
+            scope=FactScope.BINARY if scope is None else scope,
+            source=source,
+        )
+        return capability
+
+    def get_capability(
+        self,
+        capability_id: str,
+        *,
+        scope: Optional[FactScope] = None,
+    ) -> Optional[Capability]:
+        capability = self.get_fact(f"capability.{capability_id}", scope=scope)
+        return capability if isinstance(capability, Capability) else None
+
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> "ExploitContext":
         """Build an ``ExploitContext`` from an ``argparse.Namespace``.
@@ -728,6 +817,12 @@ __all__ = [
     "InteractionEdge",
     "InteractionEvent",
     "InteractionGraph",
+    "CapabilityKind",
+    "CapabilityPrereq",
+    "CapabilityBinding",
+    "CapabilityEvidence",
+    "Capability",
+    "make_capability",
     "BinaryInfo",
     "LibcInfo",
     "RopGadgetsX64",

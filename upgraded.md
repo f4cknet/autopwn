@@ -1,7 +1,7 @@
 # upgraded.md — AutoPwn v5 迭代索引
 
 > **角色**：v5 的**主索引与流程入口**
-> **状态**：`5.0.dev0` 文档基线已建立（当前活动任务：无；最近完成：`v5.0.3`，2026-08-30）
+> **状态**：`5.0.dev0` 文档基线已建立（当前活动任务：无；最近完成：`v5.0.4`，2026-08-30）
 > **配套文档**：
 > - [`AGENTS.md`](./AGENTS.md) — 项目治理与 AI Agent 约束
 > - [`v5_prd.md`](./v5_prd.md) — v5 当前需求
@@ -38,8 +38,8 @@
 ### 1.2 当前主线
 
 - **当前活动任务**：_无_
-- **最近完成**：`v5.0.3` 已建立交互图基础层，并接入 same-session canary 与 2-stage ret2libc 路线
-- **当前非目标**：尚未进入 interaction graph / capability / planner 主体迁移
+- **最近完成**：`v5.0.4` 已建立能力层基础层，并把 same-session canary 与 2-stage ret2libc-write 路线映射为 capability 链
+- **当前非目标**：尚未进入 planner / unified verifier 主体迁移
 
 ---
 
@@ -91,6 +91,7 @@ _（无 — 已归档到 `archive/v4/`）_
 
 | ID | 摘要 | 状态 | 实际 | 详情 |
 |---|---|---|---|---|
+| `v5.0.4` | 建立能力层基础层，把 facts + interaction 映射为可解释 exploit capability | ✅ | 3h | [`v5.0.4`](./upgraded/v5.0.4.md) |
 | `v5.0.3` | 建立交互图基础层，并接入 same-session canary 与 2-stage ret2libc 路线 | ✅ | 3h | [`v5.0.3`](./upgraded/v5.0.3.md) |
 | `v5.0.2` | 建立事实作用域 / 生命周期基础层，并接入首批 detect / strategy producer | ✅ | 3h | [`v5.0.2`](./upgraded/v5.0.2.md) |
 | `v5.0.1` | 治理变更实施 + 文档落盘 | ✅ | 1h | [`v5.0.1`](./upgraded/v5.0.1.md) |
@@ -151,7 +152,7 @@ Core
 
 ### 5.1 近期参考基线（2026-08-30）
 
-- 单元测试：`762 passed`
+- 单元测试：`763 passed`
 - 相关 integration 子集：`5 passed, 1 skipped`
 - 手工 `Challenge/canary`：detect 阶段会产出 `same-session canary plan`（`stack_index=55 / buffer_to_canary=64 / post_canary_padding=12`），strategy 通过 `whoami` 验证拿到 `root`
 - 手工 `Challenge/level3_x64`：2-stage ret2libc-write 路线可稳定完成，验证输出为 `ID_OUTPUT='PWNED\n'`

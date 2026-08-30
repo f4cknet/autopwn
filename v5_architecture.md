@@ -91,6 +91,16 @@ Core
 - 不在本阶段引入完整 planner，只做可执行路线的显式表达
 - 不把 challenge 特判塞进 interaction graph；图只描述交互结构，不描述题名
 
+### 3.7 能力模型（`v5.0.4` 首个落地切片）
+
+- `Capability / CapabilityKind / CapabilityPrereq / CapabilityBinding / CapabilityEvidence` 共同表达能力、事实前提、作用域兼容性、绑定 strategy / graph step 与 evidence
+- 首批接入两条已验证路线：same-session canary 链、2-stage ret2libc-write 链
+
+### 3.8 `v5.0.4` 迁移约束
+
+- capability 只表达“能做什么 / 需要什么 / 依赖什么”，排序与搜索留给后续 planner
+- capability 必须可回溯到 `InteractionGraph` 或 `FactStore`，并保留 legacy strategy 作为 adapter / fallback；禁止 challenge-name 特判
+
 ## 4. 迁移约束
 
 - 保持单向依赖，禁止反向 import

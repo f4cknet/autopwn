@@ -74,8 +74,8 @@ class Ret2LibcWriteX64LocalStrategy(ExploitStrategy):
         """Execute the 64-bit 2-stage ret2libc locally."""
         from pwn import process, u64
 
-        if ctx.gadgets_x64 is None or ctx.gadgets_x64.pop_rdi == 0 or ctx.gadgets_x64.pop_rsi == 0:
-            print_info("ret2libc-write-x64: ctx.gadgets_x64 missing pop_rdi/pop_rsi; skipping")
+        if ctx.gadgets_x64 is None or ctx.gadgets_x64.pop_rdi == 0 or ctx.gadgets_x64.ret == 0:
+            print_info("ret2libc-write-x64: ctx.gadgets_x64 missing pop_rdi/ret; skipping")
             return False
 
         print_section_header("EXPLOITATION: ret2libc (write) - x64")
@@ -169,8 +169,8 @@ class Ret2LibcWriteX64RemoteStrategy(ExploitStrategy):
             return False
         host, port = ctx.remote
 
-        if ctx.gadgets_x64 is None or ctx.gadgets_x64.pop_rdi == 0 or ctx.gadgets_x64.pop_rsi == 0:
-            print_info("ret2libc-write-x64-remote: ctx.gadgets_x64 missing pop_rdi/pop_rsi; skipping")
+        if ctx.gadgets_x64 is None or ctx.gadgets_x64.pop_rdi == 0 or ctx.gadgets_x64.ret == 0:
+            print_info("ret2libc-write-x64-remote: ctx.gadgets_x64 missing pop_rdi/ret; skipping")
             return False
 
         print_section_header("EXPLOITATION: ret2libc (write) - x64 Remote")

@@ -731,3 +731,29 @@ class TestCanaryRunInvokesRecordSuccess:
         assert "puts_addr" in info_arg.addresses
         # 2 sendlines: stage 1 + stage 2
         assert mock_io.sendline.call_count == 2
+
+    def test_ret2libc_write_x64_local_reads_8_byte_leak(self):
+        from autopwn.exp.strategies.canary_ret2libc_write import (
+            CanaryRet2LibcWriteX64LocalStrategy,
+        )
+
+        s = CanaryRet2LibcWriteX64LocalStrategy()
+        ctx = _ctx_64_canary(padding=80, canary_value=0xDEADBEEFCAFEBABE, canary_diff=8)
+
+        mock_io = MagicMock()
+        mock_io.recv.side_effect = [b"Input:\n", b"\x10\x20\x30\x40\x50\x60\x70\x80"]
+        mock_primitive = MagicMock()
+        mock_primitive.build_payload.return_value = b"\x90" * 64
+        mock_primitive.build_stage2_payload.return_value = b"\x90" * 64
+
+        with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.canary_ret2libc_write.verify_shell",
+                  return_value=(True, "uid=0(root) gid=0(root)")) as mock_verify_shell, \
+             patch("autopwn.report.record_success") as mock_record, \
+             patch("autopwn.exp.strategies.canary_ret2libc_write.Ret2LibcWriteX64", return_value=mock_primitive):
+            assert s.run(ctx) is True
+
+        mock_io.recv.assert_any_call(8, timeout=2)
+        assert mock_io.sendline.call_count == 2
+        assert mock_verify_shell.call_count == 1
+        assert mock_record.call_count == 1

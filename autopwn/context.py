@@ -140,6 +140,33 @@ class CanaryInfo:
 
 
 @dataclass(slots=True)
+class FunctionCandidate:
+    """A ranked internal function that looks like a promising exploit target.
+
+    Added in v4.1.19 so recon can surface likely ``win`` / ``hacked`` /
+    ``backdoor`` style targets without introducing challenge-name
+    special-cases into the strategy layer.
+    """
+
+    name: str
+    addr: int
+    score: int
+    reasons: Tuple[str, ...] = ()
+    string_hits: Tuple[str, ...] = ()
+    imported_calls: Tuple[str, ...] = ()
+    xref_count: int = 0
+
+
+@dataclass(slots=True)
+class ExploitHint:
+    """A route-level scoring adjustment produced by the detect layer."""
+
+    kind: str
+    score_delta: int
+    reason: str
+
+
+@dataclass(slots=True)
 class ExploitContext:
     """The single source of truth for an exploitation run.
 
@@ -183,6 +210,9 @@ class ExploitContext:
     fmtstr_offset: Optional[int] = None
     fmtstr_buf: Optional[int] = None
     canary_max_seconds: float = 20.0
+    target_candidates: list[FunctionCandidate] = field(default_factory=list)
+    exploit_hints: list[ExploitHint] = field(default_factory=list)
+    preferred_target: Optional[FunctionCandidate] = None
 
     # Runtime
     verbose: bool = False
@@ -227,6 +257,34 @@ class ExploitContext:
             "critical": print_critical,
         }
         router.get(level, print_info)(message)
+
+    def add_exploit_hint(
+        self,
+        kind: str,
+        score_delta: int,
+        reason: str,
+    ) -> ExploitHint:
+        """Append a deduplicated :class:`ExploitHint` to ``ctx.exploit_hints``.
+
+        Hints are keyed by ``(kind, reason)`` so two independent producers
+        can safely attempt to record the same observation without doubling
+        the eventual scoring adjustment.
+        """
+        for hint in self.exploit_hints:
+            if hint.kind == kind and hint.reason == reason:
+                return hint
+
+        hint = ExploitHint(kind=kind, score_delta=score_delta, reason=reason)
+        self.exploit_hints.append(hint)
+        return hint
+
+    def set_target_candidates(
+        self,
+        candidates: list[FunctionCandidate],
+    ) -> None:
+        """Persist recon-produced target candidates and cache the top hit."""
+        self.target_candidates = list(candidates)
+        self.preferred_target = self.target_candidates[0] if self.target_candidates else None
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> "ExploitContext":
@@ -379,6 +437,8 @@ __all__ = [
     "RopGadgetsX64",
     "RopGadgetsX32",
     "CanaryInfo",
+    "FunctionCandidate",
+    "ExploitHint",
     "ExploitContext",
     "ContextError",
 ]

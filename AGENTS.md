@@ -2,8 +2,9 @@
 
 > 本文档保留**核心治理规则**（4 条铁律 + AI Agent 条款 + 治理变更流程）
 >
-> **当前阶段说明（治理变更 1.10 · 2026-08-30）**：
+> **当前阶段说明（治理变更 1.10 / 1.11 · 2026-08-30）**：
 > 本项目当前为**个人独立开发**，默认流程 = **直接 `commit + push` 到 `main`**，**不要求 PR**。
+> 默认工作目录固定为 **`D:\ctf\ctf-env\autopwn`**（容器内对应 **`/data/autopwn`**）；除非 Owner 明确授权的恢复 / 取证场景，**不创建额外 `autopwn-*` 平行目录、`git worktree` 或旁路工作树**。
 >
 > **AI Agent session 启动必读**：
 >
@@ -70,6 +71,7 @@
 - Owner 自审 = Reviewer（不需要第二人签字）
 - Owner 转让 = 直接修改 `upgraded.md` 中 Owner 字段并在提交说明中说明
 - 默认流程 = 直接向 `main` 执行 `commit + push`，不要求 PR
+- 默认只在仓库主目录 `D:\ctf\ctf-env\autopwn`（容器 `/data/autopwn`）迭代；若主目录不干净，先备份 / 提交 / 回滚 / 澄清，未经 Owner 明确授权不得创建额外 worktree 或平行目录
 - `main` 是唯一长期分支（per 1.5 主干开发）
 
 ### 2.3 Owner 自审责任
@@ -85,6 +87,7 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 | **L1 轻微** | `commit message` 未引用任务 ID | amend 提交说明并重新 push | 改完即恢复 |
 | **L1 轻微** | 任务粒度超 400 行 | 拆完重做 | 拆完即恢复 |
 | **L2 中度** | 绕过文档直接实施新需求（铁律 2） | 回滚提交；任务走铁律 2 重新立项 | 走完铁律 2 后恢复 |
+| **L2 中度** | 未经 Owner 明确授权创建额外 worktree / 平行目录并把最新变更留在旁路目录 | 立即同步回主目录；删除旁路目录；记录恢复动作 | 主目录与 `origin/main` 对齐后恢复 |
 | **L2 中度** | 任务标 ✅ 但验收未过 | 状态回退到 👀 或 🔄 | 补完验收恢复 |
 | **L3 严重** | 伪造验收 | 回滚提交；Owner 暂停认领新任务一周 | 一周冷却期后恢复 |
 | **L3 严重** | 反复违反铁律 2 / 4 | 撤销该 Owner 资格 | 需 Owner 重新授权 |
@@ -123,6 +126,7 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 | 在 `commit message` 中遗漏任务 ID | 引用 `upgraded.md §3` 任务行 |
 | 推测 / 编造文件路径、函数名、任务 ID | 引用 `upgraded.md §6 附录 A` 文件路径速查 |
 | 跨多个任务 ID 同时改代码 | 一次只动一个任务 ID |
+| 擅自创建额外 `git worktree` / `autopwn-*` 平行目录继续迭代 | 先在主目录 `D:\ctf\ctf-env\autopwn` / `/data/autopwn` 执行 `git status`，必要时先备份 / 回滚 / 澄清 |
 | 把现有代码逻辑“复述”而不抽到新层 | 严格遵守 `refactor.md §3` 的分层依赖方向 |
 
 > **关键自检**：每次输出代码前，AI Agent 必须在内部回答“这个改动对应 `upgraded.md §3` 哪一行？对应 `refactor.md §3` 哪一节？”，回答不出就停手。
@@ -217,6 +221,7 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 | 2026-06-13 | **1.8** | **修复记录目录化**（治理变更 1.8，per Owner 2026-06-13）：所有 fix 文件从 root 迁移到 `bugs/` 子目录——`fix.md` → `bugs/fix.md`（索引），`fix_<bug_name>.md` → `bugs/fix_<bug_name>.md`；§6.1 新增“目录位置”段；与 v4.1.7 `writeups/`（结果产物）+ v4.1.8 `logs/{题目}/`（过程 trace）形成完整“产物-过程-记录”三件套目录结构 |
 | 2026-08-30 | **1.9** | **补充 ctf-env 容器映射说明**：在 §5 AI Agent 特别条款中明确 `ctf-env` 对应 Docker 容器名 `ctf_env`，宿主机 `D:\ctf\ctf-env\` 挂载到 `/data`，仓库在容器中对应 `/data/autopwn` |
 | 2026-08-30 | **1.10** | **删除单 Owner 项目的默认 PR 流程**：现行规范改为直接 `commit + push` 到 `main`；同步改写铁律 2/3、§2、§3、§4、§5、§6.1、§7 中所有默认 PR 依赖，并注明历史任务行中的 PR / merge / Review 字样仅用于审计追溯 |
+| 2026-08-30 | **1.11** | **明确单目录单人迭代约束**：默认工作目录固定为 `D:\ctf\ctf-env\autopwn` / `/data/autopwn`；未经 Owner 明确授权，不创建额外 `autopwn-*` 平行目录、`git worktree` 或旁路工作树；若发生恢复场景，最新已验证版本必须回到主目录 |
 
 > 完整 changelog 1.0-1.6 见 git log。
 

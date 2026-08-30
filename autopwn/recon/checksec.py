@@ -55,7 +55,7 @@ from autopwn.core.logging import (
     print_table_header,
     print_table_row,
 )
-from autopwn.core.runner import run_checksec
+from autopwn.core.runner import run_checksec, run_file
 
 
 # ``Arch:       i386-32-little``  /  ``Arch:       amd64-64-little``
@@ -82,15 +82,18 @@ def collect(program: Path) -> BinaryInfo:
     a ``BinaryInfo`` dataclass instead of a 5-tuple.
 
     The mapping from ``checksec`` textual output to ``BinaryInfo``
-    fields (preserved bit-for-bit from v3.1 logic):
+    fields (preserved bit-for-bit from v3.1 logic, with a v4.1.14
+    compatibility fallback for newer table-style ``checksec`` output):
 
     * ``Arch:``         → ``bit``         (64 if "64" in arch else 32)
+      / fallback to ``file`` when ``Arch:`` is absent
     * ``Stack:``        → ``stack_canary`` (True iff "Canary found")
     * ``PIE:``          → ``pie``         (True iff "PIE enabled")
     * ``NX:``           → ``nx``          (True iff "NX enabled")
     * ``RELRO:``        → ``relro``       ("Full" / "Partial" / "No")
     * ``RWX:``          → ``rwx_segments`` (True iff "Has RWX segments")
-    * ``Stripped:``     → ``stripped``    (True iff "Stripped" present)
+    * ``Stripped:``     → ``stripped``    (True iff value is "Yes")
+      / fallback to ``file`` when ``Stripped:`` is absent
 
     Args:
         program: path to the target ELF.
@@ -108,14 +111,24 @@ def collect(program: Path) -> BinaryInfo:
     out = run_checksec(program)
 
     arch_match = _ARCH_RE.search(out)
+    stripped_match = _STRIPPED_RE.search(out)
+    file_out = run_file(program) if (not arch_match or not stripped_match) else ""
+
     arch = arch_match.group(1) if arch_match else ""
-    bit = 64 if "64" in arch else 32  # default to 32 when arch unknown
+    if "64" in arch or "64-bit" in file_out:
+        bit = 64
+    else:
+        bit = 32  # default to 32 when arch unknown
 
     # Stripped value parsing — see DEV-1 in §6.5 P4.1 implementation
     # record.  ``"Stripped" in out`` is wrong (matches the label, not
     # the value); we extract the actual value and compare to "Yes".
-    stripped_match = _STRIPPED_RE.search(out)
-    stripped = bool(stripped_match and stripped_match.group(1) == "Yes")
+    if stripped_match:
+        stripped = stripped_match.group(1) == "Yes"
+    elif "not stripped" in file_out:
+        stripped = False
+    else:
+        stripped = "stripped" in file_out
 
     return BinaryInfo(
         path=program,

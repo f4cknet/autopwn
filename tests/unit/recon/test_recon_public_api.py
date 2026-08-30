@@ -282,6 +282,30 @@ class TestReconErrorPaths:
             # propagates the exception instead of swallowing it.
             collect(Path("/nonexistent/elf"))
 
+    def test_collect_table_output_falls_back_to_file_for_bit_and_stripped(
+        self, monkeypatch
+    ):
+        """New table-style ``checksec`` output falls back to ``file`` for missing fields."""
+        from autopwn.recon import checksec as recon_checksec
+
+        table_output = (
+            "RELRO           STACK CANARY      NX            PIE             FILE\n"
+            "Partial RELRO   No canary found   NX disabled   No PIE         Challenge/rip\n"
+        )
+        file_out = {"value": "Challenge/rip: ELF 64-bit LSB executable, x86-64, not stripped"}
+
+        monkeypatch.setattr(recon_checksec, "run_checksec", lambda _program: table_output)
+        monkeypatch.setattr(recon_checksec, "run_file", lambda _program: file_out["value"])
+
+        info = recon_checksec.collect(Path("/tmp/rip"))
+        assert info.bit == 64
+        assert info.stripped is False
+        assert info.nx is False
+
+        file_out["value"] = "Challenge/rip: ELF 64-bit LSB executable, x86-64, stripped"
+        stripped_info = recon_checksec.collect(Path("/tmp/rip_stripped"))
+        assert stripped_info.stripped is True
+
     def test_display_with_partial_info_does_not_crash(self, capsys):
         """``display`` tolerates a BinaryInfo with default fields set."""
         from autopwn.recon.checksec import BinaryInfo, display

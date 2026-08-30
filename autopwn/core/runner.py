@@ -9,12 +9,19 @@ within the same layer (can import from them).
 """
 from __future__ import annotations
 
+import re
+import shutil
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 
 
 class ToolError(RuntimeError):
     """Raised when a recon tool fails (e.g., checksec exits non-zero)."""
+
+
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+_ROPGADGET_LINE_RE = re.compile(r"^(0x[0-9a-fA-F]+)\s*:\s*(.+?)\s*$")
 
 
 def run_checksec(program) -> str:
@@ -24,16 +31,82 @@ def run_checksec(program) -> str:
     stdout. The legacy `os.system("checksec X > file 2>&1")` combined
     both streams. We replicate that here by returning `stdout + stderr`.
 
-    Raises ToolError on non-zero returncode (checksec must succeed for
-    recon to make sense; other tools degrade gracefully below).
+    Compatibility note: some environments expose the pwntools-provided
+    CLI as ``checksec <file>``, while others require the newer
+    ``checksec --file=<file>`` form.  Try the legacy form first for
+    backward-compat, then fall back to ``--file=`` when needed.
+
+    Raises ToolError when both CLI forms fail (checksec must succeed
+    for recon to make sense; other tools degrade gracefully below).
     """
-    cp = subprocess.run(
-        ["checksec", str(program)],
-        capture_output=True, text=True, check=False,
+    program_str = str(program)
+    attempts = (
+        ["checksec", program_str],
+        ["checksec", f"--file={program_str}"],
     )
-    if cp.returncode != 0:
-        raise ToolError(f"checksec failed (rc={cp.returncode}): {cp.stderr.strip()}")
-    return cp.stdout + cp.stderr
+    errors = []
+    for cmd in attempts:
+        cp = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if cp.returncode == 0:
+            return cp.stdout + cp.stderr
+        errors.append(
+            f"{' '.join(cmd)} rc={cp.returncode} "
+            f"stdout={cp.stdout.strip()!r} stderr={cp.stderr.strip()!r}"
+        )
+    raise ToolError(f"checksec failed via both CLI forms: {'; '.join(errors)}")
+
+
+def _normalize_ropgadget_output(raw_output: str) -> tuple[str, ...]:
+    """Convert raw ``ROPgadget`` stdout into ropper-like gadget lines.
+
+    Returned line format matches what ``recon/rop.py`` already parses:
+    ``0xADDR: pop rdi; ret;``.
+    """
+    normalized = []
+    for raw_line in raw_output.splitlines():
+        line = _ANSI_ESCAPE_RE.sub("", raw_line).strip()
+        match = _ROPGADGET_LINE_RE.match(line)
+        if not match:
+            continue
+        addr, instructions = match.groups()
+        parts = [part.strip() for part in instructions.split(";") if part.strip()]
+        if not parts:
+            continue
+        normalized.append(f"{addr}: {'; '.join(parts)};")
+    return tuple(normalized)
+
+
+@lru_cache(maxsize=None)
+def _ropgadget_scan_cached(program_str: str) -> tuple[str, ...]:
+    """Run a cached ``ROPgadget`` scan and normalize its output once."""
+    cp = subprocess.run(
+        ["ROPgadget", "--binary", program_str, "--only", "pop|ret|int"],
+        capture_output=True,
+        text=True,
+        errors="replace",
+        check=False,
+    )
+    return _normalize_ropgadget_output(cp.stdout)
+
+
+def _ropgadget_matches_search(gadget_line: str, search: str) -> bool:
+    """Return whether a normalized gadget line satisfies a ropper search."""
+    _, _, instructions = gadget_line.partition(":")
+    instructions = instructions.strip()
+    needle = search.strip()
+
+    if needle in ("ret", "ret;"):
+        return instructions == "ret;"
+    if needle == "int 0x80;":
+        return instructions.startswith("int 0x80;")
+    if needle.startswith("pop "):
+        return instructions.startswith(needle.rstrip(";"))
+    return needle in instructions
 
 
 def run_ropper(program, search: str) -> str:
@@ -43,12 +116,30 @@ def run_ropper(program, search: str) -> str:
     `os.system("ropper ... > file 2>&1")` combined both; we do the same.
     Do not raise on rc != 0 (ropper may exit non-zero on internal errors
     but still return useful partial output).
+
+    Compatibility note: ``ctf_env`` does not currently ship the
+    ``ropper`` executable, but does ship ``ROPgadget``.  When ropper is
+    missing, fall back to a cached ``ROPgadget`` scan and normalize the
+    result into ropper-like lines so callers in ``recon/rop.py`` do not
+    need to branch on the active backend.
     """
-    cp = subprocess.run(
-        ["ropper", "--file", str(program), "--search", search, "--nocolor"],
-        capture_output=True, text=True, check=False,
-    )
-    return cp.stdout + cp.stderr
+    if shutil.which("ropper"):
+        cp = subprocess.run(
+            ["ropper", "--file", str(program), "--search", search, "--nocolor"],
+            capture_output=True, text=True, check=False,
+        )
+        return cp.stdout + cp.stderr
+
+    if not shutil.which("ROPgadget"):
+        return ""
+
+    matches = [
+        line for line in _ropgadget_scan_cached(str(program))
+        if _ropgadget_matches_search(line, search)
+    ]
+    if not matches:
+        return ""
+    return "".join(f"{line}\n" for line in matches)
 
 
 def run_objdump_disasm(program, intel: bool = True) -> str:
@@ -199,9 +290,18 @@ def run_cyclic_create(length: int) -> str:
     prefers `pwn cyclic` or `pwn.cyclic()` directly); we drop stderr
     silently. Used in P5.1 / P7.10 to build payload + post-exploit
     crash analysis.
+
+    Some environments ship only the consolidated ``pwn cyclic`` CLI.
+    Prefer the legacy standalone binary when present; otherwise fall
+    back to the pwntools dispatcher.
     """
+    cmd = ["cyclic", str(length)]
+    if not shutil.which("cyclic"):
+        if not shutil.which("pwn"):
+            return ""
+        cmd = ["pwn", "cyclic", str(length)]
     cp = subprocess.run(
-        ["cyclic", str(length)],
+        cmd,
         capture_output=True, text=True, check=False,
     )
     return cp.stdout.strip()
@@ -214,8 +314,13 @@ def run_cyclic_find(pattern: str) -> str:
     cyclic-generated buffer (typical usage: paste the first 4 bytes of
     the saved return address from a crash).
     """
+    cmd = ["cyclic", "-l", pattern]
+    if not shutil.which("cyclic"):
+        if not shutil.which("pwn"):
+            return ""
+        cmd = ["pwn", "cyclic", "-l", pattern]
     cp = subprocess.run(
-        ["cyclic", "-l", pattern],
+        cmd,
         capture_output=True, text=True, check=False,
     )
     return cp.stdout.strip()

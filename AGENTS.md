@@ -2,22 +2,24 @@
 
 > 本文档保留**核心治理规则**（4 条铁律 + AI Agent 条款 + 治理变更流程）
 >
-> **当前阶段说明（治理变更 1.10 / 1.11 · 2026-08-30）**：
+> **当前阶段说明（治理变更 1.10 / 1.11 / 1.12 · 2026-08-30）**：
 > 本项目当前为**个人独立开发**，默认流程 = **直接 `commit + push` 到 `main`**，**不要求 PR**。
 > 默认工作目录固定为 **`D:\ctf\ctf-env\autopwn`**（容器内对应 **`/data/autopwn`**）；除非 Owner 明确授权的恢复 / 取证场景，**不创建额外 `autopwn-*` 平行目录、`git worktree` 或旁路工作树**。
+> 自治理变更 **1.12** 起，`upgraded.md` **只保留索引 / 状态 / 流程入口**；每次迭代的**需求详情、范围、风险、验收记录**统一放到 `upgraded/vX.Y.Z.md`。
 >
 > **AI Agent session 启动必读**：
 >
 > 1. 完整读 `AGENTS.md`（本文件）
-> 2. 读 `prd.md`
-> 3. 读 `Architecture.md`
+> 2. 读 `upgraded.md`（索引）
+> 3. 读 `refactor.md §3`（目标架构）
+> 4. 读当前任务对应的 `upgraded/vX.Y.Z.md`（需求详情）
 
 ---
 
 ## 1. 铁律（不可绕过）
 
-### 铁律 1：实施以 `Architecture.md` 为准
-- 任何代码改动必须对应 `upgraded.md` §3 中的一个任务行（或 Owner 现场新立任务行）
+### 铁律 1：实施以 `refactor.md §3` 为准
+- 任何代码改动必须对应 `upgraded.md` §3 中的一个任务索引行（或 Owner 现场新立任务行），且该任务的详情写在 `upgraded/vX.Y.Z.md`
 - 在 `upgraded.md` §3 找不到对应项 ⇒ **该任务不存在**
 - 如果你觉得要做的事在 `upgraded.md` 中没有：先 grep 关键字（确认不是漏看）⇒ 该项是**新需求** ⇒ 立即停手，走铁律 2
 
@@ -34,16 +36,16 @@
 
 **强制流程（缺一步都不算完成）**：
 1. **架构层**（如需）：加一节或修改既有节，说明为什么 / 影响哪些层 / 哪些模块
-2. **执行层**（`upgraded.md §3`）：加一行任务，含 ID / 状态 / 预估 / Owner
+2. **执行层**（`upgraded.md §3` + `upgraded/vX.Y.Z.md`）：在索引里加一行任务（含 ID / 状态 / 预估 / Owner），并创建同 ID 详情文件（含背景 / 目标 / 范围 / 风险 / 验收）
 3. **风险层**（如需）：评估风险，写缓解措施
 4. **评审**：Owner 自审（单 Owner 项目，per §2.2 简化）
 5. **实施**：上述 4 步完成并通过后，才能写代码
-6. **追溯**：`commit message` 标题格式 `[v{X}.{Y}.{Z}] {动词} {对象}`；如写提交说明，需链接到 `upgraded.md` 章节锚点
+6. **追溯**：`commit message` 标题格式 `[v{X}.{Y}.{Z}] {动词} {对象}`；如写提交说明，需同时引用 `upgraded.md` 索引行与 `upgraded/vX.Y.Z.md` 详情文件
 
 ### 铁律 3：任务必须有状态
 - `upgraded.md §3` 中**每一行**任务都必须有状态（⏳🔄👀✅⚠️❌ 之一）
 - 状态定义：`⏳` 待办 / `🔄` 进行中 / `👀` 待自审 / `✅` 完成 / `⚠️` 阻塞 / `❌` 取消
-- 每次代码 `push` 后，必须在**同一任务的最终提交**中更新文档（任务状态 + 实施记录）
+- 每次代码 `push` 后，必须在**同一任务的最终提交**中同步更新任务索引与详情文件（任务状态 + 实施记录）
 - 文档更新与代码改动**禁止拆成两次最终 push**
 
 ### 铁律 4：未经验证 = 未完成
@@ -111,9 +113,9 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 任何参与本项目的 AI Agent **在每个 session 启动时必须按序执行**：
 
 1. 读取本文件（`AGENTS.md`）——完整
-2. 读取 `upgraded.md` 整个 §0-§5 —— 完整
+2. 读取 `upgraded.md` 整个 §0-§5 —— 完整（索引 / 流程 / 基线）
 3. 读取 `refactor.md §3 目标架构` —— 完整（理解 v4.0 已落地的架构）
-4. 读取 `upgraded.md §3` 中**当前任务**相关行
+4. 读取 `upgraded.md §3` 中**当前任务**索引行 + 对应 `upgraded/vX.Y.Z.md` 详情文件
 
 > **环境约束补充**（治理变更 1.9 · 2026-08-30）：`ctf-env` 对应的 Docker 环境容器名是 **`ctf_env`**，宿主机 **`D:\ctf\ctf-env\`** 挂载到容器 **`/data`**。仓库工作目录 **`D:\ctf\ctf-env\autopwn`** 在容器中对应 **`/data/autopwn`**。
 
@@ -137,8 +139,9 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 
 | 你想做什么 | 查 |
 |---|---|
-| 怎么开发 autopwn | `upgraded.md` §0-§5 |
-| 找当前任务 | `upgraded.md §3` |
+| 怎么开发 autopwn | `upgraded.md` §0-§5 + 当前任务 `upgraded/vX.Y.Z.md` |
+| 找当前任务 | `upgraded.md §3` + 对应 `upgraded/vX.Y.Z.md` |
+| 看某次迭代需求详情 | `upgraded/vX.Y.Z.md` |
 | 理解 v4.0 架构 | `refactor.md §3 目标架构` |
 | 历史决策 / v3.1 → v4.0 演进 | `refactor.md §13` + `rebuild.md` 阶段总结表 |
 | Review 检查清单 | `upgraded.md §4` |
@@ -174,7 +177,7 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 
 **新增流程**（per 铁律 2）：
 
-1. fix 立项：在 `upgraded.md §3.1` 加任务行（状态 `⏳`），同时在 `bugs/fix.md` 索引加占位行（status=`⏳ TODO`，文件可暂不创建）
+1. fix 立项：在 `upgraded.md §3.1` 加任务索引行（状态 `⏳`），并创建对应 `upgraded/vX.Y.Z.md` 详情文件；同时在 `bugs/fix.md` 索引加占位行（status=`⏳ TODO`，文件可暂不创建）
 2. fix 实施：完成代码 + 6 关验收后，在最终 push 到 `main` 的提交里**同时**写 `bugs/fix_<bug_name>.md` + 更新 `bugs/fix.md` 索引（status=`✅`）
 3. 任务行状态同步：fix push 到 `main` 后，`upgraded.md §3.1` 任务行状态改 `✅`
 
@@ -222,6 +225,7 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 | 2026-08-30 | **1.9** | **补充 ctf-env 容器映射说明**：在 §5 AI Agent 特别条款中明确 `ctf-env` 对应 Docker 容器名 `ctf_env`，宿主机 `D:\ctf\ctf-env\` 挂载到 `/data`，仓库在容器中对应 `/data/autopwn` |
 | 2026-08-30 | **1.10** | **删除单 Owner 项目的默认 PR 流程**：现行规范改为直接 `commit + push` 到 `main`；同步改写铁律 2/3、§2、§3、§4、§5、§6.1、§7 中所有默认 PR 依赖，并注明历史任务行中的 PR / merge / Review 字样仅用于审计追溯 |
 | 2026-08-30 | **1.11** | **明确单目录单人迭代约束**：默认工作目录固定为 `D:\ctf\ctf-env\autopwn` / `/data/autopwn`；未经 Owner 明确授权，不创建额外 `autopwn-*` 平行目录、`git worktree` 或旁路工作树；若发生恢复场景，最新已验证版本必须回到主目录 |
+| 2026-08-30 | **1.12** | **`upgraded.md` 索引化**：`upgraded.md` 只保留阅读入口 / 任务索引 / 验收基线；每次迭代的需求详情、范围、风险、验收记录下沉到 `upgraded/vX.Y.Z.md`；历史未迁移条目按“新建即分文件，触达即迁移”逐步收敛 |
 
 > 完整 changelog 1.0-1.6 见 git log。
 

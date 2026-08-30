@@ -1,11 +1,12 @@
 # upgraded.md — AutoPwn v4.0+ 迭代流程
 
-> **角色**：v4.0+ 迭代的**单一事实来源**（替代者）—— "今天起怎么开发 autopwn"
+> **角色**：v4.0+ 迭代的**索引与流程入口**—— "今天起怎么开发 autopwn"
 > **状态**：v4.0.dev0 准备 GA（2026-06-10）
 > **配套文档**：
 > - [`AGENTS.md`](./AGENTS.md) — 项目治理（4 条铁律 + 违规分级 + 紧急通道 + AI Agent 条款）
 > - [`refactor.md`](./refactor.md) — v4.0 架构演进史（v3.1 → v4.0.dev0 WHY）
 > - [`rebuild.md`](./rebuild.md) — v3.1 → v4.0.dev0 重构实施历史（P0-P11 阶段总结）
+> - [`upgraded/`](./upgraded/) — 每次迭代的需求详情 / 范围 / 风险 / 验收记录（按 `vX.Y.Z.md` 命名）
 >
 > **本文档章节**：
 > - §0 阅读指引
@@ -15,6 +16,8 @@
 > - §4 当前架构（v4.0 已落地 + AI Agent 必读）
 > - §5 验证方法（铁律 4 6 关验收）
 > - §6 附录（文件路径 / 决策树 / 工具 / 模板）
+>
+> **治理变更 1.12 · 2026-08-30**：`upgraded.md` 现在只保留阅读入口、任务索引、流程规则与验收基线；每个迭代的需求详情、范围、风险、验收记录统一放到 `upgraded/vX.Y.Z.md`。历史未迁移条目允许暂时保留 inline，后续按“新建即分文件，触达即迁移”收敛。
 
 ---
 
@@ -24,9 +27,9 @@
 |---|---|
 | **第一次接触本项目** | **必读 [`AGENTS.md`](./AGENTS.md) §1 铁律** → 本文件 §0 → §1 → §4 → §5 |
 | **想认领任务** | §1 当前状态 → §3 任务看板 → §2 流程 → §5 验证 |
-| **正在做某个任务** | §3 当前任务 → §5 验证（6 关）|
+| **正在做某个任务** | §3 当前任务索引 → 对应 `upgraded/vX.Y.Z.md` → §5 验证（6 关）|
 | **理解 v4.0 架构** | §4 当前架构 + [`refactor.md §3`](./refactor.md) |
-| **AI Agent session 启动** | [`AGENTS.md §5`](./AGENTS.md) 5 步启动 → 本文件 §0-§5 |
+| **AI Agent session 启动** | [`AGENTS.md §5`](./AGENTS.md) 启动清单 → 本文件 §0-§5 + 当前任务详情文件 |
 | **重构期历史追溯** | [`rebuild.md`](./rebuild.md) §3 阶段总结 + `git log` |
 
 ---
@@ -66,6 +69,7 @@
 
 ### 1.3 v4.1 候选方向
 
+- **候选目标打分 + 利用链排序**：对 `win/flag/hack/backdoor/shell` 等候选目标函数，以及 `fmtstr -> leak canary -> second-stage BOF` / `fmt write -> GOT hijack` 等常见链路做 evidence-based scoring，替代 challenge-name / 单函数名热补丁
 - **HEAP 利用**：当前 strategies 全部栈 / ROP / PIE，缺 `malloc` / `free` / `tcache` 漏洞利用
 - **多 binary 批处理**：当前 CLI 单 binary；`-l <dir>` 多 binary 批跑
 - **Web UI / RPC**：`orchestrator.run` 暴露为 HTTP/JSON（per `refactor.md §11` 旧扩展点）
@@ -81,7 +85,7 @@
 
 | 来源 | 流程 |
 |---|---|
-| **Owner 主动规划** | §3 任务看板加一行 + 状态 ⏳ |
+| **Owner 主动规划** | §3 任务看板加一行 + 在 `upgraded/` 下创建同 ID 详情文件 + 状态 ⏳ |
 | **Issue tracker** | Owner review 后转 §3 任务行 |
 | **AI Agent 发现** | **不直接实施**（per `AGENTS.md §1` 铁律 2）→ 走"需求澄清"提问给 Owner |
 | **重构期任务迁移** | 从 `rebuild.md §3` 提取 ✅ 任务作为新迭代的"已实现功能"基础 |
@@ -98,6 +102,7 @@
 
 1. **⏳ Pending → 🔄 In Progress**
    - 在 §3 任务行改状态 + 加 Owner + 预估工时
+   - 创建或更新对应的 `upgraded/vX.Y.Z.md`，写清背景 / 目标 / 范围 / 风险 / 验收
    - 同步 `main`，并确认当前就在仓库主目录 `D:\ctf\ctf-env\autopwn`（容器 `/data/autopwn`）迭代
    - 若主目录工作树不干净，先备份 / 提交 / 回滚 / 与 Owner 澄清；**未经 Owner 明确授权不得创建额外 `git worktree`、`autopwn-*` 平行目录或旁路工作树**
    - 实施前先确认最终 `commit message` 会引用任务 ID（per `AGENTS.md §5`）
@@ -105,7 +110,7 @@
 2. **🔄 In Progress → 👀 Self Review**
    - 代码完成 + `pytest -m "not integration"` 全过
    - 若涉及行为变化，补跑对应 `pytest -m integration` / `Challenge/` 验证
-   - 本地提交：`[v{X}.{Y}.{Z}] {动词} {对象}` + 实施要点 + Refs:`upgraded.md §3`
+   - 本地提交：`[v{X}.{Y}.{Z}] {动词} {对象}` + 实施要点 + Refs:`upgraded.md §3`, `upgraded/vX.Y.Z.md`
 
 3. **👀 Self Review → ✅ Done**
    - Owner 自审通过（单 Owner 项目）
@@ -130,11 +135,18 @@ per `AGENTS.md §2.1`：
 - 同一批次 `commit/push` 不跨多个任务 ID
 - 单个任务只动一层（如 `recon/` 不允许顺手改 `primitives/`）
 
+### 2.5 迭代详情文件（治理变更 1.12 · 2026-08-30）
+
+- `upgraded.md` 只保留任务索引、状态、摘要、链接，不再承载整段长需求
+- 每个新任务立项时，必须同时创建 `upgraded/vX.Y.Z.md`
+- 详情文件至少包含：背景、目标、范围、实施方向、风险、6 关验收；已完成任务还应补完成记录
+- 历史未迁移的旧任务允许暂时保留 inline；遵循“**新建即分文件，触达即迁移**”
+
 ---
 
 ## 3. 任务看板
 
-> **现行流程说明（治理变更 1.10 / 1.11 · 2026-08-30）**：历史任务行中若出现 `fix/...` 分支名、`PR` 描述、`merge` / `Review` 等字样，仅用于审计追溯；当前单 Owner 流程以 `AGENTS.md §2.2` 与本文 §2 为准，默认直接 `commit + push` 到 `main`，且最新已验证版本必须留在仓库主目录 `D:\ctf\ctf-env\autopwn`（容器 `/data/autopwn`）。
+> **现行流程说明（治理变更 1.10 / 1.11 / 1.12 · 2026-08-30）**：历史任务行中若出现 `fix/...` 分支名、`PR` 描述、`merge` / `Review` 等字样，仅用于审计追溯；当前单 Owner 流程以 `AGENTS.md §2.2` 与本文 §2 为准，默认直接 `commit + push` 到 `main`，且最新已验证版本必须留在仓库主目录 `D:\ctf\ctf-env\autopwn`（容器 `/data/autopwn`）。自 **1.12** 起，**新任务只在本表保留摘要 / 状态 / 链接**，详细需求写入 `upgraded/vX.Y.Z.md`；历史未迁移条目按需逐步迁移。
 
 ### 3.1 v4.0 GA 准备（高优先级 · 修复后才发 GA）
 
@@ -178,7 +190,9 @@ per `AGENTS.md §2.1`：
 | `v4.1.15` | **将 `level3_x64` 暴露的失败归类为“x64 三参 leak primitive 缺第三参数控制”并修复**（Owner 2026-08-30 现场新立任务）：**归类理由**：如果把它写成“修 level3_x64”，后续每遇到一个 `write(fd, buf, count)` 型 x64 泄漏题就会继续靠单题热补丁；真正的共性根因是 **`Ret2LibcWriteX64.build_payload()` 把 3 参数函数调用偷简化成只控 `rdi/rsi`，把 `rdx` 留给运行时残值**。这在某些 libc / 调用路径下“碰巧可用”，在 `ctf_env` 当前 runtime 下则直接退化为 0-byte leak。**范围**：限于 `autopwn/primitives/ret2libc_write.py`、相关 x64 write strategy / canary strategy、必要的单元/集成测试，以及本表状态同步；**不**做 challenge-name 特判。**实施方向**：(a) 在 primitive 层引入**通用 x64 三参 call builder**，优先使用直接 `pop rdx`(含 `pop rdx; pop rbx; ret` 变体)；(b) 若无直接 `rdx` gadget，则 fallback 到 **ret2csu**（解析 `__libc_csu_init` 的 pop 链 + call 链）构造 `write(1, write@GOT, 8)`；(c) 让 `Ret2LibcWriteX64` / `CanaryRet2LibcWriteX64*` 共用该 builder，避免再次出现“非 canary 修了、canary 版本漏修”；(d) 把旧的“2 参 write leak”视为不可靠历史实现，不再作为新路径的默认契约；(e) 对这类 **2-stage x64 write leak**，stage2 的 `system("/bin/sh")` 对齐判定必须按“stage1 泄漏后回到 `main` 再次进入漏洞函数”的真实调用路径复核，必要时补 1 个 `ret`，避免把 stage1 修好后又在 verify 前因 MOVAPS/栈对齐倒下。**6 关验收**：① 代码合入 `fix/v4.1.15-x64-write-leak-arg3`；② `docker exec ctf_env bash -lc 'cd /data/autopwn && python3 -m pytest tests/unit/test_primitives_ret2libc_write.py tests/unit/test_primitives_ret2libc_extra_rsi.py tests/unit/test_exp_ret2libc_write.py tests/unit/test_exp_canary.py -q'` 全过；③ `docker exec ctf_env bash -lc 'cd /data/autopwn && python3 -m pytest tests/unit -m "not integration" -q'` 全过；④ `docker exec ctf_env bash -lc 'cd /data/autopwn && python3 -m pytest tests/integration/test_shell_interaction.py -q'` 恢复既有 pass/skip/xfail 基线；⑤ Owner 自审；⑥ 文档同步（本表状态 + 后续 fix 记录索引）。**当前进展（2026-08-30）**：关②已过（`102 passed in 6.24s`）；关③已过（`738 passed, 1 warning in 19.61s`）；关④已过（`4 passed, 1 skipped, 1 xfailed in 37.10s`）；关①/⑤ 需待实际 merge / Owner 收尾后才能改 `✅`。| 👀 | 1.5h | **风险**：(a) `__libc_csu_init` 在不同编译器/优化级别下寄存器搬运顺序可能不同，不能把 `r13/r14/r15` 的语义硬编码成单一版本——需要解析实际反汇编；(b) x64 write-leak stage1 payload 会变长，必须确认不破坏当前可用的 padding / frame 假设；(c) 若某 binary 同时没有 `pop rdx` 也没有可识别的 ret2csu，策略应 fail-closed 而不是继续赌运行时残值；(d) stage2 对齐若仍直接复用“单次进入漏洞函数”的旧判定，可能在 ret2csu leak 修好后把问题后移成第二阶段 SIGSEGV。 |
 | `v4.1.16` | **治理变更：删除单 Owner 项目的默认 PR 流程，改为直接 `commit + push` 到 `main`**（Owner 2026-08-30 明确澄清）：范围限于 `AGENTS.md` + `upgraded.md` 的**现行治理/流程章节**；不回写伪造历史，但删除“默认走 PR”的规范文本，并明确历史任务行中的 `fix/...` / `PR` / `merge` 描述仅用于审计追溯。**目标**：让后续迭代不再把单人项目误执行成 branch + PR 工作流。**实施方向**：(a) `AGENTS.md` 改写铁律 2/3、§2、§3、§4、§5、§6.1、§7 中所有默认 PR 依赖；(b) `upgraded.md` 改写 §1.2、§2.2、§2.4、§5.1、§5.5、§5.6，并新增现行流程说明；(c) 保留任务状态治理与单任务粒度约束，但把载体从 PR 改成 `commit/push`。**6 关验收**：① 治理文档已提交并 push 到 `main`；② N/A（纯文档任务）；③ N/A；④ N/A；⑤ Owner 自审；⑥ 文档同步（本行 + `AGENTS.md §8` changelog）。**备注**：历史任务行中已有的 `fix/...` / `PR` / `merge` 字样保留用于审计，不再视为现行规则。| ✅ | 0.5h | **Owner**：@Minzhi_Zhou |
 | `v4.1.17` | **治理变更：明确“单目录单人迭代”，禁止把最新版本留在旁路 worktree / 平行目录**（Owner 2026-08-30 现场新立任务）：**背景**：v4.1.14 / v4.1.15 / v4.1.16 期间曾临时创建 `autopwn-v4.1.14-pr`、`autopwn-v4.1.15-pr`、`autopwn-v4.1.16-direct-push` 三个平行工作目录，虽然最终已恢复，但暴露出“远端是最新、原始 `autopwn/` 目录不是最新且不干净”的可见性风险。**目标**：把单人主干流程进一步收紧成“**只认原始仓库主目录**”，避免再次出现需要额外恢复动作。**实施方向**：(a) `AGENTS.md` 当前阶段说明、§2.2、§3、§5、§8 明确默认工作目录固定为 `D:\ctf\ctf-env\autopwn` / `/data/autopwn`；(b) `upgraded.md` §1.2、§2.2、§3、§5.1 明确最新已验证版本必须留在主目录，主目录不干净时先备份 / 提交 / 回滚 / 澄清，而不是默认开旁路 worktree；(c) 把额外 worktree / 平行目录仅保留为 **Owner 明确授权的恢复场景例外**，不再视为普通迭代手段。**6 关验收**：① 治理文档提交并 push 到 `main`，且主目录 `D:\ctf\ctf-env\autopwn` 的 HEAD = `origin/main`；② N/A（纯文档任务）；③ N/A；④ N/A；⑤ Owner 自审；⑥ 文档同步（本行 + `AGENTS.md §8` changelog）。**备注**：历史上已出现过的平行目录名称保留在本行说明里，仅作复盘，不作为现行流程示例。| ✅ | 0.3h | **Owner**：@Minzhi_Zhou |
-| `v4.1.18` | **为 canary 检测增加 fail-fast 预算阈值，避免离线自动化在 `Challenge/canary` 上长期爆破**（Owner 2026-08-30 现场新立任务）：**背景**：当前 `autopwn -l Challenge/canary` 在 detect 阶段会先跑 `leakage_canary_value()`（`%0$p..%99$p` 多进程探测），再跑 `canary_fuzz()` 的 `c × j × padding` 三重枚举；用户手工观测到终端持续刷 `Starting local process` / `stopped with exit code -6 (SIGABRT)`，根因不是单次卡死，而是 **没有运行时 stop-loss** 的爆破循环。**目标**：让 canary 题在默认配置下“**有界失败**”——超出阈值后明确中断、记录原因并继续返回普通失败，而不是把整次离线 run 拖成超长任务。**范围**：限于 `autopwn/cli.py`、`autopwn/context.py`、`autopwn/orchestrator/detect.py`、`autopwn/detect/canary.py`、必要的 unit tests，以及 README / 本表同步；**不**在 challenge 名上做特判，也**不**把本任务偷扩成“优化 canary 成功率”。**实施方向**：(a) 在 CLI/Context 暴露 canary detect budget（至少包含 wall-time 阈值，允许用户覆盖默认值）；(b) `canary_fuzz()` 在预算耗尽时 fail-closed，打印明确日志（如 budget exhausted / abort brute-force），并返回 `None`，保持 `ctx.canary` 不变；(c) detect phase 只把它视为“canary 未拿到”，后续逻辑继续按现有 candidate/fallback 走；(d) 默认值要足够保守，既能避免 `canary` 长时间刷屏，又不影响 `fmtstr1` 这类“canary + fmtstr”题继续走后续 format-string 路径。**6 关验收**：① 代码提交并 push 到 `main`；② `pytest tests/unit/test_detect_canary.py tests/unit/test_orchestrator.py tests/unit/test_context_ssl.py -q` 全过；③ `pytest tests/unit -m "not integration" -q` 全过；④ `docker exec ctf_env bash -lc 'cd /data/autopwn && export PYENV_ROOT=/root/.pyenv && export PATH=\"$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH\" && source .venv/bin/activate && python -m pytest tests/integration/test_shell_interaction.py -q'` 保持既有 `4 passed, 1 skipped, 1 xfailed` 基线，且 `python -m autopwn -l Challenge/canary` 默认不再无限长时间爆破；⑤ Owner 自审；⑥ 文档同步（本表状态 + README CLI 说明 + 如行为基线有变化则同步 §1.2 / §5.4）。**完成记录（2026-08-30）**：关①已完成，代码提交 `e19d33f` 已 push 到 `origin/main`；关②已过（`34 passed, 2 warnings in 1.07s`）；关③已过（`740 passed, 2 warnings in 58.55s`）；关④已过（`4 passed, 1 skipped, 1 xfailed in 70.51s`）；容器内手工 `python -m autopwn -l Challenge/canary --no-report` 已出现 `canary fuzz budget exhausted after 320 attempts (~20.0s)` 日志，随后继续回落到普通 candidate/fallback 失败路径，证明 detect 层不再无界爆破；关⑤/⑥ 随本次状态同步完成。| ✅ | 1h | **风险**：(a) 默认 budget 过小会把未来真正可解的 canary binary 过早 fail-closed；需提供 CLI 覆盖值（如 `0=unbounded` 或更大秒数）；(b) 只加 time budget、不加算法优化，意味着 `canary` 仍是 PARTIAL —— 这是预期，不属于 regression；(c) detect 层新增运行时阈值后，integration 里的 canary 可能从“外层 timeout”变成“内层 fail-fast 返回”，测试断言必须锁定“仍未成功且不会 hang”，而不是绑死某一种退出路径。 |
+| `v4.1.18` | **为 canary 检测增加 fail-fast 预算阈值，避免离线自动化长期爆破** | ✅ | 1h | 详情：[`upgraded/v4.1.18.md`](./upgraded/v4.1.18.md)；完成提交：`e19d33f` |
+| `v4.1.19` | **候选目标打分 + 利用链排序**（含 `vuln/vulnerable` 弱名称信号） | ⏳ | 2h | 详情：[`upgraded/v4.1.19.md`](./upgraded/v4.1.19.md)；架构细化随同任务同步到 `refactor.md` |
+| `v4.1.20` | **治理变更：`upgraded.md` 仅保留索引，迭代详情移入 `/upgraded/`** | 🔄 | 0.5h | 详情：[`upgraded/v4.1.20.md`](./upgraded/v4.1.20.md)；纯文档任务，待最终 `commit/push` 后才能改 ✅ |
 
 ### 3.3 open 阻塞（当前 = 0）
 
@@ -285,11 +299,11 @@ AUTOPWN_VERIFY_TIMEOUT=60 bash scripts/run_verify.sh v<X>.<Y>-smoke canary fmtst
 
 - 单 Owner 项目（per `AGENTS.md §2.2`），Owner 自审 = Reviewer
 - `commit message` 含：任务 ID / 动词 / 对象
-- 如写 `commit body`，含：实施要点 / Refs:`upgraded.md §3` 任务行
+- 如写 `commit body`，含：实施要点 / Refs:`upgraded.md §3`, `upgraded/vX.Y.Z.md` 任务行
 
 ### 5.6 关 6: 文档同步
 
-- **同一任务的最终已 push 提交** 更新 §3 任务行（状态 + 实际工时 + commit SHA）
+- **同一任务的最终已 push 提交** 更新 §3 任务索引行与对应 `upgraded/vX.Y.Z.md`（状态 + 实际工时 + commit SHA / 完成记录）
 - **同一任务的最终已 push 提交** 更新 `CHANGELOG.md`（如适用）
 - **同一任务的最终已 push 提交** 更新 `refactor.md` / `rebuild.md`（如涉及架构变更）
 
@@ -307,6 +321,9 @@ AUTOPWN_VERIFY_TIMEOUT=60 bash scripts/run_verify.sh v<X>.<Y>-smoke canary fmtst
 ### 6.1 文件路径速查（v4.0 完整）
 
 ```
+upgraded/
+├── vX.Y.Z.md            # 单次迭代的需求详情 / 风险 / 验收记录
+
 autopwn/
 ├── __init__.py          # __version__ = "4.0.dev0"
 ├── __main__.py          # python -m autopwn 入口
@@ -402,6 +419,7 @@ Challenge/
 
 ```
 [v{X}.{Y}.{Z}] {动词} {对象}
+Refs: `upgraded.md §3`, `upgraded/vX.Y.Z.md`
 
 如：
 [v4.0.0] release v4.0 GA — 切版本号 + tag + Release
@@ -443,5 +461,5 @@ Challenge/
 ---
 
 > **最后一条**：
-> 本文档是 v4.0+ 迭代的**单一事实来源**。任何"今天起怎么开发 autopwn"问题先查这里。
+> 本文档是 v4.0+ 迭代的**索引与流程入口**。任何"今天起怎么开发 autopwn"问题先查这里的索引，再进入对应 `upgraded/vX.Y.Z.md`。
 > 历史档案在 `rebuild.md` + `refactor.md` + `git log`（永不删除）。

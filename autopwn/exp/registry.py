@@ -82,19 +82,20 @@ def _hint_adjustment(
     name = strategy.name
     is_fmtstr = name.startswith("fmtstr-")
     is_fmtstr_write = is_fmtstr and "print-strings" not in name
+    has_canary_route = ctx.canary is not None or getattr(ctx, "canary_plan", None) is not None
     is_canary = bool(getattr(strategy, "requires_canary", False))
 
     if hint.kind == "fmt_then_bof":
         if is_fmtstr_write:
             return hint.score_delta
-        if is_canary and ctx.canary is not None:
+        if is_canary and has_canary_route:
             return hint.score_delta // 2
         return 0
 
     if hint.kind == "canary_leakable":
         if is_fmtstr_write:
             return hint.score_delta
-        if is_canary and ctx.canary is not None:
+        if is_canary and has_canary_route:
             return hint.score_delta
         return 0
 
@@ -102,7 +103,7 @@ def _hint_adjustment(
         return hint.score_delta if is_fmtstr_write else 0
 
     if hint.kind == "local_nonfork_canary_bruteforce_penalty":
-        if is_canary and ctx.canary is None:
+        if is_canary and not has_canary_route:
             return hint.score_delta
         return 0
 

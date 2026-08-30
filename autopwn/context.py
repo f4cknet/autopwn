@@ -140,6 +140,25 @@ class CanaryInfo:
 
 
 @dataclass(slots=True)
+class CanaryLeakPlan:
+    """A reusable *plan* for leaking the live canary inside one session.
+
+    Added in v4.1.22 for local ``fmt leak -> second input overflow`` flows:
+    detect records *how* to recover the current process canary, and the
+    strategy executes that plan inside the same session instead of trying to
+    reuse a stale cross-process canary value.
+    """
+
+    method: str
+    leak_payload: bytes
+    stack_index: int
+    buffer_to_canary: int
+    post_canary_padding: int
+    word_count: int = 0
+    reentry_payload: bytes = b"hello"
+
+
+@dataclass(slots=True)
 class FunctionCandidate:
     """A ranked internal function that looks like a promising exploit target.
 
@@ -200,6 +219,7 @@ class ExploitContext:
     # Vulnerability facts — populated by detect phase
     padding: int = 0
     canary: Optional[CanaryInfo] = None
+    canary_plan: Optional[CanaryLeakPlan] = None
     has_system: bool = False
     has_puts: bool = False
     has_write: bool = False
@@ -227,9 +247,9 @@ class ExploitContext:
     # v4.1.11 for the rationale and CTF platform coverage.
     ssl: bool = False
 
-    # v4.0.1: shell verification result (set by core.shell_verify.verify_shell
-    # in the strategy success path).  ``None`` until a strategy probes the
-    # spawned process; populated with the ``id`` command output on success.
+    # v4.0.1+: shell verification result (set by core.shell_verify helpers
+    # in the strategy success path). ``None`` until a strategy probes the
+    # spawned process; populated with the verifier command output on success.
     id_output: Optional[str] = None
 
     def log(self, message: str, level: str = "info") -> None:
@@ -437,6 +457,7 @@ __all__ = [
     "RopGadgetsX64",
     "RopGadgetsX32",
     "CanaryInfo",
+    "CanaryLeakPlan",
     "FunctionCandidate",
     "ExploitHint",
     "ExploitContext",

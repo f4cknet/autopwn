@@ -8,25 +8,22 @@ tubes verified that ``verify_shell`` was called correctly, but **no
 end-to-end test ever ran a real Challenge/ binary to confirm the
 shell was actually alive after the verify pass**.  This module fills
 that gap by spawning ``autopwn -l <binary>`` against each of the
-5 §2.6 baseline binaries, piping stdin (echo PWNED + id + exit),
-and asserting the verify pass produces the expected tokens.
+5 §2.6 baseline binaries with stdin closed, and asserting the
+verify pass produces the expected orchestrator-side success signal.
 
 What this test pins
 -------------------
 * For each binary that exploits cleanly, the **end-to-end verify
   protocol works**: ``verify_shell`` returns True and produces a
   docx report (per the v4.0.3 record_success_verified contract).
-* For each binary, the verify command (``echo PWNED`` in v4.0.4)
-  round-trips through the real exploit pipeline — the
-  ``PWNED`` token must appear in the captured output.
+* For each binary, the exploit's verifier path round-trips through
+  the real exploit pipeline and reaches the report-generation signal.
 * The orchestrator + strategy chain can survive a closed-stdin run
   (CI environment) without hanging or crashing.
 
 What this test does NOT pin
 ----------------------------
-* 5/5 SUCCESS — canary is ``PARTIAL`` due to a pre-existing v3.1
-  limitation (per ``upgraded.md`` §1.2 "5/5 SUCCESS 不可达").
-  canary is marked ``xfail`` here; it is not a regression.
+* 5/5 SUCCESS — ``v4.1.22`` 起 canary 通过 same-session canary 计划打通。
 * True interactive shell lifetime — that requires a TTY which
   is unavailable in headless CI.  We test the **post-verify
   state** (docx generated, PWNED token in output, process exits
@@ -38,7 +35,7 @@ Per-binary expectations
 * ``level3_x64`` — ret2libc-write-x64 (priority 110) → SUCCESS
 * ``fmtstr1``    — ret2system-x32 (priority 150) → SUCCESS
 * ``pie``        — pie_backdoor (priority 180) + brute → SUCCESS
-* ``canary``     — canary brute force → **PARTIAL** (xfail, v3.1 limit)
+* ``canary``     — same-session fmt leak + canary-aware ret2libc_put → SUCCESS
 
 Test markers
 ------------
@@ -218,51 +215,20 @@ def test_fmtstr1_exploit_completes_within_extended_timeout() -> None:
     )
 
 
-@pytest.mark.xfail(
-    reason="canary is pre-existing PARTIAL (v3.1 brute-force limit); "
-           "see upgraded.md §1.2 '5/5 SUCCESS 仍不可达'",
-    strict=False,
-)
-def test_canary_is_xfail_pre_existing_partial() -> None:
-    """``canary`` is PARTIAL (v3.1 pre-existing canary brute-force limit).
-
-    Per ``upgraded.md`` §1.2 "5/5 SUCCESS 不可达": canary brute
-    force is > 10 min, so 60s/600s timeout both PARTIAL.  This is
-    **not a regression** — it's a known v3.1 limitation that v4.0
-    inherits.
-
-    This test is marked xfail (strict=False) to record the
-    expected-failure state.  If it ever starts passing (e.g. via
-    a v4.0.2c canary optimization or a smarter strategy), the
-    xfail will flip to xpass and a developer should remove this
-    guard.
-    """
+def test_canary_exploit_generates_report_after_same_session_plan() -> None:
+    """``canary`` now passes via same-session leak → canary-aware shell route."""
     binary = CHALLENGE_DIR / "canary"
     if not binary.exists():
         pytest.skip("canary binary not present")
 
-    # Use a short timeout.  Pre-v4.1.18 this usually ended in the
-    # outer TimeoutExpired path; v4.1.18+ may instead fail-fast
-    # internally once the canary brute-force budget is exhausted.
-    try:
-        result = _run_autopwn_on(binary, timeout=20)
-    except subprocess.TimeoutExpired as e:
-        pytest.xfail(
-            f"canary timed out as expected (v3.1 brute-force limit). "
-            f"Captured output:\n{e.output.decode(errors='replace')[-500:] if e.output else '(empty)'}"
-        )
-        return
-
+    result = _run_autopwn_on(binary, timeout=30)
     output = result.stdout or ""
-    if not _output_indicates_verify_success(output):
-        # canary did not generate a report (expected); xfail with reason.
-        pytest.xfail(
-            f"canary did not produce verify pass signal (expected, v3.1 PARTIAL). "
-            f"Exit code: {result.returncode}"
-        )
-    # If canary actually passes, xfail → xpass (strict=False allows
-    # this without failing the test suite).  Developer should then
-    # remove this xfail guard.
+    assert _output_indicates_verify_success(output), (
+        f"autopwn -l canary did not produce verify pass signal.\n"
+        f"Exit code: {result.returncode}\n"
+        f"--- last 60 lines of output ---\n"
+        + "\n".join(output.splitlines()[-60:])
+    )
 
 
 # ---------------------------------------------------------------------------

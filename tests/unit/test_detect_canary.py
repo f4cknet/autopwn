@@ -162,3 +162,28 @@ class TestCanaryFuzz:
         assert ctx.canary is result
         assert result.diff >= 1
         assert result.value == 0x8000000000000000  # value from leaks[3]
+
+
+class TestSameSessionCanaryPlan:
+    """``discover_same_session_canary_plan`` — reusable in-session leak recipe."""
+
+    def test_discovers_canary_plan_for_challenge_canary(self, challenge_dir):
+        from autopwn.detect.canary import discover_same_session_canary_plan
+
+        ctx = ctx_for("canary", bit=32, stack_canary=True)
+        ctx.padding = 80
+
+        plan = discover_same_session_canary_plan(
+            ctx,
+            challenge_dir / "canary",
+            32,
+            word_count=60,
+        )
+
+        assert plan is not None
+        assert ctx.canary_plan is plan
+        assert plan.method == "fmtstr-sequential-x32"
+        assert plan.stack_index > 0
+        assert plan.buffer_to_canary == 64
+        assert plan.post_canary_padding == 12
+        assert plan.word_count == 60

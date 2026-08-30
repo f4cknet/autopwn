@@ -32,7 +32,7 @@
 ### 1.1 现状快照
 
 - 当前开发版本：`4.0.dev0`，GA 收尾任务仍未完成
-- 当前行为基线：**4/5 SUCCESS + canary PARTIAL**；`v4.1.18` 起，`canary_fuzz()` 默认带 **20s fail-fast budget**
+- 当前行为基线：**5/5 SUCCESS**；`v4.1.22` 已为本地 x32 `fmt leak -> second input BOF` 题型补齐 same-session canary 路线，`canary_fuzz()` 仍保留 **20s fail-fast budget** 作为回退
 - 当前治理模式：**单 Owner / 单目录 / 直接 `commit + push` 到 `main`**
 - 主工作目录固定为 `D:\ctf\ctf-env\autopwn`（容器内 `/data/autopwn`）
 - v4.1.21 前的详细状态长说明已迁到 [`upgraded/archive_state.md`](./upgraded/archive_state.md)
@@ -41,7 +41,7 @@
 
 - **当前活动任务**：_无（等待新任务）_
 - **待收尾任务**：`v4.1.14` / `v4.1.15` 仍处于 `👀`
-- **最近功能完成**：`v4.1.19` 候选目标打分 + 利用链排序已落地
+- **最近功能完成**：`v4.1.22` same-session canary 泄露计划 + `whoami` 验证已落地
 - **最近治理完成**：`v4.1.21` 第二轮瘦身 `upgraded.md` 已落地
 - **休眠 backlog**：其余历史未完成任务已下沉到 [`upgraded/backlog.md`](./upgraded/backlog.md)，默认不在主索引逐条展开
 
@@ -98,10 +98,10 @@ _（无 — 2026-08-30）_
 
 | ID | 摘要 | 状态 | 实际 | 详情 |
 |---|---|---|---|---|
+| `v4.1.22` | same-session canary 泄露计划 + `whoami` 作为 shell 成功判定 | ✅ | 2h | [`v4.1.22`](./upgraded/v4.1.22.md) |
 | `v4.1.19` | 候选目标打分 + 利用链排序（含 `vuln/vulnerable` 弱信号） | ✅ | 2h | [`v4.1.19`](./upgraded/v4.1.19.md) |
 | `v4.1.21` | 第二轮瘦身 `upgraded.md` | ✅ | 0.5h | [`v4.1.21`](./upgraded/v4.1.21.md) |
 | `v4.1.20` | `upgraded.md` 第一阶段索引化 | ✅ | 0.5h | [`v4.1.20`](./upgraded/v4.1.20.md) / `c261d49`, `63d4103` |
-| `v4.1.18` | canary 检测 fail-fast 预算阈值 | ✅ | 1h | [`v4.1.18`](./upgraded/v4.1.18.md) / `e19d33f`, `aa46ad9` |
 
 ### 3.4 历史入口
 
@@ -148,15 +148,15 @@ Core
 1. **关 1**：代码已 push 到 `main`
 2. **关 2**：`pytest tests/unit -m "not integration" -q` 全过
 3. **关 3**：若涉及行为变化，跑对应 integration / `Challenge/` 验证
-4. **关 4**：若涉及 `autopwn` 行为，至少复测 1 个 `Challenge/`；5-binary 基线仍以 **4/5 SUCCESS + canary PARTIAL** 为准
+4. **关 4**：若涉及 `autopwn` 行为，至少复测 1 个 `Challenge/`；当前 5-binary 基线以 **5/5 SUCCESS** 为准
 5. **关 5**：Owner 自审
 6. **关 6**：同提交同步索引行、详情文件、必要归档
 
 ### 5.1 近期参考基线（2026-08-30）
 
-- 单元测试：`750 passed`
-- 相关 integration 子集：`4 passed, 1 skipped, 1 xfailed`
-- 手工 `Challenge/canary`：默认可在 detect 阶段看到目标候选 / exploit hints / 排序日志；重复 `SIGABRT` 动态探测会快速 stop-loss，`canary_fuzz` 仍保持 **20s fail-fast**
+- 单元测试：`757 passed`
+- 相关 integration 子集：`5 passed, 1 skipped`
+- 手工 `Challenge/canary`：detect 阶段会产出 `same-session canary plan`（`stack_index=55 / buffer_to_canary=64 / post_canary_padding=12`），strategy 通过 `whoami` 验证拿到 `root`
 
 ---
 

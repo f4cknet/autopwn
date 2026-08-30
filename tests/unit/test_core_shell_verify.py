@@ -164,6 +164,36 @@ class TestVerifyShellEchoPwned:
         assert ok is False
         assert tube.closed is False
 
+    def test_verify_shell_whoami_returns_username(self):
+        from autopwn.core.shell_verify import verify_shell_whoami
+
+        sent = io.BytesIO()
+        tube = _FakeTube(
+            recv_queue=[b"$ ", b"root\n__AUTOPWN_END__"],
+            sent=sent,
+        )
+        ok, out = verify_shell_whoami(tube, timeout=2.0)
+        assert ok is True
+        assert out == "root\n"
+        assert sent.getvalue() == b"whoami; echo __AUTOPWN_END__\n"
+
+    def test_verify_shell_whoami_rejects_missing_username(self):
+        from autopwn.core.shell_verify import verify_shell_whoami
+
+        tube = _FakeTube(recv_queue=[b"__AUTOPWN_END__"])
+        ok, out = verify_shell_whoami(tube, timeout=0.1)
+        assert ok is False
+        assert out == ""
+
+    def test_verify_shell_whoami_keep_alive_true_preserves_tube(self):
+        from autopwn.core.shell_verify import verify_shell_whoami
+
+        tube = _FakeTube(recv_queue=[b"$ ", b"root\n__AUTOPWN_END__"])
+        ok, out = verify_shell_whoami(tube, timeout=2.0, keep_alive=True)
+        assert ok is True
+        assert out == "root\n"
+        assert tube.closed is False
+
 
 # ---------------------------------------------------------------------------
 # record_success_verified — silent success, no banner

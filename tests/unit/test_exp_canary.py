@@ -23,7 +23,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from autopwn.context import BinaryInfo, CanaryInfo
+from autopwn.context import BinaryInfo, CanaryInfo, CanaryLeakPlan
 from tests.conftest import ctx_for
 
 
@@ -312,6 +312,23 @@ class TestCanaryStrategyMatches:
 
         assert CanaryRet2LibcPutX32LocalStrategy().matches(_ctx_32_canary(has_puts=False)) is False
 
+    def test_x32_local_ret2libc_put_accepts_canary_plan_without_ctx_canary(self):
+        from autopwn.exp.strategies.canary_ret2libc_put import (
+            CanaryRet2LibcPutX32LocalStrategy,
+        )
+
+        ctx = _ctx_32_canary(has_puts=True)
+        ctx.canary = None
+        ctx.canary_plan = CanaryLeakPlan(
+            method="fmtstr-sequential-x32",
+            leak_payload=b"%x.%x",
+            stack_index=2,
+            buffer_to_canary=64,
+            post_canary_padding=12,
+            word_count=2,
+        )
+        assert CanaryRet2LibcPutX32LocalStrategy().matches(ctx) is True
+
     def test_x32_local_ret2libc_write_requires_has_write(self):
         from autopwn.exp.strategies.canary_ret2libc_write import (
             CanaryRet2LibcWriteX32LocalStrategy,
@@ -403,21 +420,20 @@ class TestCanaryCandidates:
         for s in result:
             assert "canary" not in s.name
 
-    def test_no_system_excludes_canary_ret2system_and_ret2libc(self):
-        """ret2system + ret2libc_* need system; only canary_execve_syscall can match."""
+    def test_no_system_still_allows_canary_ret2libc_put(self):
+        """ret2libc_put resolves system from libc and should still match."""
         from autopwn.exp import candidates
 
         ctx = _ctx_32_canary(padding=80, has_system=False, has_puts=True, has_write=True)
         result = candidates(ctx)
         names = [s.name for s in result]
-        # canary ret2system/ret2libc_put/ret2libc_write all need has_system
+        # ret2system / ret2libc_write still require has_system
         for absent in [
             "canary-ret2system-x32",
-            "canary-ret2libc-put-x32",
             "canary-ret2libc-write-x32",
         ]:
             assert absent not in names
-        # canary_execve_syscall doesn't need system — only thing that should match
+        assert "canary-ret2libc-put-x32" in names
         assert "canary-execve-syscall" in names
 
 
@@ -731,6 +747,54 @@ class TestCanaryRunInvokesRecordSuccess:
         assert "puts_addr" in info_arg.addresses
         # 2 sendlines: stage 1 + stage 2
         assert mock_io.sendline.call_count == 2
+
+    def test_ret2libc_put_x32_local_same_session_flow_completes(self):
+        from autopwn.exp.strategies.canary_ret2libc_put import (
+            CanaryRet2LibcPutX32LocalStrategy,
+        )
+
+        s = CanaryRet2LibcPutX32LocalStrategy()
+        ctx = _ctx_32_canary(padding=80, has_puts=True, has_system=False)
+        ctx.canary = None
+        ctx.canary_plan = CanaryLeakPlan(
+            method="fmtstr-sequential-x32",
+            leak_payload=b"%x.%x.%x",
+            stack_index=2,
+            buffer_to_canary=64,
+            post_canary_padding=12,
+            word_count=3,
+            reentry_payload=b"hello",
+        )
+        fake_libc = MagicMock()
+        fake_libc.symbols = {"puts": 0x00071150, "system": 0x00048150}
+        fake_libc.search.return_value = iter([0x1B75AA])
+        ctx.libc.elf = fake_libc
+
+        mock_io = MagicMock()
+        mock_io.recv.side_effect = [
+            b"You'll never beat my state of the art stack protector!\n",
+            b"Who said gets() is dangerous? Good luck with your BOF attack :P\n",
+            b"hello\nWho said gets() is dangerous? Good luck with your BOF attack :P\n",
+        ]
+        mock_io.recvline.side_effect = [
+            b"1.deadbe00.3\n",
+            b"\xe0\x28\xdb\xf7p\xaf\xd5\xf7\n",
+            b"You'll never beat my state of the art stack protector!\n",
+        ]
+
+        with patch("pwn.process", return_value=mock_io), \
+             patch("autopwn.exp.strategies.canary_ret2libc_put.verify_shell_whoami",
+                  return_value=(True, "root\n")) as mock_verify_shell, \
+             patch("autopwn.report.record_success") as mock_record:
+            assert s.run(ctx) is True
+
+        assert mock_verify_shell.call_count == 1
+        assert mock_record.call_count == 1
+        info_arg = mock_record.call_args[0][0]
+        assert info_arg.exploit_type == "same-session canary ret2libc-put - x32"
+        assert info_arg.id_output == "root\n"
+        assert info_arg.addresses["stack_index"] == 2
+        assert mock_io.sendline.call_count == 4
 
     def test_ret2libc_write_x64_local_reads_8_byte_leak(self):
         from autopwn.exp.strategies.canary_ret2libc_write import (

@@ -116,6 +116,20 @@
   - stripped binary 没有符号时，名称分数直接降为 0，只允许 strings / imports / xref / protection 继续工作
   - 不允许写 challenge-name 特判，不允许写“如果文件名 == canary 就优先 hacked”
 
+#### 3.2.5 same-session canary 泄露计划（v4.1.22 设计）
+- **目标**：把 “detect 阶段泄露一个具体 canary 值，再由 strategy 在新进程里复用” 这类**跨进程失效**的旧模型，升级为“detect 产出一个**同会话可重放的泄露计划**，strategy 在同一进程里执行泄露和利用”。
+- **新增抽象**：
+  - `CanaryLeakPlan`（放在 `autopwn/context.py`）记录 `method / leak_payload / stack_index / buffer_to_canary / post_canary_padding / word_count` 等计划参数
+  - detect 层负责发现并写入 `ctx.canary_plan`
+  - strategy 层消费 `ctx.canary_plan`，在当前 `process()/remote()` 会话中临时得到该进程的 canary，再继续构造最终 payload
+- **依赖方向**：
+  - `Detect` 可以读取 `Recon` 提供的函数/栈帧事实来生成计划
+  - `Strategies` 只读取 `ctx.canary_plan`，**不反向 import detect/recon**
+- **设计收益**：
+  - 规避本地单进程题里“检测进程和利用进程 canary 不一致”的根因
+  - 避免为 `fmt -> second gets -> bof` 这一类题继续堆 challenge 特判
+  - 让 `whoami` 这类真实命令验证可以自然放在同一会话 exploit 成功路径里
+
 ### 3.3 命名约定（v4.0 落地）
 - 项目名：`pwnpasi` (v3.1) → `autopwn` (v4.0)
 - 团队：`@Ba1_Ma0` (v3.1) → `@Minzhi_Zhou` (v4.0, 2026-06-07 rename)

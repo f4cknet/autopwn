@@ -354,6 +354,7 @@ class TestRunDetectPhase:
             probe = mock.MagicMock()
             probe.vulnerable = True
             fmtstr_mod.detect_format_string_vulnerability.return_value = probe
+            canary_mod.discover_same_session_canary_plan.return_value = None
             canary_mod.leakage_canary_value.return_value = [(1, "0x1234")]
             canary_mod.canary_fuzz.return_value = None  # fuzz failure
 
@@ -364,6 +365,32 @@ class TestRunDetectPhase:
         canary_mod.canary_fuzz.assert_called_once_with(
             ctx, ctx.binary.path, ctx.binary.bit, [(1, "0x1234")], max_seconds=7.5
         )
+
+    def test_canary_branch_prefers_same_session_plan_when_available(self, tmp_path):
+        ctx = _make_ctx(tmp_path, bit=32, canary=True)
+        ctx.padding = 80
+
+        with mock.patch("autopwn.orchestrator.detect.detect_binsh") as binsh_mod, \
+             mock.patch("autopwn.orchestrator.detect.detect_overflow"), \
+             mock.patch("autopwn.orchestrator.detect.detect_canary") as canary_mod, \
+             mock.patch("autopwn.orchestrator.detect.detect_fmtstr") as fmtstr_mod:
+            binsh_mod.check_binsh.return_value = False
+            probe = mock.MagicMock()
+            probe.vulnerable = True
+            fmtstr_mod.detect_format_string_vulnerability.return_value = probe
+            canary_mod.discover_same_session_canary_plan.return_value = mock.MagicMock(
+                stack_index=55,
+                buffer_to_canary=64,
+                post_canary_padding=12,
+            )
+
+            run_detect_phase(ctx)
+
+        canary_mod.discover_same_session_canary_plan.assert_called_once_with(
+            ctx, ctx.binary.path, ctx.binary.bit
+        )
+        canary_mod.leakage_canary_value.assert_not_called()
+        canary_mod.canary_fuzz.assert_not_called()
 
     def test_no_canary_skips_canary_branch(self, tmp_path):
         """``stack_canary=False`` skips ``leakage_canary_value`` entirely."""
@@ -405,6 +432,7 @@ class TestRunDetectPhase:
             probe.vulnerable = True
             fmtstr_mod.detect_format_string_vulnerability.return_value = probe
             fmtstr_mod.find_offset.return_value = 7
+            canary_mod.discover_same_session_canary_plan.return_value = None
             canary_mod.leakage_canary_value.return_value = []
             canary_mod.canary_fuzz.return_value = None
             mock_find_bss.return_value = [
@@ -438,6 +466,7 @@ class TestRunDetectPhase:
             fmtstr_mod.find_offset.side_effect = ValueError(
                 "AAAA sentinel not found in leaked stack tokens"
             )
+            canary_mod.discover_same_session_canary_plan.return_value = None
             canary_mod.leakage_canary_value.return_value = []
             canary_mod.canary_fuzz.return_value = None
 

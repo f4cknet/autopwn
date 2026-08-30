@@ -21,7 +21,7 @@ from typing import List
 
 import pytest
 
-from autopwn.context import BinaryInfo, ExploitContext, CanaryInfo, LibcInfo
+from autopwn.context import BinaryInfo, ExploitContext, CanaryInfo, ExploitHint, LibcInfo
 from autopwn.exp import (
     CANARY,
     EXECVE_SYSCALL,
@@ -39,7 +39,7 @@ from autopwn.exp import (
     reset,
 )
 from autopwn.exp import priorities as priorities_mod
-from autopwn.exp.registry import _REGISTRY
+from autopwn.exp.registry import _REGISTRY, ranked_candidates
 
 
 pytestmark = pytest.mark.strategy
@@ -415,6 +415,56 @@ class TestCandidatesIntegration:
         ctx = _ctx(canary=True, has_system=True, binsh_in_binary=True)
         result = candidates(ctx)
         assert [s.name for s in result] == ["canary", "ret2system"]
+
+
+class TestCandidatesEffectivePriority:
+    """v4.1.19: exploit hints may re-rank, but never bypass hard gates."""
+
+    def test_fmtstr_hints_can_promote_fmtstr_write_route(self):
+        fmt = _StubStrat()
+        fmt.name = "fmtstr-x32"
+        fmt.priority = FMTSTR
+
+        ret = _StubStrat()
+        ret.name = "ret2libc-put-x32"
+        ret.priority = RET2LIBC_PUT
+
+        register(ret)
+        register(fmt)
+
+        ctx = _ctx(bit=32)
+        ctx.exploit_hints = [
+            ExploitHint("fmt_then_bof", 40, "fmt then bof"),
+            ExploitHint("canary_leakable", 20, "canary leakable"),
+            ExploitHint("got_writable_no_pie", 15, "got writable"),
+        ]
+
+        ranked = ranked_candidates(ctx)
+        assert [item.strategy.name for item in ranked] == ["fmtstr-x32", "ret2libc-put-x32"]
+        assert ranked[0].effective_priority == 125
+        assert "fmt_then_bof +40" in ranked[0].adjustments
+
+    def test_hint_scoring_does_not_bypass_requires_canary_gate(self):
+        canary = _StubStrat()
+        canary.name = "canary-ret2system-x32"
+        canary.priority = CANARY
+        canary.requires_canary = True
+
+        fmt = _StubStrat()
+        fmt.name = "fmtstr-x32"
+        fmt.priority = FMTSTR
+
+        register(canary)
+        register(fmt)
+
+        ctx = _ctx(bit=32, canary=False)
+        ctx.exploit_hints = [
+            ExploitHint("canary_leakable", 20, "canary leakable"),
+            ExploitHint("fmt_then_bof", 40, "fmt then bof"),
+        ]
+
+        result = candidates(ctx)
+        assert [strategy.name for strategy in result] == ["fmtstr-x32"]
 
 
 # ---------------------------------------------------------------------------

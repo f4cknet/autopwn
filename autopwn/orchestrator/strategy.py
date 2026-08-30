@@ -14,7 +14,7 @@ from autopwn.core.logging import (
     print_info,
     print_warning,
 )
-from autopwn.exp.registry import candidates
+from autopwn.exp.registry import ranked_candidates
 from autopwn.exp import strategies as _strategies  # noqa: F401  -- import to trigger @register
 
 
@@ -33,9 +33,27 @@ def run_strategy_phase(ctx: ExploitContext) -> int:
     Returns:
         ``0`` if any strategy succeeded; ``1`` otherwise.
     """
-    match_list: List = candidates(ctx)
+    ranked = ranked_candidates(ctx)
+    match_list: List = [item.strategy for item in ranked]
     n = len(match_list)
     print_info(f"candidates: {n} strategies matched this context")
+    if ctx.preferred_target is not None:
+        print_info(
+            f"preferred target: {ctx.preferred_target.name} "
+            f"@ 0x{ctx.preferred_target.addr:x} "
+            f"(score={ctx.preferred_target.score})"
+        )
+    if getattr(ctx, "exploit_hints", None):
+        hint_kinds = ", ".join(hint.kind for hint in ctx.exploit_hints)
+        print_info(f"active exploit hints: {hint_kinds}")
+    for item in ranked:
+        adjustment_text = ", ".join(item.adjustments) if item.adjustments else "base"
+        print_info(
+            f"candidate order: {item.strategy.name} "
+            f"base={item.strategy.priority} "
+            f"effective={item.effective_priority} "
+            f"[{adjustment_text}]"
+        )
     for strat in match_list:
         print_info(f"→ trying {strat.name}")
         try:

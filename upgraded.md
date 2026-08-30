@@ -39,8 +39,9 @@
 
 ### 1.2 当前主线
 
-- **当前活动任务**：`v4.1.19` 候选目标打分 + 利用链排序
+- **当前活动任务**：_无（等待新任务）_
 - **待收尾任务**：`v4.1.14` / `v4.1.15` 仍处于 `👀`
+- **最近功能完成**：`v4.1.19` 候选目标打分 + 利用链排序已落地
 - **最近治理完成**：`v4.1.21` 第二轮瘦身 `upgraded.md` 已落地
 - **休眠 backlog**：其余历史未完成任务已下沉到 [`upgraded/backlog.md`](./upgraded/backlog.md)，默认不在主索引逐条展开
 
@@ -84,9 +85,7 @@
 
 ### 3.1 当前活动任务
 
-| ID | 摘要 | 状态 | 预估 | 详情 |
-|---|---|---|---|---|
-| `v4.1.19` | 候选目标打分 + 利用链排序（含 `vuln/vulnerable` 弱信号） | ⏳ | 2h | [`v4.1.19`](./upgraded/v4.1.19.md) |
+_（无 — 2026-08-30）_
 
 ### 3.2 待收尾 / 待自审
 
@@ -99,6 +98,7 @@
 
 | ID | 摘要 | 状态 | 实际 | 详情 |
 |---|---|---|---|---|
+| `v4.1.19` | 候选目标打分 + 利用链排序（含 `vuln/vulnerable` 弱信号） | ✅ | 2h | [`v4.1.19`](./upgraded/v4.1.19.md) |
 | `v4.1.21` | 第二轮瘦身 `upgraded.md` | ✅ | 0.5h | [`v4.1.21`](./upgraded/v4.1.21.md) |
 | `v4.1.20` | `upgraded.md` 第一阶段索引化 | ✅ | 0.5h | [`v4.1.20`](./upgraded/v4.1.20.md) / `c261d49`, `63d4103` |
 | `v4.1.18` | canary 检测 fail-fast 预算阈值 | ✅ | 1h | [`v4.1.18`](./upgraded/v4.1.18.md) / `e19d33f`, `aa46ad9` |
@@ -154,9 +154,9 @@ Core
 
 ### 5.1 近期参考基线（2026-08-30）
 
-- 单元测试：`740 passed, 2 warnings`
+- 单元测试：`750 passed`
 - 相关 integration 子集：`4 passed, 1 skipped, 1 xfailed`
-- 手工 `Challenge/canary`：默认可在 detect 阶段 **20s fail-fast**，不再无界刷 `Starting local process`
+- 手工 `Challenge/canary`：默认可在 detect 阶段看到目标候选 / exploit hints / 排序日志；重复 `SIGABRT` 动态探测会快速 stop-loss，`canary_fuzz` 仍保持 **20s fail-fast**
 
 ---
 

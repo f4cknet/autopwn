@@ -192,7 +192,7 @@ per `AGENTS.md §2.1`：
 | `v4.1.17` | **治理变更：明确“单目录单人迭代”，禁止把最新版本留在旁路 worktree / 平行目录**（Owner 2026-08-30 现场新立任务）：**背景**：v4.1.14 / v4.1.15 / v4.1.16 期间曾临时创建 `autopwn-v4.1.14-pr`、`autopwn-v4.1.15-pr`、`autopwn-v4.1.16-direct-push` 三个平行工作目录，虽然最终已恢复，但暴露出“远端是最新、原始 `autopwn/` 目录不是最新且不干净”的可见性风险。**目标**：把单人主干流程进一步收紧成“**只认原始仓库主目录**”，避免再次出现需要额外恢复动作。**实施方向**：(a) `AGENTS.md` 当前阶段说明、§2.2、§3、§5、§8 明确默认工作目录固定为 `D:\ctf\ctf-env\autopwn` / `/data/autopwn`；(b) `upgraded.md` §1.2、§2.2、§3、§5.1 明确最新已验证版本必须留在主目录，主目录不干净时先备份 / 提交 / 回滚 / 澄清，而不是默认开旁路 worktree；(c) 把额外 worktree / 平行目录仅保留为 **Owner 明确授权的恢复场景例外**，不再视为普通迭代手段。**6 关验收**：① 治理文档提交并 push 到 `main`，且主目录 `D:\ctf\ctf-env\autopwn` 的 HEAD = `origin/main`；② N/A（纯文档任务）；③ N/A；④ N/A；⑤ Owner 自审；⑥ 文档同步（本行 + `AGENTS.md §8` changelog）。**备注**：历史上已出现过的平行目录名称保留在本行说明里，仅作复盘，不作为现行流程示例。| ✅ | 0.3h | **Owner**：@Minzhi_Zhou |
 | `v4.1.18` | **为 canary 检测增加 fail-fast 预算阈值，避免离线自动化长期爆破** | ✅ | 1h | 详情：[`upgraded/v4.1.18.md`](./upgraded/v4.1.18.md)；完成提交：`e19d33f` |
 | `v4.1.19` | **候选目标打分 + 利用链排序**（含 `vuln/vulnerable` 弱名称信号） | ⏳ | 2h | 详情：[`upgraded/v4.1.19.md`](./upgraded/v4.1.19.md)；架构细化随同任务同步到 `refactor.md` |
-| `v4.1.20` | **治理变更：`upgraded.md` 仅保留索引，迭代详情移入 `/upgraded/`** | 🔄 | 0.5h | 详情：[`upgraded/v4.1.20.md`](./upgraded/v4.1.20.md)；纯文档任务，待最终 `commit/push` 后才能改 ✅ |
+| `v4.1.20` | **治理变更：`upgraded.md` 仅保留索引，迭代详情移入 `/upgraded/`** | ✅ | 0.5h | 详情：[`upgraded/v4.1.20.md`](./upgraded/v4.1.20.md)；落地提交：`c261d49` |
 
 ### 3.3 open 阻塞（当前 = 0）
 

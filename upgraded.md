@@ -1,17 +1,15 @@
-# upgraded.md — AutoPwn v4.0+ 迭代索引
+# upgraded.md — AutoPwn v5 迭代索引
 
-> **角色**：v4.0+ 迭代的**主索引与流程入口**——“今天起怎么开发 autopwn”
-> **状态**：`4.0.dev0` 准备 GA（最近治理变更：1.13，2026-08-30）
+> **角色**：v5 的**主索引与流程入口**
+> **状态**：`5.0.dev0` 文档基线已建立（最近完成任务：`v5.0.1`，2026-08-30）
 > **配套文档**：
 > - [`AGENTS.md`](./AGENTS.md) — 项目治理与 AI Agent 约束
-> - [`refactor.md`](./refactor.md) — v4.0 架构演进史（WHY）
-> - [`rebuild.md`](./rebuild.md) — v3.1 → v4.0 重构实施历史
+> - [`v5_prd.md`](./v5_prd.md) — v5 当前需求
+> - [`v5_architecture.md`](./v5_architecture.md) — v5 当前架构
 > - [`upgraded/appendix.md`](./upgraded/appendix.md) — 文件路径 / 工具 / 模板速查
-> - [`upgraded/backlog.md`](./upgraded/backlog.md) — 休眠 backlog 与历史未完成任务归档
-> - [`upgraded/archive_completed.md`](./upgraded/archive_completed.md) — 历史已完成任务归档
-> - [`upgraded/archive_state.md`](./upgraded/archive_state.md) — v4.1.21 前的详细状态快照
+> - [`archive/v4/README.md`](./archive/v4/README.md) — v4 历史归档入口
 >
-> **治理变更 1.12 / 1.13 · 2026-08-30**：`upgraded.md` 现在只保留阅读入口、流程、当前活动任务、待收尾任务、最近完成任务与验证基线；休眠 backlog、详细状态说明、附录速查统一下沉到 `upgraded/*.md`。
+> **治理变更 1.14 · 2026-08-30**：v4 文档已归档到 `archive/v4/`，本文件切换为 v5 当前任务索引。
 
 ---
 
@@ -19,11 +17,11 @@
 
 | 你是谁 | 先看什么 |
 |---|---|
-| **第一次接触本项目** | `AGENTS.md` §1 → 本文件 §1 / §2 / §5 → `refactor.md §3` |
-| **正在做当前任务** | 本文件 §3.1 / §3.2 → 对应 `upgraded/vX.Y.Z.md` → 本文件 §5 |
-| **要续做历史 backlog** | `upgraded/backlog.md` 对应条目 → **先回填** 本文件 §3 + 新建 `upgraded/vX.Y.Z.md` → 再实施 |
+| **第一次接触本项目** | `AGENTS.md` → 本文件 → `v5_prd.md` → `v5_architecture.md §3` |
+| **正在做当前任务** | 本文件 §3.1 → 对应 `upgraded/vX.Y.Z.md` → `v5_architecture.md` |
+| **要续做历史 backlog** | `archive/v4/upgraded/backlog.md` 对应条目 → **先回填** 本文件 §3 + 新建 `upgraded/vX.Y.Z.md` → 再实施 |
 | **只想找文件路径 / 工具脚本** | `upgraded/appendix.md` |
-| **要追溯旧状态 / 历史决策** | `upgraded/archive_state.md` / `upgraded/archive_completed.md` / `rebuild.md` |
+| **要追溯旧状态 / 历史决策** | `archive/v4/README.md` / `archive/v4/upgraded.md` / `archive/v4/rebuild.md` |
 
 ---
 
@@ -31,19 +29,17 @@
 
 ### 1.1 现状快照
 
-- 当前开发版本：`4.0.dev0`，GA 收尾任务仍未完成
+- 当前开发主线：`v5`
 - 当前行为基线：**5/5 SUCCESS**；`v4.1.22` 已为本地 x32 `fmt leak -> second input BOF` 题型补齐 same-session canary 路线，`canary_fuzz()` 仍保留 **20s fail-fast budget** 作为回退
 - 当前治理模式：**单 Owner / 单目录 / 直接 `commit + push` 到 `main`**
 - 主工作目录固定为 `D:\ctf\ctf-env\autopwn`（容器内 `/data/autopwn`）
-- v4.1.21 前的详细状态长说明已迁到 [`upgraded/archive_state.md`](./upgraded/archive_state.md)
+- v4 详细状态、旧 backlog 与历史任务已统一归档到 [`archive/v4/`](./archive/v4/)
 
 ### 1.2 当前主线
 
-- **当前活动任务**：_无（等待新任务）_
-- **待收尾任务**：`v4.1.14` / `v4.1.15` 仍处于 `👀`
-- **最近功能完成**：`v4.1.22` same-session canary 泄露计划 + `whoami` 验证已落地
-- **最近治理完成**：`v4.1.21` 第二轮瘦身 `upgraded.md` 已落地
-- **休眠 backlog**：其余历史未完成任务已下沉到 [`upgraded/backlog.md`](./upgraded/backlog.md)，默认不在主索引逐条展开
+- **当前活动任务**：_无（等待 `v5.0.2`）_
+- **最近完成**：`v5.0.1` 已完成 v4 归档与 v5 文档入口切换
+- **当前非目标**：尚未进入 runtime 架构迁移
 
 ---
 
@@ -54,7 +50,7 @@
 | 来源 | 要求 |
 |---|---|
 | Owner 新需求 | 在 §3 增加任务索引行 + 创建 `upgraded/vX.Y.Z.md` |
-| 续做历史 backlog | 先从 `upgraded/backlog.md` 拆出 `upgraded/vX.Y.Z.md`，并**回填到 §3**，再写代码 |
+| 续做历史 backlog | 先从 `archive/v4/upgraded/backlog.md` 找来源，再**回填到 §3** 并新建 `upgraded/vX.Y.Z.md` |
 | AI Agent 发现 | 不直接实施；先走需求澄清 / 立项 |
 | 历史追溯 | 默认读 archive；非追溯场景不主动进入 |
 
@@ -67,7 +63,7 @@
 ### 2.3 详情文件规则
 
 - **当前活动 / 待收尾任务**：必须有专属 `upgraded/vX.Y.Z.md`，或有明确的 backlog 长记录可追溯
-- **休眠 backlog**：允许先留在 `upgraded/backlog.md`，但**重新开工前必须拆出专属详情文件并回填主索引**
+- **历史 backlog**：默认留在 `archive/v4/upgraded/backlog.md`，但**重新开工前必须拆出专属详情文件并回填主索引**
 - 详情文件至少包含：背景、目标、范围、实施方向、风险、6 关验收
 - `commit body` 若存在，需同时引用 `upgraded.md §3` 与对应详情文件
 
@@ -81,7 +77,7 @@
 
 ## 3. 任务看板
 
-> **现行规则**：主索引只保留**当前活动任务**、**待收尾任务**与**最近完成任务**。休眠 backlog 与更早历史统一放在 `upgraded/*.md`；若某个历史 backlog 要续做，必须先回填到本节。
+> **现行规则**：主索引只保留**v5 当前活动任务**；v4 历史任务与 backlog 统一放在 `archive/v4/`。
 
 ### 3.1 当前活动任务
 
@@ -89,25 +85,20 @@ _（无 — 2026-08-30）_
 
 ### 3.2 待收尾 / 待自审
 
-| ID | 摘要 | 状态 | 预估 | 详情 |
-|---|---|---|---|---|
-| `v4.1.14` | `ctf_env` 工具链兼容层 | 👀 | 1h | [`backlog`](./upgraded/backlog.md#v4_1_14) |
-| `v4.1.15` | x64 三参 write leak primitive 缺第三参数控制 | 👀 | 1.5h | [`backlog`](./upgraded/backlog.md#v4_1_15) |
+_（无 — 已归档到 `archive/v4/`）_
 
 ### 3.3 最近完成
 
 | ID | 摘要 | 状态 | 实际 | 详情 |
 |---|---|---|---|---|
-| `v4.1.22` | same-session canary 泄露计划 + `whoami` 作为 shell 成功判定 | ✅ | 2h | [`v4.1.22`](./upgraded/v4.1.22.md) |
-| `v4.1.19` | 候选目标打分 + 利用链排序（含 `vuln/vulnerable` 弱信号） | ✅ | 2h | [`v4.1.19`](./upgraded/v4.1.19.md) |
-| `v4.1.21` | 第二轮瘦身 `upgraded.md` | ✅ | 0.5h | [`v4.1.21`](./upgraded/v4.1.21.md) |
-| `v4.1.20` | `upgraded.md` 第一阶段索引化 | ✅ | 0.5h | [`v4.1.20`](./upgraded/v4.1.20.md) / `c261d49`, `63d4103` |
+| `v5.0.1` | 治理变更实施 + 文档落盘 | ✅ | 1h | [`v5.0.1`](./upgraded/v5.0.1.md) |
+| `v4 archive` | 历史完成任务与 backlog 已统一迁入 `archive/v4/` | ✅ | - | [`archive/v4/README.md`](./archive/v4/README.md) |
 
 ### 3.4 历史入口
 
-- 休眠 backlog（当前收纳 14 条历史未完成任务）：[`upgraded/backlog.md`](./upgraded/backlog.md)
-- 历史已完成任务快照：[`upgraded/archive_completed.md`](./upgraded/archive_completed.md)
-- v4.1.21 前的详细状态说明：[`upgraded/archive_state.md`](./upgraded/archive_state.md)
+- v4 归档入口：[`archive/v4/README.md`](./archive/v4/README.md)
+- v4 历史索引：[`archive/v4/upgraded.md`](./archive/v4/upgraded.md)
+- v4 任务详情 / backlog / 状态：[`archive/v4/upgraded/`](./archive/v4/upgraded/)
 
 ### 3.5 open 阻塞
 
@@ -117,18 +108,22 @@ _（无 — 2026-08-30）_
 
 ## 4. 当前架构（精简）
 
-详细 WHY 与分层演进：见 [`refactor.md §3`](./refactor.md)
+详细当前架构：见 [`v5_architecture.md §3`](./v5_architecture.md)
 
 ```text
 CLI / Orchestrator
         ↓
-Strategies
+Planner
         ↓
-Primitives
+Executor / Legacy Strategy Adapter
         ↓
-Detect
+Capability IR
         ↓
-Recon
+Interaction Graph
+        ↓
+Scope / Lifetime Facts
+        ↓
+Recon / Detect Producers
         ↓
 Core
 ```
@@ -162,10 +157,10 @@ Core
 
 ## 6. 速查入口
 
+- 当前需求：[`v5_prd.md`](./v5_prd.md)
+- 当前架构：[`v5_architecture.md`](./v5_architecture.md)
 - 文件路径 / 工具 / 模板：[`upgraded/appendix.md`](./upgraded/appendix.md)
-- 休眠 backlog：[`upgraded/backlog.md`](./upgraded/backlog.md)
-- 历史已完成任务：[`upgraded/archive_completed.md`](./upgraded/archive_completed.md)
-- 详细状态长说明：[`upgraded/archive_state.md`](./upgraded/archive_state.md)
+- v4 归档入口：[`archive/v4/README.md`](./archive/v4/README.md)
 - 修复记录索引：[`bugs/fix.md`](./bugs/fix.md)
 
 ---

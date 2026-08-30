@@ -1,6 +1,6 @@
-<div align="center">
+﻿<div align="center">
 
-# 🚀 AutoPwn v4.0 (refactor in progress)
+# 🚀 AutoPwn (v5 migration in progress)
 
 **Professional Automated Binary Exploitation Framework**
 
@@ -8,7 +8,7 @@
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-red.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/f4cknet/autopwn)
-[![Tests](https://img.shields.io/badge/tests-604%20passed-brightgreen.svg)](.github/workflows/ci.yml)
+[![Tests](https://img.shields.io/badge/tests-757%20passed-brightgreen.svg)](.github/workflows/ci.yml)
 
 
 </div>
@@ -54,15 +54,19 @@ AutoPwn is a **cutting-edge automated binary exploitation framework** designed f
 ### Installation
 
 ```bash
-# Install from source (recommended for v4.0.dev0)
+# Install from source (recommended current flow)
 git clone https://github.com/f4cknet/autopwn.git
 cd autopwn
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
 
 # After install, both entry points are available:
 #   - `autopwn` (PEP 517 console_scripts)
 #   - `python -m autopwn` (PEP 338)
 ```
+
+Recommended in `ctf_env` or a Linux shell: create / reuse `.venv`, activate it, then install in editable mode.
 
 The `pip install -e .` step will:
 - Install Python dependencies (pwntools, LibcSearcher, ropper, python-docx, pyelftools)
@@ -249,7 +253,7 @@ We welcome contributions! Whether it's:
 - 📚 Documentation improvements
 - 🔧 Performance optimizations
 
-**开发流程**：先读 [`upgraded.md`](./upgraded.md)（v4.0+ 迭代流程 + 任务看板）→ 必读 [`AGENTS.md`](./AGENTS.md) §1 铁律 → 了解 v4.0 架构 [`refactor.md §3`](./refactor.md) → 看重构历史 [`rebuild.md §3`](./rebuild.md) 阶段总结。
+**开发流程**：先读 [`AGENTS.md`](./AGENTS.md) → [`upgraded.md`](./upgraded.md) → [`v5_prd.md`](./v5_prd.md) → [`v5_architecture.md`](./v5_architecture.md)；若需追溯旧决策，再看 [`archive/v4/README.md`](./archive/v4/README.md)。
 
 ---
 
@@ -274,3 +278,4 @@ AutoPwn is designed for **educational purposes** and **authorized security testi
 *Star ⭐ this repo if AutoPwn helped you pwn some binaries!*
 
 </div>
+

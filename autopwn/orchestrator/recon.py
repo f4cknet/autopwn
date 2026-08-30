@@ -18,9 +18,10 @@ from autopwn.core.fs import set_permission
 from autopwn.core.logging import (
     print_info,
     print_section_header,
+    print_success,
     print_warning,
 )
-from autopwn.recon import checksec, frame, libc, plt, rop
+from autopwn.recon import checksec, frame, libc, plt, rop, targets
 
 
 def run_recon_phase(ctx: ExploitContext) -> None:
@@ -92,6 +93,25 @@ def run_recon_phase(ctx: ExploitContext) -> None:
     ctx.frame_context = frame.extract_frame_context(program, bit) or frame.FrameContext(
         required_ret_count=1,
     )
+
+    print_section_header("TARGET CANDIDATE DISCOVERY")
+    candidate_list = targets.collect_target_candidates(ctx, program)
+    ctx.set_target_candidates(candidate_list)
+    if not candidate_list:
+        print_warning("no high-signal internal target candidates identified")
+    else:
+        top = ctx.preferred_target
+        print_success(
+            f"preferred target: {top.name} @ 0x{top.addr:x} "
+            f"(score={top.score})"
+        )
+        for candidate in candidate_list[:5]:
+            reason_text = "; ".join(candidate.reasons[:3]) or "no extra reasons"
+            print_info(
+                f"candidate {candidate.name} @ 0x{candidate.addr:x} "
+                f"score={candidate.score} xrefs={candidate.xref_count} "
+                f"[{reason_text}]"
+            )
 
 
 __all__ = ["run_recon_phase"]

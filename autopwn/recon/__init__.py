@@ -56,6 +56,11 @@ from autopwn.recon.frame import (
     compute_required_ret_count as compute_required_ret_count,
     extract_frame_context as extract_frame_context,
 )
+from autopwn.recon.targets import (
+    DiscoveredFunction as DiscoveredFunction,
+    inspect_functions as inspect_functions,
+    collect_target_candidates as collect_target_candidates,
+)
 
 __all__: list[str] = [
     "collect",
@@ -72,4 +77,7 @@ __all__: list[str] = [
     "FrameContext",
     "compute_required_ret_count",
     "extract_frame_context",
+    "DiscoveredFunction",
+    "inspect_functions",
+    "collect_target_candidates",
 ]

@@ -88,6 +88,34 @@
 - 9 字段（6 required + 3 optional）的 dataclass
 - 替代 v3.1 的 `exploit_info['x']` dict 读
 
+#### 3.2.4 候选目标发现与利用链排序（v4.1.19 设计）
+- **目标**：把“修某一道题里的 `hacked()` / `win()`”抽象成**通用的候选目标打分 + 利用链排序**，避免继续围绕 challenge 名称或单个符号名做热补丁。
+- **上下文扩展**（仍放在 `autopwn/context.py`，不打破现有分层）：
+  - `FunctionCandidate`：记录 `name / addr / score / reasons / string_hits / imported_calls / xref_count`
+  - `ExploitHint`：记录 `kind / score_delta / reason`
+  - `ExploitContext` 增加 `target_candidates: list[FunctionCandidate]`、`exploit_hints: list[ExploitHint]`、`preferred_target`
+- **信号生产者**：
+  - `recon/*` 负责收集**目标函数候选**：符号名、字符串引用、导入函数调用、XREF 稀疏度、是否可在 no-PIE 下直接 ret2win
+  - `detect/*` 负责收集**利用链提示**：如 `fmtstr_sink`、`second_input_sink`、`fmt_then_bof`、`canary_leakable`、`got_writable_no_pie`
+- **信号消费者**：
+  - `exp/registry.py::candidates(ctx)` 不再只看 strategy 静态 priority；改为 `base priority + hint bonus - penalty`
+  - strategy 的**硬前提**（如必须已识别 fmtstr / 必须有 canary / 必须有 x64 gadget）仍保持为 gate，评分只负责排序，不负责越权放行
+- **最小可落地评分规则**（首版常量，可后续调参）：
+  - 目标函数：强名称命中 `win/flag/getflag/print_flag/hack/hacked/backdoor/secret/admin/shell/pwn` `+20`（名称总上限 `+30`）
+  - 目标函数：弱名称命中 `vuln/vulnerable` `+5`（只视为“可能是入口/可疑函数”，不得单独作为 win 证据）
+  - 目标函数：引用 `flag`、`/bin/sh`、`you win`、`how did you get in here` 等字符串 `+15`
+  - 目标函数：调用 `system/execve` `+25`；调用 `open/read/puts/printf` 这类“读出/展示”API `+10`
+  - 目标函数：`xref_count <= 1` 或 hidden/backdoor 风格孤立函数 `+10`
+  - 目标函数：No PIE 下可直接 ret2win `+5`
+  - 利用链：检测到 `fmtstr` 且其后仍有独立 overflow/read sink，给“先 leak 再利用”路线 `+40`
+  - 利用链：`stack canary + fmt leak candidate` 再给 `+20`
+  - 利用链：`Partial RELRO + No PIE + fmt write` 给 GOT overwrite 路线 `+15`
+  - 利用链：本地单进程、无 fork 证据时，对 blind `canary_fuzz` 路线 `-30`
+- **护栏**：
+  - 关键词只是**加分项**，不是漏洞证明；不得因为命中 `hack`/`flag` 就跳过前置检测
+  - stripped binary 没有符号时，名称分数直接降为 0，只允许 strings / imports / xref / protection 继续工作
+  - 不允许写 challenge-name 特判，不允许写“如果文件名 == canary 就优先 hacked”
+
 ### 3.3 命名约定（v4.0 落地）
 - 项目名：`pwnpasi` (v3.1) → `autopwn` (v4.0)
 - 团队：`@Ba1_Ma0` (v3.1) → `@Minzhi_Zhou` (v4.0, 2026-06-07 rename)

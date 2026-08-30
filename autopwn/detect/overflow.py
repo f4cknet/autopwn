@@ -76,6 +76,8 @@ _LEA_RE = re.compile(r"lea\s+(-?0x[0-9a-f]+)\(%[er]bp\)")
 
 # v3.1's "dangerous read" function set (L596, L706).
 _DANGEROUS_CALLS = ("read", "gets", "fgets", "scanf")
+_REPEATED_CRASH_STOP_CODES = frozenset({-6})
+DEFAULT_MAX_SAME_CRASH = 8
 
 
 def test_stack_overflow(
@@ -83,6 +85,7 @@ def test_stack_overflow(
     program: Path,
     bit: int,
     max_test: int = 10000,
+    max_same_crash: int = DEFAULT_MAX_SAME_CRASH,
 ) -> int:
     """Dynamically probe the target binary for a stack-overflow offset.
 
@@ -107,6 +110,12 @@ def test_stack_overflow(
         max_test: maximum number of A's to try before giving up.
             Default 10000 matches v3.1.  Unit tests should override
             to a small value (e.g. 32) to keep CI tractable.
+        max_same_crash: fail-fast threshold for repeated non-SIGSEGV
+            crashes (currently SIGABRT).  Once the same crash code
+            is observed this many times consecutively, the dynamic
+            probe aborts and lets the caller fall back to static
+            analysis.  Added in v4.1.19 for canary-protected
+            binaries that spam immediate ``SIGABRT``.
 
     Returns:
         The discovered padding (``final_padding = padding + 1`` where
@@ -149,6 +158,8 @@ def test_stack_overflow(
         is a quick canary check.
     """
     padding = 0
+    last_crash_rc: int | None = None
+    same_crash_count = 0
     while padding < max_test:
         input_data = "A" * (padding + 1)
         try:
@@ -175,6 +186,25 @@ def test_stack_overflow(
                 final_padding = padding
                 ctx.padding = final_padding
                 return final_padding
+
+            if proc.returncode in _REPEATED_CRASH_STOP_CODES:
+                if proc.returncode == last_crash_rc:
+                    same_crash_count += 1
+                else:
+                    last_crash_rc = proc.returncode
+                    same_crash_count = 1
+                if max_same_crash > 0 and same_crash_count >= max_same_crash:
+                    ctx.log(
+                        "dynamic overflow probe saw repeated "
+                        f"{proc.returncode} crashes {same_crash_count} times; "
+                        "stopping early and falling back to static analysis",
+                        level="warning",
+                    )
+                    ctx.padding = 0
+                    return 0
+            else:
+                last_crash_rc = None
+                same_crash_count = 0
 
         except subprocess.TimeoutExpired:
             proc.kill()

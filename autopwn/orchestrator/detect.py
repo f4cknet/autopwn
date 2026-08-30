@@ -18,6 +18,7 @@ from autopwn.core.runner import run_objdump_disasm
 from autopwn.detect import binsh as detect_binsh
 from autopwn.detect import canary as detect_canary
 from autopwn.detect import fmtstr as detect_fmtstr
+from autopwn.detect import hints as detect_hints
 from autopwn.detect import overflow as detect_overflow
 
 
@@ -45,6 +46,8 @@ def run_detect_phase(ctx: ExploitContext) -> None:
         ``None`` — mutates ``ctx`` in place.
     """
     program = ctx.binary.path
+
+    _record_hints(ctx, detect_hints.collect_static_hints(ctx, program))
 
     print_section_header("PADDING CALCULATION")
 
@@ -90,6 +93,14 @@ def run_detect_phase(ctx: ExploitContext) -> None:
         print_warning("canary protection is enabled")
         print_info("testing for format string vulnerability to bypass canary")
         probe = detect_fmtstr.detect_format_string_vulnerability(ctx, program)
+        _record_hints(
+            ctx,
+            detect_hints.collect_fmtstr_hints(
+                ctx,
+                program,
+                fmtstr_vulnerable=probe.vulnerable,
+            ),
+        )
         if probe.vulnerable:
             print_success("format string vulnerability detected")
             print_info("attempting to leak canary value")
@@ -127,6 +138,28 @@ def run_detect_phase(ctx: ExploitContext) -> None:
 
     print_section_header("EXPLOITATION PHASE")
     print_info("initializing exploitation attempts")
+
+
+def _record_hints(ctx: ExploitContext, hints) -> None:
+    """Persist and log newly discovered exploit hints."""
+    new_hints = []
+    before = len(ctx.exploit_hints)
+    for hint in hints:
+        existing = ctx.add_exploit_hint(
+            hint.kind,
+            hint.score_delta,
+            hint.reason,
+        )
+        if len(ctx.exploit_hints) > before + len(new_hints):
+            new_hints.append(existing)
+
+    if not new_hints:
+        return
+
+    print_section_header("EXPLOIT HINTS")
+    for hint in new_hints:
+        delta = f"{hint.score_delta:+d}"
+        print_info(f"{hint.kind} ({delta}) — {hint.reason}")
 
 
 __all__ = ["run_detect_phase"]

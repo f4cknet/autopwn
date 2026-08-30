@@ -42,6 +42,10 @@ from autopwn.detect.canary import (
 from autopwn.detect.binsh import (
     check_binsh as check_binsh,
 )
+from autopwn.detect.hints import (
+    collect_static_hints as collect_static_hints,
+    collect_fmtstr_hints as collect_fmtstr_hints,
+)
 
 __all__: list[str] = [
     "test_stack_overflow",
@@ -52,4 +56,6 @@ __all__: list[str] = [
     "leakage_canary_value",
     "canary_fuzz",
     "check_binsh",
+    "collect_static_hints",
+    "collect_fmtstr_hints",
 ]

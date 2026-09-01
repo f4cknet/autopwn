@@ -137,3 +137,24 @@ Core
 - Capability IR：已落地
 - Planner：最小入口已落地
 - Verifier：仍以 legacy / 分散实现为主
+
+### 5.4 需求 → 架构映射
+
+| 需求 ID | 设计落点 | 说明 |
+|---|---|---|
+| RQ-01 | Core / Scope / FactStore | 统一事实与生命周期 |
+| RQ-02 | InteractionGraph / InteractionStep / Event | 统一交互表达 |
+| RQ-03 | Capability IR | 抽象可组合能力 |
+| RQ-04 | Planner / scoring | 生成与排序 plan |
+| RQ-05 | Executor / Legacy Adapter | 兼容旧 strategy |
+| RQ-06 | Verifier | 统一成功判定 |
+| RQ-07 | Logging / trace / explain | 记录选择原因与证据链 |
+| RQ-08 | tests / CI / container runner | 约束验证环境与回归门禁 |
+| RQ-09 | AGENTS / upgraded / doc links | 维持治理与文档一致性 |
+| RQ-10 | migration policy | 增量迁移与回退 |
+
+### 5.5 设计约束
+
+- 不在架构文档里维护独立任务状态
+- 架构文档只回答“怎么做”，不承担进度看板职责
+- 所有状态以 `upgraded.md` 为准，架构只保留需求 ID 与模块映射

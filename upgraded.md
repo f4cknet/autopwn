@@ -38,7 +38,7 @@
 ### 1.2 当前主线
 
 - **当前活动任务**：_无_
-- **最近完成**：`v5.0.5` 已完成最小 planner 入口，并通过容器验证；**当前非目标**：统一 verifier 执行层仍未迁移
+- **最近完成**：`v5.0.7` 已完成需求清单细化、架构映射与 TODO 管理原则收敛；**当前非目标**：统一 verifier 执行层仍未迁移
 - **当前非目标**：统一 verifier 主体迁移仍未完成；legacy strategy adapter 继续作为过渡层
 
 ---
@@ -89,14 +89,15 @@ _（无 — 已归档到 `archive/v4/`）_
 
 ### 3.3 最近完成
 
-| ID | 摘要 | 状态 | 实际 | 详情 |
-|---|---|---|---|---|
+| ID | 摘要 | 状态 | 实际 | Owner | 详情 |
+|---|---|---|---|---|---|
+| `v5.0.7` | 细化需求清单，补齐架构映射，并收敛 TODO 管理原则 | ✅ | 2h | @Minzhi_Zhou | [`v5.0.7`](./upgraded/v5.0.7.md) |
 | `v5.0.5` | 建立最小 planner 入口，把 capability 链收束为可执行 plan | ✅ | 3h | @Minzhi_Zhou | [`v5.0.5`](./upgraded/v5.0.5.md) |
-| `v5.0.4` | 建立能力层基础层，把 facts + interaction 映射为可解释 exploit capability | ✅ | 3h | [`v5.0.4`](./upgraded/v5.0.4.md) |
-| `v5.0.3` | 建立交互图基础层，并接入 same-session canary 与 2-stage ret2libc 路线 | ✅ | 3h | [`v5.0.3`](./upgraded/v5.0.3.md) |
-| `v5.0.2` | 建立事实作用域 / 生命周期基础层，并接入首批 detect / strategy producer | ✅ | 3h | [`v5.0.2`](./upgraded/v5.0.2.md) |
-| `v5.0.1` | 治理变更实施 + 文档落盘 | ✅ | 1h | [`v5.0.1`](./upgraded/v5.0.1.md) |
-| `v4 archive` | 历史完成任务与 backlog 已统一迁入 `archive/v4/` | ✅ | - | [`archive/v4/README.md`](./archive/v4/README.md) |
+| `v5.0.4` | 建立能力层基础层，把 facts + interaction 映射为可解释 exploit capability | ✅ | 3h | @Minzhi_Zhou | [`v5.0.4`](./upgraded/v5.0.4.md) |
+| `v5.0.3` | 建立交互图基础层，并接入 same-session canary 与 2-stage ret2libc 路线 | ✅ | 3h | @Minzhi_Zhou | [`v5.0.3`](./upgraded/v5.0.3.md) |
+| `v5.0.2` | 建立事实作用域 / 生命周期基础层，并接入首批 detect / strategy producer | ✅ | 3h | @Minzhi_Zhou | [`v5.0.2`](./upgraded/v5.0.2.md) |
+| `v5.0.1` | 治理变更实施 + 文档落盘 | ✅ | 1h | @Minzhi_Zhou | [`v5.0.1`](./upgraded/v5.0.1.md) |
+| `v4 archive` | 历史完成任务与 backlog 已统一迁入 `archive/v4/` | ✅ | - | @Minzhi_Zhou | [`archive/v4/README.md`](./archive/v4/README.md) |
 
 ### 3.4 历史入口
 

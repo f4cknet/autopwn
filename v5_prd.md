@@ -88,3 +88,36 @@ AutoPwn v5 面向 CTF / 离线训练场景，目标是把自动化 pwn 从“str
 2. `v5_prd.md` 负责“为什么做 / 做到什么算完”
 3. `v5_architecture.md` 负责“怎么做 / 模块怎么拆”
 4. 每个新需求都必须先立任务，再写实现
+
+## 9. 需求清单（详细）
+
+> 说明：本节只定义“需求与验收”，不承载执行状态；执行状态统一以 `upgraded.md` 为准。
+
+| ID | 需求 | 优先级 | 验收标准 | 架构映射 |
+|---|---|---:|---|---|
+| RQ-01 | 事实层标准化 | P0 | binary / process / session / attempt 四类作用域稳定存在，且兼容旧字段视图 | `v5_architecture.md §3.3` / `§5.4` |
+| RQ-02 | 交互图显式化 | P0 | 能描述 leak → reentry → execute → verify 的多阶段路径 | `v5_architecture.md §3.5` / `§5.4` |
+| RQ-03 | 能力层抽象 | P0 | leak / write / control / exec / verify 可组合、可追溯、可解释 | `v5_architecture.md §3.7` / `§5.4` |
+| RQ-04 | Planner 入口 | P0 | 能基于前提、风险、作用域兼容性生成并排序候选 plan | `v5_architecture.md §3.1` / `§5.4` |
+| RQ-05 | Legacy 兼容执行 | P0 | 旧 strategy 在迁移期仍可作为 adapter / fallback 正常运行 | `v5_architecture.md §3.2` / `§5.4` |
+| RQ-06 | 统一验证口径 | P0 | success verdict 可由统一 verifier 输出，而非分散判定 | `v5_architecture.md §3.1` / `§5.4` |
+| RQ-07 | 可解释性与可追溯 | P1 | 每次选择 plan 都能回溯到事实、交互、能力、评分 | `v5_architecture.md §5.4` |
+| RQ-08 | 回归与验证基线 | P0 | 所有验证仍只在 `ctf_env` 容器内完成，且不回退现有基线 | `AGENTS.md` / `upgraded.md §5` |
+| RQ-09 | 文档/治理一致性 | P0 | 需求、架构、执行状态三者引用一致，不出现双份状态漂移 | `AGENTS.md` / `upgraded.md` |
+| RQ-10 | 增量迁移 | P0 | 新层可逐步接管，旧层保持可用，禁止一次性重写 | `v5_architecture.md §4` |
+
+### 9.1 非功能需求
+
+- 可维护：模块边界清晰，禁止互相反向依赖
+- 可验证：每个阶段都能在真实 `Challenge/` 上验收
+- 可回退：迁移失败时能落回 legacy adapter
+- 可解释：plan、capability、verifier 都能输出原因
+- 可移植：默认只在 `ctf_env` 容器内验证
+
+## 10. Todo 管理原则
+
+- **只保留一个可变状态源**：`upgraded.md`
+- `v5_prd.md` 只放“需求清单 + 验收标准”
+- `v5_architecture.md` 只放“模块拆分 + 需求映射”
+- 不建议在 PRD 和 architecture 里各放一份独立可编辑的 TODO 状态；那样容易漂移
+- 若必须展示进度，只在文档中引用 `upgraded.md` 的任务 ID 和状态

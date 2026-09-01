@@ -5,16 +5,17 @@
 > **当前阶段说明（治理变更 1.10 / 1.11 / 1.12 / 1.13 / 1.14 · 2026-08-30）**：
 > 本项目当前为**个人独立开发**，默认流程 = **直接 `commit + push` 到 `main`**，**不要求 PR**。
 > 默认工作目录固定为 **`D:\ctf\ctf-env\autopwn`**（容器内对应 **`/data/autopwn`**）；除非 Owner 明确授权的恢复 / 取证场景，**不创建额外 `autopwn-*` 平行目录、`git worktree` 或旁路工作树**。
-> 自治理变更 **1.14** 起，**v4 文档体系统一归档到 `archive/v4/`**；当前规范文档切换为 **`AGENTS.md` + `upgraded.md` + `v5_prd.md` + `v5_architecture.md`**。
+> 自治理变更 **1.14** 起，**v4 文档体系统一归档到 `archive/v4/`**；当前规范文档切换为 **`AGENTS.md` + `upgraded.md` + `v5_prd.md` + `v5_todo.md` + `v5_architecture.md`**。
 >
 > **AI Agent session 启动必读**：
 >
 > 1. 完整读 `AGENTS.md`（本文件）
 > 2. 读 `upgraded.md`（主索引）
 > 3. 读 `v5_prd.md`
-> 4. 读 `v5_architecture.md §3`（目标架构）
-> 5. 读当前任务对应的 `upgraded/vX.Y.Z.md`（需求详情）
-> 6. 仅在历史追溯 / 审计时，再读 `archive/v4/*`
+> 4. 读 `v5_todo.md`（独立待办 / 路线图）
+> 5. 读 `v5_architecture.md §3`（目标架构）
+> 6. 读当前任务对应的 `upgraded/vX.Y.Z.md`（需求详情）
+> 7. 仅在历史追溯 / 审计时，再读 `archive/v4/*`
 
 ---
 
@@ -120,7 +121,7 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 - 把 Owner 的目标翻译成可执行的需求、架构、迭代计划与任务索引
 - 主动补齐不清晰的 PRD / 架构 / 验收文档
 - 在实施前先做范围拆分、风险提示与验证计划
-- 输出必须可回链到 `v5_prd.md`、`v5_architecture.md`、`upgraded.md §3` 和对应任务详情
+- 输出必须可回链到 `v5_prd.md`、`v5_todo.md`、`v5_architecture.md`、`upgraded.md §3` 和对应任务详情
 - 若需求模糊，先澄清或补文档，再进入实现
 
 任何参与本项目的 AI Agent **在每个 session 启动时必须按序执行**：
@@ -156,7 +157,8 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 
 | 你想做什么 | 查 |
 |---|---|
-| 怎么开发 autopwn | `AGENTS.md` + `upgraded.md` + `v5_prd.md` + `v5_architecture.md` + 当前任务 `upgraded/vX.Y.Z.md` |
+| 怎么开发 autopwn | `AGENTS.md` + `upgraded.md` + `v5_prd.md` + `v5_todo.md` + `v5_architecture.md` + 当前任务 `upgraded/vX.Y.Z.md` |
+| 看长期待办 / 路线图 | `v5_todo.md` |
 | 找当前任务 | `upgraded.md §3` + 对应 `upgraded/vX.Y.Z.md` |
 | 看当前需求边界 | `v5_prd.md` |
 | 看当前架构 | `v5_architecture.md §3` |
@@ -249,8 +251,9 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 | 2026-08-30 | **1.14** | **v4 文档统一归档，v5 文档体系生效**：`refactor.md` / `rebuild.md` / v4 历史索引迁入 `archive/v4/`；当前规范切换为 `AGENTS.md` + `upgraded.md` + `v5_prd.md` + `v5_architecture.md` |
 | 2026-09-01 | **1.15** | **补充验证环境铁律**：所有单元 / 集成 / smoke / 手工验收仅可在 `ctf_env` 容器内执行（Python 3.12.11）；宿主机仅用于编辑、查看与 `git` 操作 |
 | 2026-09-01 | **1.16** | **补充 AI Agent 角色定位**：默认将项目内 AI Agent 定位为“高水平全栈开发工程师 + 产品经理”，负责需求拆解、架构协同、迭代计划与进度透明化 |
+| 2026-09-01 | **1.17** | **拆分独立 TODO 文档**：新增 `v5_todo.md` 作为长期待办 / 路线图文档；`upgraded.md` 保留执行板职责，`v5_prd.md` / `v5_architecture.md` 仅保留需求与设计 |
 
-> 完整 changelog 1.0-1.16 见 git log。
+> 完整 changelog 1.0-1.17 见 git log。
 
 ---
 

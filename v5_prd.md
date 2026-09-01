@@ -66,6 +66,7 @@ AutoPwn v5 面向 CTF / 离线训练场景，目标是把自动化 pwn 从“str
 ## 7. 需求 / 架构 / 迭代 / 进度 分工
 
 - `v5_prd.md`：定义为什么做、做什么、做到什么程度算完成
+- `v5_todo.md`：独立的长期待办 / 路线图文档，定义下一步先做什么
 - `v5_architecture.md`：定义怎么做、模块怎么拆、依赖怎么流
 - `upgraded.md`：定义当前做到哪一步、谁在做、最近完成了什么
 - `upgraded/vX.Y.Z.md`：定义单次迭代的背景、范围、风险、验收
@@ -79,6 +80,9 @@ AutoPwn v5 面向 CTF / 离线训练场景，目标是把自动化 pwn 从“str
 | v5.0.3 | 完成 | InteractionGraph | 多阶段交互显式化 |
 | v5.0.4 | 完成 | Capability IR | `Capability` 建模 |
 | v5.0.5 | 完成 | Planner 入口 | plan 生成与 legacy adapter 并存 |
+| v5.0.6 | 完成 | 角色定位与文档路线图 | `AGENTS.md` / `v5_prd.md` / `v5_architecture.md` |
+| v5.0.7 | 完成 | 需求清单细化与架构映射 | `v5_prd.md` / `v5_architecture.md` |
+| v5.0.8 | 完成 | 独立 TODO 文档与执行板分层 | `v5_todo.md` / `upgraded.md` |
 | 下一步候选 | 待立项 | Unified verifier | 统一成功判定与回归口径 |
 | 后续候选 | 待立项 | Legacy adapter 收敛 | fallback 逐步缩小 |
 
@@ -116,8 +120,8 @@ AutoPwn v5 面向 CTF / 离线训练场景，目标是把自动化 pwn 从“str
 
 ## 10. Todo 管理原则
 
-- **只保留一个可变状态源**：`upgraded.md`
+- `v5_todo.md` 是独立的长期待办 / 路线图文档
+- `upgraded.md` 是执行板，记录当前活动、待收尾与最近完成
 - `v5_prd.md` 只放“需求清单 + 验收标准”
 - `v5_architecture.md` 只放“模块拆分 + 需求映射”
-- 不建议在 PRD 和 architecture 里各放一份独立可编辑的 TODO 状态；那样容易漂移
-- 若必须展示进度，只在文档中引用 `upgraded.md` 的任务 ID 和状态
+- 不在 PRD / architecture 里维护独立 TODO 状态，避免漂移

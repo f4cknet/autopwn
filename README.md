@@ -253,7 +253,7 @@ We welcome contributions! Whether it's:
 - 📚 Documentation improvements
 - 🔧 Performance optimizations
 
-**开发流程**：先读 [`AGENTS.md`](./AGENTS.md) → [`upgraded.md`](./upgraded.md) → [`v5_prd.md`](./v5_prd.md) → [`v5_architecture.md`](./v5_architecture.md)；若需追溯旧决策，再看 [`archive/v4/README.md`](./archive/v4/README.md)。
+**开发流程**：先读 [`AGENTS.md`](./AGENTS.md) → [`upgraded.md`](./upgraded.md) → [`v5_prd.md`](./v5_prd.md) → [`v5_todo.md`](./v5_todo.md) → [`v5_architecture.md`](./v5_architecture.md)；若需追溯旧决策，再看 [`archive/v4/README.md`](./archive/v4/README.md)。
 
 ---
 

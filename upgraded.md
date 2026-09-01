@@ -1,10 +1,11 @@
 # upgraded.md — AutoPwn v5 迭代索引
 
 > **角色**：v5 的**主索引与流程入口**
-> **状态**：`5.0.dev0` 文档基线已建立（当前活动任务：_无_；最近完成：`v5.0.5`，2026-09-01）
+> **状态**：`5.0.dev0` 文档基线已建立（当前活动任务：_无_；最近完成：`v5.0.8`，2026-09-01）
 > **配套文档**：
 > - [`AGENTS.md`](./AGENTS.md) — 项目治理与 AI Agent 约束
 > - [`v5_prd.md`](./v5_prd.md) — v5 当前需求
+> - [`v5_todo.md`](./v5_todo.md) — v5 独立待办 / 路线图
 > - [`v5_architecture.md`](./v5_architecture.md) — v5 当前架构
 > - [`upgraded/appendix.md`](./upgraded/appendix.md) — 文件路径 / 工具 / 模板速查
 > - [`archive/v4/README.md`](./archive/v4/README.md) — v4 历史归档入口
@@ -17,8 +18,9 @@
 
 | 你是谁 | 先看什么 |
 |---|---|
-| **第一次接触本项目** | `AGENTS.md` → 本文件 → `v5_prd.md` → `v5_architecture.md §3` |
+| **第一次接触本项目** | `AGENTS.md` → 本文件 → `v5_prd.md` → `v5_todo.md` → `v5_architecture.md §3` |
 | **正在做当前任务** | 本文件 §3.1 → 对应 `upgraded/vX.Y.Z.md` → `v5_architecture.md` |
+| **要看长期待办 / 路线图** | `v5_todo.md` |
 | **要续做历史 backlog** | `archive/v4/upgraded/backlog.md` 对应条目 → **先回填** 本文件 §3 + 新建 `upgraded/vX.Y.Z.md` → 再实施 |
 | **只想找文件路径 / 工具脚本** | `upgraded/appendix.md` |
 | **要追溯旧状态 / 历史决策** | `archive/v4/README.md` / `archive/v4/upgraded.md` / `archive/v4/rebuild.md` |
@@ -38,7 +40,7 @@
 ### 1.2 当前主线
 
 - **当前活动任务**：_无_
-- **最近完成**：`v5.0.7` 已完成需求清单细化、架构映射与 TODO 管理原则收敛；**当前非目标**：统一 verifier 执行层仍未迁移
+- **最近完成**：`v5.0.8` 已建立独立 TODO 文档并补全任务板入口；**当前非目标**：统一 verifier 执行层仍未迁移
 - **当前非目标**：统一 verifier 主体迁移仍未完成；legacy strategy adapter 继续作为过渡层
 
 ---
@@ -49,8 +51,8 @@
 
 | 来源 | 要求 |
 |---|---|
-| Owner 新需求 | 在 §3 增加任务索引行 + 创建 `upgraded/vX.Y.Z.md` |
-| 续做历史 backlog | 先从 `archive/v4/upgraded/backlog.md` 找来源，再**回填到 §3** 并新建 `upgraded/vX.Y.Z.md` |
+| Owner 新需求 | 先更新 `v5_todo.md`（必要时同步 `v5_prd.md` / `v5_architecture.md`），再在 §3 增加任务索引行 + 创建 `upgraded/vX.Y.Z.md` |
+| 续做历史 backlog | 先从 `v5_todo.md` 或 `archive/v4/upgraded/backlog.md` 找来源，再**回填到 §3** 并新建 `upgraded/vX.Y.Z.md` |
 | AI Agent 发现 | 不直接实施；先走需求澄清 / 立项 |
 | 历史追溯 | 默认读 archive；非追溯场景不主动进入 |
 
@@ -91,6 +93,7 @@ _（无 — 已归档到 `archive/v4/`）_
 
 | ID | 摘要 | 状态 | 实际 | Owner | 详情 |
 |---|---|---|---|---|---|
+| `v5.0.8` | 建立独立 TODO 文档，分离长期待办与执行板职责 | ✅ | 1h | @Minzhi_Zhou | [`v5.0.8`](./upgraded/v5.0.8.md) |
 | `v5.0.7` | 细化需求清单，补齐架构映射，并收敛 TODO 管理原则 | ✅ | 2h | @Minzhi_Zhou | [`v5.0.7`](./upgraded/v5.0.7.md) |
 | `v5.0.5` | 建立最小 planner 入口，把 capability 链收束为可执行 plan | ✅ | 3h | @Minzhi_Zhou | [`v5.0.5`](./upgraded/v5.0.5.md) |
 | `v5.0.4` | 建立能力层基础层，把 facts + interaction 映射为可解释 exploit capability | ✅ | 3h | @Minzhi_Zhou | [`v5.0.4`](./upgraded/v5.0.4.md) |
@@ -108,6 +111,11 @@ _（无 — 已归档到 `archive/v4/`）_
 ### 3.5 open 阻塞
 
 _（无 — 2026-08-30）_
+
+### 3.6 独立 TODO 入口
+
+- [`v5_todo.md`](./v5_todo.md) — 长期待办 / 路线图 / 优先级
+- 当前优先级：统一 verifier → explain trace → regression gate → legacy adapter 收敛
 
 ---
 

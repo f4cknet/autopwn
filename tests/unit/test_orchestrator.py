@@ -32,7 +32,7 @@ from unittest import mock
 
 import pytest
 
-from autopwn.context import BinaryInfo, ExploitContext, FactScope, LibcInfo
+from autopwn.context import BinaryInfo, CapabilityKind, ExploitContext, FactScope, LibcInfo, make_capability
 from autopwn.exp import ExploitStrategy, candidates, register, reset
 from autopwn.orchestrator import (
     run,
@@ -217,6 +217,31 @@ class TestRunStrategyPhase:
         # Highest-priority strategy was tried first
         assert order[0] == "p30"
         assert set(order) == {"p10", "p20", "p30"}
+
+    def test_strategy_phase_records_selected_plan(self, clean_registry, tmp_path):
+        ctx = _make_ctx(tmp_path)
+
+        class _Cap(_StubStrategy):
+            def describe_capabilities(self, inner_ctx):
+                return (
+                    make_capability(
+                        "demo.exec",
+                        CapabilityKind.EXEC,
+                        strategy_name=self.name,
+                        graph_name="demo",
+                        fact_keys=("overflow.padding",),
+                        scope=FactScope.BINARY,
+                        step_ids=("exec",),
+                        provides=("shell.spawned",),
+                    ),
+                )
+
+        cap = _Cap("cap", priority=50, returns=False)
+        register(cap)
+        ctx.set_fact("overflow.padding", 64, scope=FactScope.BINARY, source="test.padding")
+
+        run_strategy_phase(ctx)
+        assert ctx.get_fact("planner.selected", scope=FactScope.ATTEMPT) == "plan.cap"
 
 
 # ---------------------------------------------------------------------------

@@ -124,6 +124,8 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 
 > **环境约束补充**（治理变更 1.9 · 2026-08-30）：`ctf-env` 对应的 Docker 环境容器名是 **`ctf_env`**，宿主机 **`D:\ctf\ctf-env\`** 挂载到容器 **`/data`**。仓库工作目录 **`D:\ctf\ctf-env\autopwn`** 在容器中对应 **`/data/autopwn`**。
 
+> **验证环境铁律**：所有单元 / 集成 / smoke / 手工验收都只能在 **`ctf_env`** 容器内执行，容器内默认 Python 版本为 **3.12.11**；宿主机 Windows shell 仅用于编辑、查看与 `git` 操作，不作为验证环境。
+
 **硬性约束**：
 
 | ❌ 禁止 | ✅ 允许 |
@@ -235,6 +237,7 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 | 2026-08-30 | **1.12** | **`upgraded.md` 索引化**：`upgraded.md` 只保留阅读入口 / 任务索引 / 验收基线；每次迭代的需求详情、范围、风险、验收记录下沉到 `upgraded/vX.Y.Z.md`；历史未迁移条目按“新建即分文件，触达即迁移”逐步收敛 |
 | 2026-08-30 | **1.13** | **`upgraded.md` 第二轮瘦身**：主文档只保留当前活动任务、待收尾任务、最近完成任务、流程与验证基线；休眠 backlog 下沉到 `upgraded/backlog.md`，详细状态说明下沉到 `upgraded/archive_state.md`，文件路径/工具/模板下沉到 `upgraded/appendix.md`；AI Agent 非追溯场景默认不读历史归档 |
 | 2026-08-30 | **1.14** | **v4 文档统一归档，v5 文档体系生效**：`refactor.md` / `rebuild.md` / v4 历史索引迁入 `archive/v4/`；当前规范切换为 `AGENTS.md` + `upgraded.md` + `v5_prd.md` + `v5_architecture.md` |
+| 2026-09-01 | **1.15** | **补充验证环境铁律**：所有单元 / 集成 / smoke / 手工验收仅可在 `ctf_env` 容器内执行（Python 3.12.11）；宿主机仅用于编辑、查看与 `git` 操作 |
 
 > 完整 changelog 1.0-1.6 见 git log。
 

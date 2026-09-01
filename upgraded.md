@@ -1,7 +1,7 @@
 # upgraded.md — AutoPwn v5 迭代索引
 
 > **角色**：v5 的**主索引与流程入口**
-> **状态**：`5.0.dev0` 文档基线已建立（当前活动任务：无；最近完成：`v5.0.4`，2026-08-30）
+> **状态**：`5.0.dev0` 文档基线已建立（当前活动任务：_无_；最近完成：`v5.0.5`，2026-09-01）
 > **配套文档**：
 > - [`AGENTS.md`](./AGENTS.md) — 项目治理与 AI Agent 约束
 > - [`v5_prd.md`](./v5_prd.md) — v5 当前需求
@@ -38,7 +38,7 @@
 ### 1.2 当前主线
 
 - **当前活动任务**：_无_
-- **最近完成**：`v5.0.4` 已建立能力层基础层，并把 same-session canary 与 2-stage ret2libc-write 路线映射为 capability 链
+- **最近完成**：`v5.0.5` 已完成最小 planner 入口，并通过容器验证；**当前非目标**：统一 verifier 执行层仍未迁移
 - **当前非目标**：尚未进入 planner / unified verifier 主体迁移
 
 ---
@@ -81,7 +81,7 @@
 
 ### 3.1 当前活动任务
 
-_（无 — 2026-08-30）_
+_（无 — 2026-09-01）_
 
 ### 3.2 待收尾 / 待自审
 
@@ -91,6 +91,7 @@ _（无 — 已归档到 `archive/v4/`）_
 
 | ID | 摘要 | 状态 | 实际 | 详情 |
 |---|---|---|---|---|
+| `v5.0.5` | 建立最小 planner 入口，把 capability 链收束为可执行 plan | ✅ | 3h | @Minzhi_Zhou | [`v5.0.5`](./upgraded/v5.0.5.md) |
 | `v5.0.4` | 建立能力层基础层，把 facts + interaction 映射为可解释 exploit capability | ✅ | 3h | [`v5.0.4`](./upgraded/v5.0.4.md) |
 | `v5.0.3` | 建立交互图基础层，并接入 same-session canary 与 2-stage ret2libc 路线 | ✅ | 3h | [`v5.0.3`](./upgraded/v5.0.3.md) |
 | `v5.0.2` | 建立事实作用域 / 生命周期基础层，并接入首批 detect / strategy producer | ✅ | 3h | [`v5.0.2`](./upgraded/v5.0.2.md) |

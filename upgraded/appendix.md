@@ -90,15 +90,16 @@ Challenge/
 
 ## 3. 工具脚本
 
+所有验证命令都默认在 `ctf_env` 容器内执行（Python 3.12.11）。
+
 | 工具 | 用途 | 何时用 |
 |---|---|---|
-| `pytest tests/unit/ -m "not integration"` | 单元测试 | 每次改代码后必跑（关 2） |
-| `pytest tests/integration/` | 集成测试 | 改 orchestrator / strategy 时必跑（关 3） |
-| `AUTOPWN_VERIFY_TIMEOUT=60 bash scripts/run_verify.sh <tag> canary fmtstr1 level3_x64 pie rip` | 5-binary 串行 smoke | 改 autopwn 行为时必跑（关 4） |
-| `bash scripts/baseline_lock.sh lock logs/v<X>-smoke` | 锁 baseline log 文件 hash | 发布前 / 长期 baseline 保留时 |
-| `python3 tools/check_recon_coverage.py` | recon 95% 覆盖 gate | CI 跑（关 2 增强） |
-| `python3 tools/check_public_api_coverage.py` | primitive 80% 覆盖 gate | CI 跑（关 2 增强） |
-
+| `docker exec ctf_env /bin/bash -lc "cd /data/autopwn && ./.venv/bin/python -m pytest tests/unit/ -m 'not integration' -q"` | 单元测试 | 每次改代码后必跑（关 2） |
+| `docker exec ctf_env /bin/bash -lc "cd /data/autopwn && ./.venv/bin/python -m pytest tests/integration/ -q"` | 集成测试 | 改 orchestrator / strategy 时必跑（关 3） |
+| `docker exec ctf_env /bin/bash -lc "cd /data/autopwn && AUTOPWN_VERIFY_TIMEOUT=60 bash scripts/run_verify.sh <tag> canary fmtstr1 level3_x64 pie rip"` | 5-binary 串行 smoke | 改 autopwn 行为时必跑（关 4） |
+| `docker exec ctf_env /bin/bash -lc "cd /data/autopwn && bash scripts/baseline_lock.sh lock logs/v<X>-smoke"` | 锁 baseline log 文件 hash | 发布前 / 长期 baseline 留存时 |
+| `docker exec ctf_env /bin/bash -lc "cd /data/autopwn && ./.venv/bin/python tools/check_recon_coverage.py"` | recon 95% 覆盖 gate | CI 跑（关 2 增强） |
+| `docker exec ctf_env /bin/bash -lc "cd /data/autopwn && ./.venv/bin/python tools/check_public_api_coverage.py"` | primitive 80% 覆盖 gate | CI 跑（关 2 增强） |
 ## 4. 任务 ID 模板（v4.0+）
 
 ```text

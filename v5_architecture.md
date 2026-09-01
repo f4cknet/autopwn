@@ -1,6 +1,7 @@
 ﻿# AutoPwn v5 Architecture
 
-> **角色**：v5 当前架构规范。
+> **角色**：v5 当前架构规范与迁移路线图。
+> **用途**：定义模块边界、数据流与迁移顺序。
 > **状态**：生效中（2026-08-30）
 
 ## 1. 原则
@@ -106,3 +107,33 @@ Core
 - 保持单向依赖，禁止反向 import
 - 迁移期间维持当前 5/5 SUCCESS 基线
 - 禁止 challenge-name 特判回潮
+
+## 5. 迭代落地顺序与当前状态
+
+### 5.1 模块边界
+
+| 层 | 职责 | 输入 | 输出 |
+|---|---|---|---|
+| Core | 基础事实与检测原语 | target / runtime signal | facts / evidence |
+| Scope / Lifetime | 生命周期控制 | facts / events | scoped facts |
+| Interaction Graph | 交互路径建模 | facts / runtime steps | graph / route events |
+| Capability IR | 将事实与交互抽象为能力 | facts + graph | capability set |
+| Planner | 计划排序与选择 | capability set | ordered plan |
+| Executor / Legacy Adapter | 执行与兼容 | selected plan | runtime events |
+| Verifier | 成功判定 | runtime output | verdict |
+
+### 5.2 迁移顺序
+
+1. 先事实与作用域
+2. 再交互图
+3. 再能力层
+4. 再 planner
+5. 最后统一 verifier 和收敛 legacy adapter
+
+### 5.3 当前状态
+
+- Facts / Scope：已落地
+- InteractionGraph：已落地
+- Capability IR：已落地
+- Planner：最小入口已落地
+- Verifier：仍以 legacy / 分散实现为主

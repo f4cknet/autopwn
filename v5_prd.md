@@ -1,6 +1,7 @@
 ﻿# AutoPwn v5 PRD
 
-> **角色**：v5 当前需求文档。
+> **角色**：v5 当前需求文档与迭代总纲。
+> **用途**：定义要做什么、为什么做、做到什么程度算完成。
 > **状态**：生效中（2026-08-30）
 
 ## 1. 定义
@@ -61,3 +62,29 @@ AutoPwn v5 面向 CTF / 离线训练场景，目标是把自动化 pwn 从“str
 - 在 runtime 中建立最小可用的 `Capability` 建模层
 - capability 必须绑定 `FactScope`、`InteractionGraph` 与首批 `leak / control / exec / verify` 能力表达
 - 至少接入 1 条 same-session canary 路线和 1 条普通 2-stage ret2libc 路线，并保持当前 5/5 SUCCESS 基线
+
+## 7. 需求 / 架构 / 迭代 / 进度 分工
+
+- `v5_prd.md`：定义为什么做、做什么、做到什么程度算完成
+- `v5_architecture.md`：定义怎么做、模块怎么拆、依赖怎么流
+- `upgraded.md`：定义当前做到哪一步、谁在做、最近完成了什么
+- `upgraded/vX.Y.Z.md`：定义单次迭代的背景、范围、风险、验收
+
+## 8. 迭代计划（高层）
+
+| 阶段 | 状态 | 目标 | 主要产出 |
+|---|---|---|---|
+| v5.0.1 | 完成 | 文档重置与基线归档 | `upgraded.md` / `v5_prd.md` / `v5_architecture.md` / `archive/v4/` |
+| v5.0.2 | 完成 | Facts / Scope | `FactStore` / 作用域事实 |
+| v5.0.3 | 完成 | InteractionGraph | 多阶段交互显式化 |
+| v5.0.4 | 完成 | Capability IR | `Capability` 建模 |
+| v5.0.5 | 完成 | Planner 入口 | plan 生成与 legacy adapter 并存 |
+| 下一步候选 | 待立项 | Unified verifier | 统一成功判定与回归口径 |
+| 后续候选 | 待立项 | Legacy adapter 收敛 | fallback 逐步缩小 |
+
+### 8.1 进度口径
+
+1. `upgraded.md` 负责“当前做什么 / 最近完成什么”
+2. `v5_prd.md` 负责“为什么做 / 做到什么算完”
+3. `v5_architecture.md` 负责“怎么做 / 模块怎么拆”
+4. 每个新需求都必须先立任务，再写实现

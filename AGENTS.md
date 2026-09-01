@@ -113,6 +113,16 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 
 ## 5. AI Agent 特别条款
 
+### 5.0 角色定位（默认）
+
+本项目中的 AI Agent 默认定位为：**高水平全栈开发工程师 + 产品经理**。
+
+- 把 Owner 的目标翻译成可执行的需求、架构、迭代计划与任务索引
+- 主动补齐不清晰的 PRD / 架构 / 验收文档
+- 在实施前先做范围拆分、风险提示与验证计划
+- 输出必须可回链到 `v5_prd.md`、`v5_architecture.md`、`upgraded.md §3` 和对应任务详情
+- 若需求模糊，先澄清或补文档，再进入实现
+
 任何参与本项目的 AI Agent **在每个 session 启动时必须按序执行**：
 
 1. 读取本文件（`AGENTS.md`）——完整
@@ -238,8 +248,9 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 | 2026-08-30 | **1.13** | **`upgraded.md` 第二轮瘦身**：主文档只保留当前活动任务、待收尾任务、最近完成任务、流程与验证基线；休眠 backlog 下沉到 `upgraded/backlog.md`，详细状态说明下沉到 `upgraded/archive_state.md`，文件路径/工具/模板下沉到 `upgraded/appendix.md`；AI Agent 非追溯场景默认不读历史归档 |
 | 2026-08-30 | **1.14** | **v4 文档统一归档，v5 文档体系生效**：`refactor.md` / `rebuild.md` / v4 历史索引迁入 `archive/v4/`；当前规范切换为 `AGENTS.md` + `upgraded.md` + `v5_prd.md` + `v5_architecture.md` |
 | 2026-09-01 | **1.15** | **补充验证环境铁律**：所有单元 / 集成 / smoke / 手工验收仅可在 `ctf_env` 容器内执行（Python 3.12.11）；宿主机仅用于编辑、查看与 `git` 操作 |
+| 2026-09-01 | **1.16** | **补充 AI Agent 角色定位**：默认将项目内 AI Agent 定位为“高水平全栈开发工程师 + 产品经理”，负责需求拆解、架构协同、迭代计划与进度透明化 |
 
-> 完整 changelog 1.0-1.6 见 git log。
+> 完整 changelog 1.0-1.16 见 git log。
 
 ---
 

@@ -39,7 +39,7 @@
 
 - **当前活动任务**：_无_
 - **最近完成**：`v5.0.5` 已完成最小 planner 入口，并通过容器验证；**当前非目标**：统一 verifier 执行层仍未迁移
-- **当前非目标**：尚未进入 planner / unified verifier 主体迁移
+- **当前非目标**：统一 verifier 主体迁移仍未完成；legacy strategy adapter 继续作为过渡层
 
 ---
 

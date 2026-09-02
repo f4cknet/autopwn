@@ -85,6 +85,18 @@ class _FakeTube:
 class TestVerifyShellEchoPwned:
     """``verify_shell`` must send ``echo PWNED`` and look for ``PWNED``."""
 
+    def test_verify_with_probe_reuses_shared_driver(self):
+        from autopwn.core.shell_verify import VerifyProbe, verify_with_probe
+
+        def _parse(_io, _matched: bytes, _timeout: float) -> str | None:
+            return "OK\n"
+
+        tube = _FakeTube(recv_queue=[b"$ ", b"OK\n"])
+        probe = VerifyProbe("toy", b"echo OK", b"OK", _parse)
+        ok, out = verify_with_probe(tube, probe, timeout=2.0)
+        assert ok is True
+        assert out == "OK\n"
+
     def test_sends_echo_pwned_and_returns_token_on_match(self):
         from autopwn.core.shell_verify import verify_shell
 

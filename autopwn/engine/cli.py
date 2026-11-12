@@ -141,6 +141,8 @@ def main(argv=None) -> int:
     ap.add_argument("--ld", default=None)
     ap.add_argument("--host", default=None, help="远程地址（配合 --port 使用）")
     ap.add_argument("--port", type=int, default=None)
+    ap.add_argument("--ssl", action="store_true", help="远程走 TLS（stunnel 类平台）")
+    ap.add_argument("--sni", default=None, help="TLS SNI，默认等于 --host")
     ap.add_argument("--max-attempts", type=int, default=80)
     ap.add_argument("--budget", type=float, default=240.0, help="单题时间预算（秒）")
     ap.add_argument("--facts-only", action="store_true", help="只打印静态事实，不执行利用")
@@ -176,6 +178,7 @@ def main(argv=None) -> int:
     for path, workdir in targets:
         ch = Challenge(path, libc=args.libc, ld=args.ld,
                        host=args.host, port=args.port,
+                       ssl=args.ssl, sni=args.sni,
                        workdir=workdir or None)
         print(f"[*] {ch.name}: {ch.bin_src}")
         if args.facts_only:

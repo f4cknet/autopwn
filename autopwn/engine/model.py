@@ -51,7 +51,8 @@ class Challenge:
 
     def __init__(self, path: str, libc: Optional[str] = None,
                  ld: Optional[str] = None, workdir: Optional[str] = None,
-                 host: Optional[str] = None, port: Optional[int] = None):
+                 host: Optional[str] = None, port: Optional[int] = None,
+                 ssl: bool = False, sni: Optional[str] = None):
         self.src = os.path.abspath(path)
         if os.path.isdir(self.src):
             self.dir = self.src
@@ -70,6 +71,8 @@ class Challenge:
         self.run_bin = os.path.join(self.run_dir, "bin")
         self.host = host
         self.port = port
+        self.ssl = bool(ssl)
+        self.sni = sni or (host if ssl else None)
         self._prepared = False
 
         self.elf: ELF = None          # type: ignore

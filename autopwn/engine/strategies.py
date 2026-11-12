@@ -293,7 +293,11 @@ def s_ret2csu(ch: Challenge, f: Facts) -> Iterable[Plan]:
 # --------------------------------------------------------------------------- 5b. ret2libc（write 三参数泄漏）
 def s_ret2libc_write(ch: Challenge, f: Facts) -> Iterable[Plan]:
     """没有 puts 只有 write 时：write(1, got, 8) 泄漏，再回 main 打 system。"""
-    if ch.elf.pie or ch.libc_elf is None or ch.plt("puts"):
+    if ch.elf.pie or ch.libc_elf is None:
+        return
+    # 远程 socket 下 stdout 是「全缓冲」，puts 泄漏会卡在缓冲区里发不出来；
+    # 只有本地 tty（行缓冲）才优先用 puts。远程一律先试 write。
+    if ch.plt("puts") and not getattr(ch, "host", None):
         return
     write = ch.plt("write")
     main = ch.var("main")

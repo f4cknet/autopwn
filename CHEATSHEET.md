@@ -35,10 +35,25 @@ solve.bat bench
 ## 3. 打远程（比赛现场）
 
 ```bat
+:: 明文
+solve.bat pwn --host 1.2.3.4 --port 31337
+
+:: 平台套了 TLS（dasctf 这类 tcp-ctf2 域名基本都要）
+solve.bat pwn --host xxxx.tcp-ctf2.dasctf.com --port 9999 --ssl --sni xxxx.tcp-ctf2.dasctf.com
+
+:: ret2libc 必须给远程同版本 libc
 solve.bat pwn --host 1.2.3.4 --port 31337 --libc libc.so.6
 ```
 
-> 远程打 ret2libc 必须给**题目同版本 libc**，否则算出来的 system 地址是错的。
+成功时会直接打印证据：`=> SHELL ret2win uid=1000(ctf)`。
+
+### 远程 ≠ 本地的三个坑（引擎已处理 / 需你注意）
+
+| 坑 | 表现 | 处理 |
+|---|---|---|
+| stdout 全缓冲 | 本地能看到的提示语/泄漏，远程一条都不来 | 引擎在远程模式优先用 `write(1,got,8)` 泄漏（系统调用，不经 stdio 缓冲）；只在本地才用 `puts` |
+| libc 版本不同 | ret2libc 算出的 system 地址非法，直接崩 | **必须** `--libc` 给远程同版本；没有就别用 ret2libc 这条路 |
+| 每次尝试是新连接 | 平台限速/超时杀连接 | 远程模式每次尝试间隔 0.25s；单题预算内不狂刷 |
 
 ## 4. 其他入口
 

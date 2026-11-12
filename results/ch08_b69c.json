@@ -40,35 +40,35 @@
       "strategy": "ret2win",
       "desc": "jump to system(\"/bin/sh\") @ 0x400726 off=24 align=0",
       "ok": false,
-      "elapsed": 0.51,
+      "elapsed": 0.5,
       "tail": "**********************************\n*     Welcome to the BJDCTF!     *\n* And Welcome to the bin world!  *\n*  Let's try to pwn the world!   *\n* Please told me u answer loudly!*\n[+]Are u ready?\n[+]Please input the length of your name:\nOops,u name is too long!\n"
     },
     {
       "strategy": "ret2win",
       "desc": "jump to system(\"/bin/sh\") @ 0x400726 off=24 align=1",
       "ok": false,
-      "elapsed": 0.51,
+      "elapsed": 0.5,
       "tail": "**********************************\n*     Welcome to the BJDCTF!     *\n* And Welcome to the bin world!  *\n*  Let's try to pwn the world!   *\n* Please told me u answer loudly!*\n[+]Are u ready?\n[+]Please input the length of your name:\nOops,u name is too long!\n"
     },
     {
       "strategy": "ret2win",
       "desc": "jump to system(\"/bin/sh\") @ 0x400726 off=24 align=0",
       "ok": false,
-      "elapsed": 0.51,
+      "elapsed": 0.5,
       "tail": "**********************************\n*     Welcome to the BJDCTF!     *\n* And Welcome to the bin world!  *\n*  Let's try to pwn the world!   *\n* Please told me u answer loudly!*\n[+]Are u ready?\n[+]Please input the length of your name:\nOops,u name is too long!\n"
     },
     {
       "strategy": "ret2win",
       "desc": "jump to system(\"/bin/sh\") @ 0x400726 off=24 align=1",
       "ok": false,
-      "elapsed": 0.51,
+      "elapsed": 0.5,
       "tail": "**********************************\n*     Welcome to the BJDCTF!     *\n* And Welcome to the bin world!  *\n*  Let's try to pwn the world!   *\n* Please told me u answer loudly!*\n[+]Are u ready?\n[+]Please input the length of your name:\nOops,u name is too long!\n"
     },
     {
       "strategy": "ret2win",
       "desc": "jump to system(\"/bin/sh\") @ 0x400726 off=24 align=0",
       "ok": false,
-      "elapsed": 0.47,
+      "elapsed": 0.46,
       "tail": "**********************************\n*     Welcome to the BJDCTF!     *\n* And Welcome to the bin world!  *\n*  Let's try to pwn the world!   *\n* Please told me u answer loudly!*\n[+]Are u ready?\n[+]Please input the length of your name:\n[+]What's u name?\n"
     },
     {

@@ -2,7 +2,7 @@
   "name": "ch13_zip76c8",
   "ok": true,
   "strategy": "ret2libc",
-  "detail": "libc_base=0x70ad8ae7f000 system=0x70ad8aed1290 binsh=0x70ad8b0335bd",
+  "detail": "libc_base=0x774b594e7000 system=0x774b59539290 binsh=0x774b5969b5bd",
   "elapsed": 1.9,
   "attempt_count": 1,
   "flag_only": false,
@@ -40,7 +40,7 @@
       "desc": "leak puts@0x601018 off=40",
       "ok": true,
       "elapsed": 1.58,
-      "tail": "Glad to meet you again!What u bring to me this time?\nOk.See you!\n 4ð­p\nGlad to meet you again!What u bring to me this time?\nOk.See you!\nPWNED_42\nroot\nuid=0(root) gid=0(root) groups=0(root)\n"
+      "tail": "Glad to meet you again!What u bring to me this time?\nOk.See you!\n ´VYKw\nGlad to meet you again!What u bring to me this time?\nOk.See you!\nPWNED_42\nroot\nuid=0(root) gid=0(root) groups=0(root)\n"
     }
   ],
   "error": ""

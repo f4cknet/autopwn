@@ -39,8 +39,9 @@ def spawn(ch: Challenge):
     if ch.host:
         from pwn import remote
         return remote(ch.host, ch.port, timeout=5)
-    return process([ch.run_bin], cwd=ch.dir, env=_env(ch),
-                   stdin=-1, stdout=-1, stderr=-1)
+    # 不显式传 stdin/stdout/stderr：pwnlib 默认给三者共用同一个 PTY，
+    # 显式传 -1 会把子进程 stdout 接到父进程，tube 里读不到任何输出。
+    return process([ch.run_bin], cwd=ch.dir, env=_env(ch))
 
 
 def run_capture(ch: Challenge, stdin_data: bytes = b"", timeout: float = 2.0) -> bytes:

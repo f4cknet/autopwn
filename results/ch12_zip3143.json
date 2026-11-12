@@ -46,11 +46,53 @@
       "strategy": "ret2win",
       "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
       "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
+      "ok": false,
       "elapsed": 0.54,
       "tail": "Welcome!May I have your name?\nOk.See you!\n"
     },
     {
       "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
       "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
       "ok": false,
       "elapsed": 0.53,
@@ -59,71 +101,29 @@
     {
       "strategy": "ret2win",
       "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
+      "ok": false,
+      "elapsed": 0.58,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
       "ok": false,
       "elapsed": 0.54,
-      "tail": "Welcome!May I have your name?\nOk.See you!\n"
-    },
-    {
-      "strategy": "ret2win",
-      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
-      "ok": false,
-      "elapsed": 0.53,
-      "tail": "Welcome!May I have your name?\nOk.See you!\n"
-    },
-    {
-      "strategy": "ret2win",
-      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
-      "ok": false,
-      "elapsed": 0.53,
-      "tail": "Welcome!May I have your name?\nOk.See you!\n"
-    },
-    {
-      "strategy": "ret2win",
-      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
-      "ok": false,
-      "elapsed": 0.53,
-      "tail": "Welcome!May I have your name?\nOk.See you!\n"
-    },
-    {
-      "strategy": "ret2win",
-      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
-      "ok": false,
-      "elapsed": 0.53,
-      "tail": "Welcome!May I have your name?\nOk.See you!\n"
-    },
-    {
-      "strategy": "ret2win",
-      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
-      "ok": false,
-      "elapsed": 0.53,
-      "tail": "Welcome!May I have your name?\nOk.See you!\n"
-    },
-    {
-      "strategy": "ret2win",
-      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
-      "ok": false,
-      "elapsed": 0.53,
-      "tail": "Welcome!May I have your name?\nOk.See you!\n"
-    },
-    {
-      "strategy": "ret2win",
-      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
-      "ok": false,
-      "elapsed": 0.53,
-      "tail": "Welcome!May I have your name?\nOk.See you!\n"
-    },
-    {
-      "strategy": "ret2win",
-      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
-      "ok": false,
-      "elapsed": 0.53,
-      "tail": "Welcome!May I have your name?\nOk.See you!\n"
-    },
-    {
-      "strategy": "ret2win",
-      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
-      "ok": false,
-      "elapsed": 0.53,
       "tail": "Welcome!May I have your name?\nOk.See you!\n"
     },
     {

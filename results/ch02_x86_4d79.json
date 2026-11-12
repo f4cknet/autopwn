@@ -39,7 +39,7 @@
       "desc": "fmt atoi@got -> system@plt arg#10 write=short",
       "ok": true,
       "elapsed": 1.02,
-      "tail": "                                                                                   x                                                                                                                                       caaa4À\u0004\b7À\u0004\b\nîÕÿyour passwd:PWNED_42\nroot\nuid=0(root) gid=0(root) groups=0(root)\n"
+      "tail": "                                                                                   8                                                                                                                                       caaa4À\u0004\b7À\u0004\b\nÝÿyour passwd:PWNED_42\nroot\nuid=0(root) gid=0(root) groups=0(root)\n"
     }
   ],
   "error": ""

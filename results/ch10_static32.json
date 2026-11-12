@@ -3,7 +3,7 @@
   "ok": true,
   "strategy": "ret2sys_write",
   "detail": "gets(0x80ec180) -> main -> execve off=45",
-  "elapsed": 3.9,
+  "elapsed": 4.1,
   "attempt_count": 1,
   "flag_only": false,
   "facts": {
@@ -41,7 +41,7 @@
       "strategy": "ret2sys_write",
       "desc": "gets(0x80ec180) -> main -> execve off=45",
       "ok": true,
-      "elapsed": 1.17,
+      "elapsed": 1.18,
       "tail": "PWNED_42\nroot\nuid=0(root) gid=0(root) groups=0(root)\n"
     }
   ],

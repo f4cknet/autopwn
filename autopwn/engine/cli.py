@@ -126,6 +126,15 @@ def _collect(target: str, workroot: str) -> list[tuple[str, str]]:
     return out
 
 
+def _norm_target(t: str) -> str:
+    """把 Windows 写法（bench\\ch01、D:////...////autopwn////bench////ch01）换成容器内路径。"""
+    t = t.replace("\\", "/")
+    root = os.environ.get("AUTOPWN_HOST_ROOT", "").replace("\\", "/").rstrip("/")
+    if root and t.lower().startswith(root.lower()):
+        t = "/work" + t[len(root):]
+    return t
+
+
 def _md5_of(ch: Challenge) -> str:
     try:
         with open(ch.bin_src, "rb") as fh:
@@ -146,10 +155,17 @@ def main(argv=None) -> int:
     ap.add_argument("--max-attempts", type=int, default=80)
     ap.add_argument("--budget", type=float, default=240.0, help="单题时间预算（秒）")
     ap.add_argument("--facts-only", action="store_true", help="只打印静态事实，不执行利用")
+    ap.add_argument("--cmd", action="append", default=None, metavar="CMD",
+                    help="拿到 shell 后执行的命令，可重复：--cmd \"cat /flag\" --cmd ls")
     ap.add_argument("--no-dedup", action="store_true", help="按 md5 去重（默认开启）")
     ap.add_argument("--out", default="results")
     ap.add_argument("-q", "--quiet", action="store_true")
     args = ap.parse_args(argv)
+    args.target = _norm_target(args.target)
+    # CMD 会把 --cmd "ls -la /" 的引号原样传进来，剥一层
+    if args.cmd:
+        args.cmd = [c[1:-1] if len(c) >= 2 and c[0] == c[-1] == '"' else c
+                    for c in args.cmd]
 
     os.makedirs(args.out, exist_ok=True)
     pairs = _collect(args.target, args.out)
@@ -196,11 +212,17 @@ def main(argv=None) -> int:
             print(f"    fmtbuf : {f.fmt_buf}")
             continue
         res = solve(ch, max_attempts=args.max_attempts,
-                    budget=args.budget, verbose=not args.quiet)
+                    budget=args.budget, verbose=not args.quiet,
+                    post_cmds=args.cmd or None)
         results.append(res)
         status = "SHELL" if (res.ok and not res.flag_only) else ("FLAG-ONLY" if res.ok else "FAILED")
         print(f"    => {status} {res.strategy} "
               f"{res.detail} ({res.elapsed:.1f}s / {len(res.attempts)} attempts)")
+        for cmd, out in (res.cmds or []):
+            print(f"    $ {cmd}")
+            text = out.decode("latin-1", "replace").rstrip()
+            for line in (text.splitlines() or [""]):
+                print(f"      {line}")
         import json
         with open(os.path.join(args.out, f"{ch.name}.json"), "w", encoding="utf-8") as fh:
             json.dump(res.as_dict(), fh, ensure_ascii=False, indent=2)

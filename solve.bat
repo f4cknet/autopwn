@@ -1,39 +1,40 @@
 @echo off
 rem ===========================================================================
-rem  autopwn offline auto-exploit - Windows entry (no bash / WSL needed)
+rem  autopwn offline / remote auto-exploit - Windows entry (no bash needed)
 rem
 rem  Usage (run in this folder):
 rem     solve.bat bench\ch01_note
 rem     solve.bat bench
-rem     solve.bat bench\ch13_zip76c8 --facts-only
-rem     solve.bat note
-rem     solve.bat pwn --host 1.2.3.4 --port 31337 --libc libc.so.6
+rem     solve.bat bench\ch13 --facts-only
+rem     solve.bat note --cmd "cat /flag" --cmd "ls -la /"
+rem     solve.bat pwn --host 1.2.3.4 --port 31337 --ssl --cmd "cat /flag"
 rem ===========================================================================
 setlocal
 cd /d "%~dp0"
 
-if "%~1"=="" (
-  echo [usage] solve.bat ^<challenge-dir^|binary^> [options]
-  echo    e.g. solve.bat bench
-  echo         solve.bat bench\ch01_note --facts-only
-  exit /b 2
-)
+if "%~1"=="" goto usage
 
 where docker >nul 2>nul
-if errorlevel 1 (
-  echo [error] docker not found. Start Docker Desktop first.
-  exit /b 3
-)
+if errorlevel 1 goto nodocker
 
 docker image inspect autopwn:pwn22 >nul 2>nul
-if errorlevel 1 (
-  echo [error] image autopwn:pwn22 missing. Run build_pwn.bat first.
-  exit /b 4
-)
+if errorlevel 1 goto noimage
 
-rem the engine runs inside Linux, so backslashes in the target path must go
-set "TARGET=%~1"
-set "TARGET=%TARGET:\=/%"
-
-docker run --rm --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -v "%CD%:/work" -w /work autopwn:pwn22 python3 -m autopwn.engine.cli "%TARGET%" %2 %3 %4 %5 %6 %7
+rem %%* passed through as-is (keeps quotes for --cmd "ls -la /")
+docker run --rm --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -e AUTOPWN_HOST_ROOT="%CD%" -v "%CD%:/work" -w /work autopwn:pwn22 python3 -m autopwn.engine.cli %*
 exit /b %errorlevel%
+
+:usage
+echo [usage] solve.bat ^<challenge-dir^|binary^> [options]
+echo    e.g. solve.bat bench
+echo         solve.bat bench\ch01_note --facts-only
+echo         solve.bat pwn --host 1.2.3.4 --port 31337 --ssl --cmd "cat /flag"
+exit /b 2
+
+:nodocker
+echo [error] docker not found. Start Docker Desktop first.
+exit /b 3
+
+:noimage
+echo [error] image autopwn:pwn22 missing. Run build_pwn.bat first.
+exit /b 4

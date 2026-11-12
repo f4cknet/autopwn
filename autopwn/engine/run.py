@@ -25,6 +25,7 @@ class Result:
     output: bytes = b""
     note: str = ""
     error: str = ""
+    cmds: list = field(default_factory=list)   # [(命令, 回显)]
 
 
 def _verify_timeout(ch: Challenge) -> float:
@@ -71,7 +72,8 @@ def run_capture(ch: Challenge, stdin_data: bytes = b"", timeout: float = 2.0) ->
             pass
 
 
-def verify_shell(p, wait: float = 0.45, timeout: float = 2.2) -> Result:
+def verify_shell(p, wait: float = 0.45, timeout: float = 2.2,
+                 post_cmds: list = None) -> Result:
     """在有 shell 的前提下探测；返回是否拿到 shell 与回显。"""
     out = b""
     try:
@@ -99,7 +101,15 @@ def verify_shell(p, wait: float = 0.45, timeout: float = 2.2) -> Result:
         if MARKER in out or b"uid=" in out:
             break
     if MARKER in out or re.search(rb"uid=\d+", out):
-        return Result(True, out)
+        res = Result(True, out)
+        # 拿到 shell 之后再跑用户指定的命令（cat /flag、ls 等）
+        for cmd in (post_cmds or []):
+            try:
+                p.sendline(cmd.encode())
+                res.cmds.append((cmd, p.recvrepeat(0.8)))
+            except Exception as exc:
+                res.cmds.append((cmd, f"<error: {exc}>".encode()))
+        return res
     return Result(False, out)
 
 
@@ -122,7 +132,7 @@ def _sync(p, timeout: float = 1.0) -> bytes:
 
 def execute(ch: Challenge, sends: list[bytes], pre_wait: float = 0.0,
             post_wait: float = 0.0, verify: bool = True,
-            keep_open: float = 0.0) -> Result:
+            keep_open: float = 0.0, post_cmds: list = None) -> Result:
     """按顺序发送 sends，然后验证 shell。"""
     if getattr(ch, "host", None):
         # 远程每次尝试都是一条新连接，稍微错开，避免被平台限速/封 IP
@@ -163,7 +173,7 @@ def execute(ch: Challenge, sends: list[bytes], pre_wait: float = 0.0,
         if not verify:
             out += p.recvrepeat(0.4)
             return Result(False, out, note="no-verify")
-        res = verify_shell(p, timeout=_verify_timeout(ch))
+        res = verify_shell(p, timeout=_verify_timeout(ch), post_cmds=post_cmds)
         res.output = out + res.output
         return res
     finally:

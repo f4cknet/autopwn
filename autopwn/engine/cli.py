@@ -218,6 +218,8 @@ def main(argv=None) -> int:
         status = "SHELL" if (res.ok and not res.flag_only) else ("FLAG-ONLY" if res.ok else "FAILED")
         print(f"    => {status} {res.strategy} "
               f"{res.detail} ({res.elapsed:.1f}s / {len(res.attempts)} attempts)")
+        if not res.ok and res.error:
+            print(f"    !! {res.error}")
         for cmd, out in (res.cmds or []):
             print(f"    $ {cmd}")
             text = out.decode("latin-1", "replace").rstrip()

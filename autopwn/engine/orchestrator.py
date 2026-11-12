@@ -62,6 +62,31 @@ class SolveResult:
         }
 
 
+import re as _re_mod
+
+# 这些是「连接层面」的失败，重试没有任何意义，继续刷只会浪费时间/被平台限速。
+# 命中时立即中止，并把原因说清楚——避免被误读成「payload 打不进去」。
+_FATAL_RULES = [
+    (_re_mod.compile(r"no running target|start or renew it", _re_mod.I),
+     "题目实例已不存在。请回平台题目页点「启动 / 续期」，拿到新地址后再连"
+     "（这不是利用失败，payload 没问题）"),
+    (_re_mod.compile(r"Could not resolve hostname|Name or service not known|"
+                     r"Temporary failure in name resolution|nodename nor servname|getaddrinfo",
+                     _re_mod.I),
+     "域名解析失败。请检查拼写（常见错误：.dasctf.com 写成 .dasctf.comm）"),
+    (_re_mod.compile(r"Connection refused|No route to host|Connection reset by peer.*"
+                     r"|timed out", _re_mod.I),
+     "端口不通。请确认端口号与题目一致，且实例处于运行状态"),
+]
+
+
+def _fatal_hint(blob: str):
+    for pat, hint in _FATAL_RULES:
+        if pat.search(blob):
+            return hint
+    return None
+
+
 def _unpack4(ret):
     """兼容 3/4 元组返回。"""
     if len(ret) >= 4:
@@ -139,6 +164,13 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
                 att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, r.output, r.error)
             res.cmds = cmds or []
             res.attempts.append(att)
+            if not ok and getattr(ch, "host", None):
+                blob = (att.error or "") + " " + (out or b"").decode("latin-1", "ignore")
+                hint = _fatal_hint(blob)
+                if hint:
+                    res.error = "连接失败（不是利用失败）：" + hint
+                    res.elapsed = time.time() - t0
+                    return res
             if ok:
                 res.ok = True
                 import re as _re

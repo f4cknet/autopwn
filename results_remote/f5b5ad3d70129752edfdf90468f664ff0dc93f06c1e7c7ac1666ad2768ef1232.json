@@ -1,0 +1,78 @@
+{
+  "name": "f5b5ad3d70129752edfdf90468f664ff0dc93f06c1e7c7ac1666ad2768ef1232",
+  "ok": false,
+  "strategy": "",
+  "detail": "",
+  "elapsed": 15.6,
+  "attempt_count": 5,
+  "flag_only": false,
+  "facts": {
+    "prot": {
+      "arch": "i386/32",
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "relro": "Partial",
+      "static": true
+    },
+    "vulns": [
+      "gets@0x8048a36 disp=4 off=56"
+    ],
+    "wins": [],
+    "binsh": null,
+    "gadgets": {
+      "syscall": "0x806357d",
+      "int80": "0x80701d0",
+      "ret": "0x8048196",
+      "leave": "0x809ee21",
+      "pop_ebx": "0x80481ad",
+      "pop_edx": "0x806fc0a",
+      "pop_eax": "0x80b91e6",
+      "pop_ecx_ebx": "0x806fc31"
+    },
+    "csu": false,
+    "mmap_rwx": null,
+    "fmt_buf": null,
+    "libc": null,
+    "notes": []
+  },
+  "cmds": [],
+  "attempts": [
+    {
+      "strategy": "ret2sys_write",
+      "desc": "gets(0x80ec180) -> main -> execve off=56",
+      "ok": false,
+      "elapsed": 2.59,
+      "tail": ";51m \u001b[38;2;57;63;59;48;2;21;50;49m \u001b[38;2;57;63;59;48;2;24;53;53m \u001b[38;2;14;24;26;48;2;37;59;61m,\u001b[0m\r\n\r\n  \u001b[1;38;2;116;205;185mRANGE KEEPER\u001b[0m  \u001b[1;38;2;232;106;84m[ TARGET NOT FOUND ]\u001b[0m\r\n  This address has no running target.\r\n  Return to the challenge page, start or renew it, then reconnect.\r\n"
+    },
+    {
+      "strategy": "ret2sys_write",
+      "desc": "gets(0x80ec180) -> main -> execve off=52",
+      "ok": false,
+      "elapsed": 2.57,
+      "tail": ";51m \u001b[38;2;57;63;59;48;2;21;50;49m \u001b[38;2;57;63;59;48;2;24;53;53m \u001b[38;2;14;24;26;48;2;37;59;61m,\u001b[0m\r\n\r\n  \u001b[1;38;2;116;205;185mRANGE KEEPER\u001b[0m  \u001b[1;38;2;232;106;84m[ TARGET NOT FOUND ]\u001b[0m\r\n  This address has no running target.\r\n  Return to the challenge page, start or renew it, then reconnect.\r\n"
+    },
+    {
+      "strategy": "ret2sys_write",
+      "desc": "gets(0x80ec180) -> main -> execve off=60",
+      "ok": false,
+      "elapsed": 2.57,
+      "tail": ";51m \u001b[38;2;57;63;59;48;2;21;50;49m \u001b[38;2;57;63;59;48;2;24;53;53m \u001b[38;2;14;24;26;48;2;37;59;61m,\u001b[0m\r\n\r\n  \u001b[1;38;2;116;205;185mRANGE KEEPER\u001b[0m  \u001b[1;38;2;232;106;84m[ TARGET NOT FOUND ]\u001b[0m\r\n  This address has no running target.\r\n  Return to the challenge page, start or renew it, then reconnect.\r\n"
+    },
+    {
+      "strategy": "ret2sys_write",
+      "desc": "gets(0x80ec180) -> main -> execve off=48",
+      "ok": false,
+      "elapsed": 2.57,
+      "tail": ";51m \u001b[38;2;57;63;59;48;2;21;50;49m \u001b[38;2;57;63;59;48;2;24;53;53m \u001b[38;2;14;24;26;48;2;37;59;61m,\u001b[0m\r\n\r\n  \u001b[1;38;2;116;205;185mRANGE KEEPER\u001b[0m  \u001b[1;38;2;232;106;84m[ TARGET NOT FOUND ]\u001b[0m\r\n  This address has no running target.\r\n  Return to the challenge page, start or renew it, then reconnect.\r\n"
+    },
+    {
+      "strategy": "ret2sys_write",
+      "desc": "gets(0x80ec180) -> main -> execve off=64",
+      "ok": false,
+      "elapsed": 2.63,
+      "tail": ";51m \u001b[38;2;57;63;59;48;2;21;50;49m \u001b[38;2;57;63;59;48;2;24;53;53m \u001b[38;2;14;24;26;48;2;37;59;61m,\u001b[0m\r\n\r\n  \u001b[1;38;2;116;205;185mRANGE KEEPER\u001b[0m  \u001b[1;38;2;232;106;84m[ TARGET NOT FOUND ]\u001b[0m\r\n  This address has no running target.\r\n  Return to the challenge page, start or renew it, then reconnect.\r\n"
+    }
+  ],
+  "error": ""
+}

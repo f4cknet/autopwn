@@ -62,6 +62,17 @@ solve.bat pwn --host 1.2.3.4 --port 31337 --ssl ^
       CTF2{...}
 ```
 
+### 打不通先看这一张表（按报错对号入座）
+
+| 你看到的报错 | 真实原因 | 怎么办 |
+|---|---|---|
+| `Could not resolve hostname` / `Name or service not known` | 域名拼错 | 常见是 `.dasctf.com` 写成 `.dasctf.comm`；复制时多/少一个字母 |
+| `This address has no running target` | 平台实例已回收/未启动 | 回题目页点「启动 / 续期」，拿新地址再连 |
+| `Connection refused` | 端口错或实例没起来 | 核对端口号，确认实例 running |
+| `FAILED` 但没有任何报错 | 真的没打进去 | 先 `--facts-only` 看保护/偏移，再单题跑 |
+
+> 前三种引擎现在都会**只跑 1 次就中止**，并打印中文原因，不会把 20 次尝试白烧掉。
+
 ### 远程 ≠ 本地的三个坑（引擎已处理 / 需你注意）
 
 | 坑 | 表现 | 处理 |

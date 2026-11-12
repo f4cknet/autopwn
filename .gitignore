@@ -101,3 +101,6 @@ bench_extra/*/.run/
 results_extra/
 *.pyc
 __pycache__/
+# v6 运行副本 / Windows 入口产物
+.*.run/
+.run/

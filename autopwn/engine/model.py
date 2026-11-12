@@ -56,14 +56,17 @@ class Challenge:
         if os.path.isdir(self.src):
             self.dir = self.src
             self.bin_src = os.path.join(self.dir, "bin")
+            self.name = os.path.basename(self.dir.rstrip("/\\")) or "challenge"
+            self.run_dir = workdir or os.path.join(self.dir, ".run")
         else:
+            # 裸二进制：名字取文件名，运行副本放 <name>.run/，不要污染父目录
             self.dir = os.path.dirname(self.src)
             self.bin_src = self.src
-        self.name = os.path.basename(self.dir.rstrip("/\\")) or "challenge"
+            self.name = os.path.splitext(os.path.basename(self.src))[0] or "challenge"
+            self.run_dir = workdir or os.path.join(self.dir, f".{self.name}.run")
 
         self.libc_path = libc or self._auto_libc()
         self.ld_path = ld or self._auto_ld()
-        self.run_dir = workdir or os.path.join(self.dir, ".run")
         self.run_bin = os.path.join(self.run_dir, "bin")
         self.host = host
         self.port = port

@@ -78,7 +78,7 @@ def verify_shell(p, wait: float = 0.45) -> Result:
             p.sendline(line)
     except Exception as exc:
         return Result(False, out, error=str(exc))
-    deadline = time.time() + 1.6
+    deadline = time.time() + 2.2
     while time.time() < deadline:
         try:
             chunk = p.recvrepeat(wait)
@@ -94,6 +94,23 @@ def verify_shell(p, wait: float = 0.45) -> Result:
     if MARKER in out or re.search(rb"uid=\d+", out):
         return Result(True, out)
     return Result(False, out)
+
+
+def _sync(p, timeout: float = 1.0) -> bytes:
+    """等到目标「真正消化完上一段输入」：出现新输出并静默 0.06s，或超时。"""
+    buf = b""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            chunk = p.recvrepeat(0.06)
+        except Exception:
+            break
+        if chunk:
+            buf += chunk
+            continue
+        if buf:
+            break
+    return buf
 
 
 def execute(ch: Challenge, sends: list[bytes], pre_wait: float = 0.0,
@@ -121,12 +138,16 @@ def execute(ch: Challenge, sends: list[bytes], pre_wait: float = 0.0,
             except (EOFError, BrokenPipeError, OSError):
                 # 进程已退出：这次尝试失败，但不要中断整轮
                 return Result(False, out, error="process died before payload")
-            # 分阶段读写的题目（scanf 之后 read）需要给足时间让上一段先被消费
-            time.sleep(0.12 if idx < total - 1 else 0.18)
-            try:
-                out += p.recvrepeat(0.03)
-            except Exception:
-                pass
+            # 分阶段读写的题目（scanf 之后 read）必须等上一段被真正消费：
+            # 用「读到静默」作为同步点，比固定 sleep 抗负载波动。
+            if idx < total - 1:
+                out += _sync(p)
+            else:
+                time.sleep(0.2)
+                try:
+                    out += p.recvrepeat(0.04)
+                except Exception:
+                    pass
         if post_wait:
             time.sleep(post_wait)
         if not verify:

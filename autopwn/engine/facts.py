@@ -84,6 +84,7 @@ class Facts:
     fmt_buf: Optional[int] = None        # printf(user_buf) 的缓冲位移
     static_binsh: bool = False
     callers: dict = field(default_factory=dict)   # 函数入口 -> [调用点之后的下一条地址]
+    gadget_alts: dict = field(default_factory=dict)  # gadget 名 -> 全部可用地址（用于挑无坏字节的）
 
     @property
     def shell_win(self) -> Optional[Win]:
@@ -112,9 +113,15 @@ def read_cstr(ch: Challenge, addr: int, maxlen: int = 96) -> Optional[str]:
     return None
 
 
+def _imm(tok: str) -> int:
+    """capstone 的小位移/小立即数会打印成十进制，这里统一解析。"""
+    tok = tok.strip()
+    return int(tok, 16) if tok.lower().startswith("0x") else int(tok, 10)
+
+
 def _lea_disp(ins) -> Optional[tuple]:
     """解析 `lea reg, [rbp - X]` / `[esp + X]`，返回 (base, disp, dest)。"""
-    m = re.match(r"^(r[a-z0-9]+|e[a-z]{2}), \[(rbp|ebp|rsp|esp)( ?[-+] ?0x[0-9a-f]+)?\]$",
+    m = re.match(r"^(r[a-z0-9]+|e[a-z]{2}), \[(rbp|ebp|rsp|esp)( ?[-+] ?(?:0x[0-9a-f]+|\d+))?\]$",
                  ins.op_str)
     if not m:
         return None
@@ -123,24 +130,24 @@ def _lea_disp(ins) -> Optional[tuple]:
     if delta:
         s = delta.replace(" ", "")
         if s.startswith("-"):
-            disp = -int(s[1:], 16)
+            disp = -_imm(s[1:])
         else:
-            disp = int(s[1:], 16)
+            disp = _imm(s[1:])
     return base, disp, dest
 
 
 def _mov_imm(ins) -> Optional[tuple]:
-    m = re.match(r"^(r[a-z0-9]+|e[a-z]{2}), (0x[0-9a-f]+)$", ins.op_str)
+    m = re.match(r"^(r[a-z0-9]+|e[a-z]{2}), (0x[0-9a-f]+|\d+)$", ins.op_str)
     if not m:
         return None
-    return m.group(1), int(m.group(2), 16)
+    return m.group(1), _imm(m.group(2))
 
 
 def _frame_size(win: list) -> Optional[int]:
     for ins in reversed(win):
         if ins.mnemonic == "sub" and ins.op_str.startswith(("rsp, ", "esp, ")):
             try:
-                return int(ins.op_str.split(", ")[1], 16)
+                return _imm(ins.op_str.split(", ")[1])
             except Exception:
                 return None
     return None
@@ -184,6 +191,7 @@ def analyse(ch: Challenge) -> Facts:
 
     # ---- gadget
     f.gadgets = _find_gadgets(ch)
+    f.gadget_alts = _scan_gadget_alts(ch)
     f.csu = _find_csu(ch, d)
 
     # ---- RWX / mmap RWX
@@ -213,7 +221,7 @@ def _static_vuln(ch: Challenge, d: Dis) -> Optional[Vuln]:
     for ins in d.insns[start:start + 40]:
         if ins.mnemonic == "push":
             try:
-                last_push = int(ins.op_str, 16)
+                last_push = _imm(ins.op_str)
             except Exception:
                 last_push = None
         elif ins.mnemonic == "call" and last_push and lo <= last_push < hi:
@@ -229,7 +237,7 @@ def _static_vuln(ch: Challenge, d: Dis) -> Optional[Vuln]:
     for ins in body[:12]:
         if ins.mnemonic == "sub" and ins.op_str.startswith(("esp, ", "rsp, ")):
             try:
-                frame = int(ins.op_str.split(", ")[1], 16)
+                frame = _imm(ins.op_str.split(", ")[1])
             except Exception:
                 frame = None
             break
@@ -276,7 +284,7 @@ def _derive_offset(ch: Challenge, win: list, sink: str):
         for ins in reversed(win):
             if ins.mnemonic == "mov" and ins.op_str.startswith(("edx, ", "rdx, ")):
                 try:
-                    limit = int(ins.op_str.split(", ")[1], 16)
+                    limit = _imm(ins.op_str.split(", ")[1])
                 except Exception:
                     limit = None
                 break
@@ -284,7 +292,7 @@ def _derive_offset(ch: Challenge, win: list, sink: str):
                 # 32 位调用序列是 push count / push buf / push fd，
                 # 倒着扫时先遇到的是 fd(0)，要跳过继续往前找 count
                 try:
-                    val = int(ins.op_str, 16)
+                    val = _imm(ins.op_str)
                 except Exception:
                     continue
                 if val > 1:
@@ -296,7 +304,7 @@ def _derive_offset(ch: Challenge, win: list, sink: str):
         for ins in reversed(win):
             if ins.mnemonic == "mov" and ins.op_str.startswith(("esi, ", "rsi, ")):
                 try:
-                    limit = int(ins.op_str.split(", ")[1], 16)
+                    limit = _imm(ins.op_str.split(", ")[1])
                 except Exception:
                     limit = None
                 break
@@ -411,19 +419,19 @@ def _first_arg_string(ch: Challenge, win: list):
         if ins.mnemonic == "lea":
             m = re.match(r"^(r[a-z0-9]+|e[a-z]{2}), \[rip \+ (0x[0-9a-f]+)\]$", ins.op_str)
             if m:
-                reg_rip[m.group(1)] = ins.address + ins.size + int(m.group(2), 16)
+                reg_rip[m.group(1)] = ins.address + ins.size + _imm(m.group(2))
                 continue
         if ins.mnemonic == "mov":
             m = re.match(r"^(r[a-z0-9]+|e[a-z]{2}), (0x[0-9a-f]+)$", ins.op_str)
             if m:
-                reg_rip[m.group(1)] = int(m.group(2), 16)
+                reg_rip[m.group(1)] = _imm(m.group(2))
     for ins in reversed(win):
         if ins.mnemonic == "mov":
             m = re.match(r"^(rdi|edi), (0x[0-9a-f]+)$", ins.op_str)
             if m:
-                txt = read_cstr(ch, int(m.group(2), 16))
+                txt = read_cstr(ch, _imm(m.group(2)))
                 if txt:
-                    return txt, int(m.group(2), 16)
+                    return txt, _imm(m.group(2))
             m = re.match(r"^(rdi|edi), (r[a-z0-9]+|e[a-z]{2})$", ins.op_str)
             if m and m.group(2) in reg_rip:
                 txt = read_cstr(ch, reg_rip[m.group(2)])
@@ -432,19 +440,59 @@ def _first_arg_string(ch: Challenge, win: list):
         if ins.mnemonic == "lea":
             m = re.match(r"^(rdi|edi), \[rip \+ (0x[0-9a-f]+)\]$", ins.op_str)
             if m:
-                addr = ins.address + ins.size + int(m.group(2), 16)
+                addr = ins.address + ins.size + _imm(m.group(2))
                 txt = read_cstr(ch, addr)
                 if txt:
                     return txt, addr
         if ins.mnemonic == "push":
             try:
-                addr = int(ins.op_str, 16)
+                addr = _imm(ins.op_str)
             except Exception:
                 continue
             txt = read_cstr(ch, addr)
             if txt:
                 return txt, addr
     return None
+
+
+GADGET_BYTES = {
+    "pop_eax": b"\x58\xc3",
+    "pop_ebx": b"\x5b\xc3",
+    "pop_ecx": b"\x59\xc3",
+    "pop_edx": b"\x5a\xc3",
+    "pop_esi": b"\x5e\xc3",
+    "pop_edi": b"\x5f\xc3",
+    "pop_ecx_ebx": b"\x59\x5b\xc3",
+    "pop_ebx_edx": b"\x5b\x5a\xc3",
+    "pop_edx_ecx": b"\x5a\x59\xc3",
+    "int80": b"\xcd\x80",
+}
+
+
+def _scan_gadget_alts(ch: Challenge) -> dict:
+    """字节级扫 gadget 的所有出现位置。
+
+    `gets` 会在 0x0a 处截断、`scanf("%s")` 会在空白处截断，
+    所以同一个 gadget 往往不能只用 pwntools 返回的那一个地址。
+    """
+    text = ch.elf.get_section_by_name(".text")
+    if text is None:
+        return {}
+    data = text.data()
+    base = text.header.sh_addr
+    out: dict[str, list[int]] = {}
+    for name, seq in GADGET_BYTES.items():
+        hits = []
+        start = 0
+        while True:
+            i = data.find(seq, start)
+            if i < 0:
+                break
+            hits.append(base + i)
+            start = i + 1
+        if hits:
+            out[name] = hits
+    return out
 
 
 def _find_gadgets(ch: Challenge) -> dict:

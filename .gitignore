@@ -93,3 +93,11 @@ logs/**/*.tmp
 /check_binsh.txt
 /Information_Collection.txt
 /Information_Collection.txt*
+
+# v6 评测产物 / 运行副本
+chellenges/
+bench/*/.run/
+bench_extra/*/.run/
+results_extra/
+*.pyc
+__pycache__/

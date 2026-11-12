@@ -1,0 +1,98 @@
+/lib64/ld-linux-x86-64.so.2
+8<K7
+libc.so.6
+exit
+__isoc99_scanf
+puts
+stdin
+read
+stdout
+system
+setvbuf
+__libc_start_main
+__gmon_start__
+GLIBC_2.7
+GLIBC_2.2.5
+UH-`
+AWAVA
+AUATL
+[]A\A]A^A_
+/bin/sh
+**********************************
+*     Welcome to the BJDCTF!     *
+* And Welcome to the bin world!  *
+*  Let's try to pwn the world!   *
+* Please told me u answer loudly!*
+[+]Are u ready?
+[+]Please input the length of your name:
+Oops,u name is too long!
+[+]What's u name?
+;*3$"
+GCC: (Ubuntu 5.4.0-6ubuntu1~16.04.12) 5.4.0 20160609
+crtstuff.c
+__JCR_LIST__
+deregister_tm_clones
+__do_global_dtors_aux
+completed.7594
+__do_global_dtors_aux_fini_array_entry
+frame_dummy
+__frame_dummy_init_array_entry
+ret2text.c
+__FRAME_END__
+__JCR_END__
+__init_array_end
+_DYNAMIC
+__init_array_start
+__GNU_EH_FRAME_HDR
+_GLOBAL_OFFSET_TABLE_
+__libc_csu_fini
+_ITM_deregisterTMCloneTable
+stdout@@GLIBC_2.2.5
+puts@@GLIBC_2.2.5
+stdin@@GLIBC_2.2.5
+_edata
+system@@GLIBC_2.2.5
+read@@GLIBC_2.2.5
+__libc_start_main@@GLIBC_2.2.5
+__data_start
+__gmon_start__
+__dso_handle
+_IO_stdin_used
+__libc_csu_init
+backdoor
+__bss_start
+main
+setvbuf@@GLIBC_2.2.5
+_Jv_RegisterClasses
+__isoc99_scanf@@GLIBC_2.7
+exit@@GLIBC_2.2.5
+__TMC_END__
+_ITM_registerTMCloneTable
+.symtab
+.strtab
+.shstrtab
+.interp
+.note.ABI-tag
+.note.gnu.build-id
+.gnu.hash
+.dynsym
+.dynstr
+.gnu.version
+.gnu.version_r
+.rela.dyn
+.rela.plt
+.init
+.plt.got
+.text
+.fini
+.rodata
+.eh_frame_hdr
+.eh_frame
+.init_array
+.fini_array
+.jcr
+.dynamic
+.got.plt
+.data
+.bss
+.comment

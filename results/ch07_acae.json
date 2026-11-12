@@ -1,0 +1,43 @@
+{
+  "name": "ch07_acae",
+  "ok": false,
+  "strategy": "",
+  "detail": "",
+  "elapsed": 0.1,
+  "attempt_count": 0,
+  "flag_only": false,
+  "facts": {
+    "prot": {
+      "arch": "amd64/64",
+      "pie": false,
+      "canary": true,
+      "nx": true,
+      "relro": "Full",
+      "static": false
+    },
+    "vulns": [
+      "read@0x400b16 disp=-48 off=56 limit=8",
+      "read@0x400b6f disp=None off=None",
+      "read@0x400be0 disp=-32 off=40 limit=4",
+      "read@0x400c98 disp=-32 off=40 limit=4",
+      "read@0x400d7f disp=-32 off=40 limit=8"
+    ],
+    "wins": [
+      "flag@0x4009d2(system(\"date\"))"
+    ],
+    "binsh": "0x602010",
+    "gadgets": {
+      "pop_rdi": "0x400e43",
+      "pop_rbp": "0x400850",
+      "ret": "0x400769",
+      "leave": "0x400988"
+    },
+    "csu": true,
+    "mmap_rwx": null,
+    "fmt_buf": null,
+    "libc": null,
+    "notes": []
+  },
+  "attempts": [],
+  "error": ""
+}

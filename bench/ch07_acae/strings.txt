@@ -1,0 +1,69 @@
+/lib64/ld-linux-x86-64.so.2
+|fUa
+libc.so.6
+exit
+signal
+puts
+__stack_chk_fail
+stdin
+printf
+read
+stdout
+malloc
+stderr
+alarm
+system
+atoi
+setbuf
+__libc_start_main
+free
+__gmon_start__
+GLIBC_2.4
+GLIBC_2.2.5
+AWAVA
+AUATL
+[]A\A]A^A_
+Content is '%s'
+==============================
+ This is a heap exploit demo  
+1. Create something           
+2. Delete something           
+3. Print something            
+4. Exit                       
+Now the time is 
+date
+Your choice: 
+The list is full
+Please input size: 
+Please input content: 
+Please input list index: 
+Out of bound!
+Bye~
+;*3$"
+/bin/sh
+GCC: (Ubuntu 5.4.0-6ubuntu1~16.04.11) 5.4.0 20160609
+.shstrtab
+.interp
+.note.ABI-tag
+.note.gnu.build-id
+.gnu.hash
+.dynsym
+.dynstr
+.gnu.version
+.gnu.version_r
+.rela.dyn
+.init
+.plt
+.plt.got
+.text
+.fini
+.rodata
+.eh_frame_hdr
+.eh_frame
+.init_array
+.fini_array
+.jcr
+.dynamic
+.data
+.bss
+.comment

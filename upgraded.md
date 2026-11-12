@@ -85,6 +85,7 @@
 
 | ID | 摘要 | 状态 | 预估 | Owner | 详情 |
 |---|---|---|---|---|---|
+| `v6.0.0` | 离线自动利用引擎（autopwn.engine）+ pwn 容器 + 15 题回归 | ✅ | 6h | @Minzhi_Zhou | [`v6.0.0`](./upgraded/v6.0.0.md) |
 | `v5.0.9` | 统一 verifier 主体切片（probe/spec 抽象） | 🔄 | 2h | @Minzhi_Zhou | [`v5.0.9`](./upgraded/v5.0.9.md) |
 
 ### 3.2 待收尾 / 待自审

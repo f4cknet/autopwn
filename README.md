@@ -49,6 +49,38 @@ AutoPwn is a **cutting-edge automated binary exploitation framework** designed f
 
 ---
 
+## ⚡ v6 离线自动利用引擎（推荐入口）
+
+`autopwn/engine/` 是 v6 新增的**可度量**引擎：静态推导 → 逐策略尝试 → 用真实 shell 回显验证，
+不依赖 AI、不依赖人工，一条命令跑完整个题目目录。
+
+```bash
+# 1) 构建 pwn 环境（ubuntu 22.04 + pwntools/pwndbg 依赖/one_gadget/seccomp-tools/i386 库）
+bash docker/build.sh
+
+# 2) 跑整个目录（bench/<题名>/bin，可选 libc/ 子目录）
+bash docker/solve.sh bench
+
+# 3) 单题；只看静态事实不利用
+bash docker/solve.sh bench/ch13_zip76c8 --facts-only
+
+# 4) 远程目标（需同版本 libc 才能算 ret2libc）
+bash docker/solve.sh ./pwn --host 1.2.3.4 --port 31337 --libc ./libc-2.31.so
+```
+
+**成功判据**：payload 之后在目标进程里执行 `whoami` / `id` / `echo PWNED_$((6*7))`
+能拿到正确回显（`uid=` 或 `PWNED_42`）。策略跑完但拿不到 shell 一律记为失败。
+
+**已覆盖策略**：ret2win（含对齐 ret）/ PIE 局部覆盖 ret / ret2system@plt /
+gets-or-read(bss)→system(bss) / ret2csu（按实际寄存器映射拼链）/ ret2libc（puts 或
+write(1,got,8) 泄漏，同进程两阶段）/ ret2shellcode（RWX mmap）/ i386 `int 0x80` execve /
+格式化字符串改 GOT / 只打 flag 的题单独记账。
+
+**当前基线**：`chellenges/` 15 个题解出 13 个（86.7%），三连跑稳定；未解的两题是菜单式堆
+（Full RELRO / glibc 2.35），属于未实现的能力边界。详见 [`bench/RESULTS.md`](./bench/RESULTS.md)。
+
+---
+
 ## 🚀 Quick Start
 
 ### Installation

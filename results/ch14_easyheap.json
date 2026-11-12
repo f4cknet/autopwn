@@ -1,0 +1,44 @@
+{
+  "name": "ch14_easyheap",
+  "ok": false,
+  "strategy": "",
+  "detail": "",
+  "elapsed": 1.1,
+  "attempt_count": 0,
+  "flag_only": false,
+  "facts": {
+    "prot": {
+      "arch": "amd64/64",
+      "pie": false,
+      "canary": true,
+      "nx": true,
+      "relro": "Partial",
+      "static": false
+    },
+    "vulns": [
+      "read@0x4008a6 disp=None off=None",
+      "read@0x400992 disp=-16 off=24 limit=8",
+      "read@0x400a7e disp=-16 off=24 limit=4",
+      "read@0x400ae4 disp=-16 off=24 limit=8",
+      "read@0x400b8a disp=-16 off=24 limit=4",
+      "read@0x400ca2 disp=-16 off=24 limit=8"
+    ],
+    "wins": [
+      "flag@0x400c23(system(\"cat /home/pwn/flag\"))"
+    ],
+    "binsh": null,
+    "gadgets": {
+      "pop_rdi": "0x400db3",
+      "pop_rbp": "0x4007f0",
+      "ret": "0x400293",
+      "leave": "0x4008c9"
+    },
+    "csu": true,
+    "mmap_rwx": null,
+    "fmt_buf": 16,
+    "libc": null,
+    "notes": []
+  },
+  "attempts": [],
+  "error": ""
+}

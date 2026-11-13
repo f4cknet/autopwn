@@ -21,7 +21,12 @@
 
 ## 1. 铁律（不可绕过）
 
-### 铁律 1：实施以 `v5_architecture.md §3` 为准
+### 铁律 1：实施以 `ARCHITECTURE.md` + `upgraded.md §3` 为准
+
+> 2026-11-13 更新：v6 起主线是 `autopwn/engine/`，架构以 [`ARCHITECTURE.md`](./ARCHITECTURE.md) 为准；
+> v5 时代的 `v5_architecture.md` 已归档到 `archive/v5/`（见 [`DOC_MAP.md`](./DOC_MAP.md)）。
+> 进度与基线看 [`PROGRESS.md`](./PROGRESS.md)，接手须知看 [`HANDOVER.md`](./HANDOVER.md)。
+
 - 任何代码改动必须对应 `upgraded.md` §3 中的一个任务索引行（或 Owner 现场新立任务行）；新任务与当前任务的详情写在 `upgraded/vX.Y.Z.md`
 - 在 `upgraded.md` §3 找不到对应项 ⇒ **该任务不存在**
 - 如果你觉得要做的事在 `upgraded.md` 中没有：先 grep 关键字（确认不是漏看）⇒ 该项是**新需求** ⇒ 立即停手，走铁律 2

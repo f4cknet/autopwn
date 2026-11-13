@@ -1,313 +1,122 @@
-﻿<div align="center">
+﻿# AutoPwn
 
-# 🚀 AutoPwn (v5 migration in progress)
+离线 pwn 自动利用引擎：给它一个题目的二进制，它给你「目标进程里真的执行了命令」的证据。
 
-**Professional Automated Binary Exploitation Framework**
+- **判据**：payload 之后在目标进程里执行 `echo PWNED_$((6*7))` / `whoami` / `id` 有正确回显；
+  只出 flag 的题记 `FLAG-ONLY`，与 shell 成功率**分开统计**。
+- **不依赖 AI、不依赖人工**：静态推导 → 逐策略尝试 → 真实执行验证。
+- **可复盘**：每次尝试的回显都落在 `results/<题名>.json`。
 
-[![Version](https://img.shields.io/badge/version-4.0.dev0-blue.svg)](https://github.com/f4cknet/autopwn)
-[![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-red.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/f4cknet/autopwn)
-[![Tests](https://img.shields.io/badge/tests-757%20passed-brightgreen.svg)](.github/workflows/ci.yml)
+> 仓库里还保留一套 v4/v5 历史链路（`autopwn/cli.py`，输出 docx 报告）。
+> **对外一律以 `autopwn/engine/` 为准**；历史文档去向见 [`DOC_MAP.md`](./DOC_MAP.md)。
 
+## 当前状态
 
-</div>
+| 题库 | 规模 | shell | flag-only |
+|---|---|---|---|
+| `bench/`（比赛原题） | 15 | **13** | 0 |
+| `bench_extra/`（经典题型泛化） | 8 | **5** | 1 |
+| `bench_sys/`（syscall 策略变体） | 4 | **4** | 0 |
+| `chellenges/`（当前赛题） | 3 | 0 | 2（容器内无 `/flag`，链路已验证） |
 
----
+明细与已知边界见 [`PROGRESS.md`](./PROGRESS.md)；逐题参数见 [`bench/RESULTS.md`](./bench/RESULTS.md)。
 
-## 🎯 What is AutoPwn?
+## 快速开始
 
-AutoPwn is a **cutting-edge automated binary exploitation framework** designed for CTF competitions and security research, AutoPwn transforms complex binary exploitation into an automated, streamlined process.
+环境：Windows + Docker Desktop。镜像构建一次即可。
 
-### ✨ Key Features
+```bat
+cd /d D:\ctf\ctf-env\autopwn
 
-🔍 **Smart Vulnerability Detection**
-- Automatic stack overflow detection with dynamic padding calculation
-- Format string vulnerability identification and exploitation
-- Binary protection analysis (RELRO, Stack Canary, NX, PIE)
-- Assembly code analysis for vulnerable function detection
-- Automatically generating reports
+:: 0) 首次或镜像丢失时（8~12 分钟）
+build_pwn.bat
 
-⚡ **Advanced Exploitation Techniques**
-- **ret2system**: Direct system function calls
-- **ret2libc**: ASLR bypass through libc address leaking
-- **ROP Chain Construction**: Automated gadget discovery and chaining
-- **Syscall Exploitation**: execve system call chains
-- **Shellcode Injection**: RWX segment exploitation
-- **Stack Canary Bypass**: Format string canary leaking
-- **PIE Bypass**: Position Independent Executable circumvention
+:: 1) 先看静态事实：保护、漏洞点、可用 win、偏移、菜单字符
+solve.bat chellenges\note --facts-only
 
-🏗️ **Multi-Architecture Support**
-- **x86 (32-bit)**: Complete 32-bit exploitation chains
-- **x86_64 (64-bit)**: Full 64-bit exploitation support
-- **Auto-detection**: Intelligent architecture recognition
+:: 2) 打本地
+solve.bat chellenges\note
 
-🌐 **Flexible Deployment**
-- **Local Mode**: Direct binary file exploitation
-- **Remote Mode**: Network service targeting
-- **Hybrid Approach**: Seamless local-to-remote transition
-
----
-
-## ⚡ v6 离线自动利用引擎（推荐入口）
-
-`autopwn/engine/` 是 v6 新增的**可度量**引擎：静态推导 → 逐策略尝试 → 用真实 shell 回显验证，
-不依赖 AI、不依赖人工，一条命令跑完整个题目目录。
-
-```bash
-# 1) 构建 pwn 环境（ubuntu 22.04 + pwntools/pwndbg 依赖/one_gadget/seccomp-tools/i386 库）
-bash docker/build.sh
-
-# 2) 跑整个目录（bench/<题名>/bin，可选 libc/ 子目录）
-bash docker/solve.sh bench
-
-# 3) 单题；只看静态事实不利用
-bash docker/solve.sh bench/ch13_zip76c8 --facts-only
-
-# 4) 远程目标（需同版本 libc 才能算 ret2libc）
-bash docker/solve.sh ./pwn --host 1.2.3.4 --port 31337 --libc ./libc-2.31.so
+:: 3) 整个目录（自动识别 ELF / zip / 已解压的平铺目录，按 md5 去重）
+solve.bat bench
 ```
 
-**成功判据**：payload 之后在目标进程里执行 `whoami` / `id` / `echo PWNED_$((6*7))`
-能拿到正确回显（`uid=` 或 `PWNED_42`）。策略跑完但拿不到 shell 一律记为失败。
+### 打远程
 
-**已覆盖策略**：ret2win（含对齐 ret）/ PIE 局部覆盖 ret / ret2system@plt /
-gets-or-read(bss)→system(bss) / ret2csu（按实际寄存器映射拼链）/ ret2libc（puts 或
-write(1,got,8) 泄漏，同进程两阶段）/ ret2shellcode（RWX mmap）/ i386 `int 0x80` execve /
-格式化字符串改 GOT / 只打 flag 的题单独记账。
+```bat
+:: 明文
+solve.bat pwn --host 1.2.3.4 --port 31337
 
-**当前基线**：`chellenges/` 15 个题解出 13 个（86.7%），三连跑稳定；未解的两题是菜单式堆
-（Full RELRO / glibc 2.35），属于未实现的能力边界。详见 [`bench/RESULTS.md`](./bench/RESULTS.md)。
+:: 平台套了 TLS（dasctf 这类 tcp-ctf2 域名基本都要）
+solve.bat pwn --host xxxx.tcp-ctf2.dasctf.com --port 9999 --ssl --sni xxxx.tcp-ctf2.dasctf.com
 
----
+:: ret2libc 必须给远程同版本 libc
+solve.bat pwn --host 1.2.3.4 --port 31337 --libc libc.so.6
 
-## 🚀 Quick Start
-
-### Installation
-
-```bash
-# Install from source (recommended current flow)
-git clone https://github.com/f4cknet/autopwn.git
-cd autopwn
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-
-# After install, both entry points are available:
-#   - `autopwn` (PEP 517 console_scripts)
-#   - `python -m autopwn` (PEP 338)
+:: 拿到 shell 后跑自己的命令（可重复）
+solve.bat pwn --host 1.2.3.4 --port 31337 --cmd "id" --cmd "cat /flag"
 ```
 
-Recommended in `ctf_env` or a Linux shell: create / reuse `.venv`, activate it, then install in editable mode.
+### 没有远程地址时：自建容器靶机
 
-The `pip install -e .` step will:
-- Install Python dependencies (pwntools, LibcSearcher, ropper, python-docx, pyelftools)
-- Register the `autopwn` console script (Linux/macOS PATH)
-- Keep the source tree editable for development
-
-**System dependencies** (install separately via your package manager):
-- `ropper` (Python wrapper also accepted, but system ropper is faster)
-- `checksec` (binary security analysis)
-- `objdump` / `strings` / `ldd` (part of `binutils` on most distros)
-- `gdb` + `pwndbg` / `gef` (optional, for interactive debugging)
-
-### Basic Usage
-
-```bash
-# Analyze local binary
-autopwn -l ./target_binary
-
-# Remote exploitation
-autopwn -l ./binary -ip 192.168.1.100 -p 9999
-
-# Custom libc and padding
-autopwn -l ./binary -libc ./libc-2.19.so -f 112
-
-# Verbose mode
-autopwn -l ./binary -v
-
-# Cap canary brute-force detect to 10 seconds
-autopwn -l ./Challenge/canary --canary-max-seconds 10
+```bat
+target.bat chellenges\note 4444          :: socat fork，每连接新进程（ASLR 每次变）
+solve.bat chellenges\note --host 127.0.0.1 --port 4444
+target.bat stop
 ```
 
-> **v4.1.18 change**: canary detect now has a default fail-fast
-> wall-time budget of **20s**.  This prevents `Challenge/canary`-style
-> brute-force loops from monopolizing an offline batch run.  Use
-> `--canary-max-seconds 0` to restore the old unbounded behavior for
-> a one-off long run.
+`solve.bat` 检测到 `--host 127.0.0.1` 会自动给攻击容器加 `--network host`；其它地址走
+`host.docker.internal`。这是**唯一**能复现「远程形态」的方式 —— 本地直跑会读 `/proc/<pid>/maps`
+走捷径（PIE 题尤其明显）。
 
-### Report control
+## 文档索引
 
-> **v4.1.7 change**: Reports are now always written to the
-> `writeups/` subdirectory of the current working directory
-> (`./writeups/{target}_wp.docx`).  The `--report-dir` flag is still
-> accepted (backward-compat) but its value is **ignored** at the
-> file-write step — see `upgraded.md` §3.2 v4.1.7 for the rationale
-> and trade-off.  The `writeups/` directory is auto-created if missing.
+| 文档 | 给谁看 | 内容 |
+|---|---|---|
+| [`HANDOVER.md`](./HANDOVER.md) | 接手开发者 | 上手、铁律、环境坑、如何加策略、验收清单 |
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | 接手开发者 | 分层、数据结构、16 个策略、判定链、边界 |
+| [`PROGRESS.md`](./PROGRESS.md) | 所有人 | 版本演进、实测基线、能力矩阵、下一步 |
+| [`CHEATSHEET.md`](./CHEATSHEET.md) | 比赛现场 | 一页命令速查 + 排错对照表 |
+| [`bench/RESULTS.md`](./bench/RESULTS.md) | 复盘 | 逐题策略/偏移/关键参数/踩坑 |
+| [`DOC_MAP.md`](./DOC_MAP.md) | 维护者 | 哪份文档是活的、哪些是历史、清理清单 |
+| [`CLAUDE.md`](./CLAUDE.md) | Claude Code | 入口指针与最容易违反的规则 |
+| [`AGENTS.md`](./AGENTS.md) | AI Agent | 治理与铁律（项目级约定） |
+| [`upgraded.md`](./upgraded.md) | 维护者 | 任务板（版本 → 状态 → 详情） |
+| [`upgraded/v7.0.0.md`](./upgraded/v7.0.0.md) | 架构 | 四层管线提案（下一步方向） |
 
-```bash
-# Skip DOCX report generation (exploit still runs)
-autopwn -l ./binary --no-report
+## 目录结构
 
-# Reports are written to ./writeups/{target}_wp.docx by default
-# (the --report-dir flag is currently ignored — v4.1.7 trade-off)
-autopwn -l ./binary
+```
+autopwn/
+├── autopwn/engine/        引擎主线（facts / strategies / orchestrator / run / model / cli）
+├── docker/                Dockerfile、serve.sh（靶机）、make_sys_variants.py、评测脚本
+├── bench/                 15 道比赛原题（<题名>/bin [+ libc/]）
+├── bench_extra/           8 道经典题型（泛化验证用）
+├── bench_sys/             4 个「窗口/帧尺寸」变体（syscall 策略回归）
+├── chellenges/            当前比赛附件（原始 ELF / zip / 平铺目录，可直接跑）
+├── results/               每次尝试的证据（json，gitignore）
+└── archive/               历史版本归档（v4 已归档，v5 待归档）
 ```
 
-### Log output
+## 覆盖的题型
 
-> **v4.1.8 change**: The full terminal output (autopwn's `print_*`
-> + pwntools' tube output) is mirrored to
-> `logs/{challenge_name}/run.log` for post-mortem analysis.  ANSI
-> color codes are preserved (use `less -R` to view with colors).
-> The log is overwritten on each run; see `upgraded.md` §3.2 v4.1.8
-> for the rationale and pwntools-compat story.
+ret2win（含栈对齐变体）· PIE 局部覆盖（含零泄漏 nib 爆破）· ret2system@plt ·
+gets/read→bss→system · ret2csu（按实际寄存器映射）· ret2libc（`puts` 或 `write(1,got,8)` 泄漏，
+同进程两阶段）· canary+fmt 三阶段 · RWX mmap shellcode · i386 `int 0x80` execve ·
+无 libc 纯 syscall 三段式（0CTF-welcome 型）· fmt 改 GOT · 只出 flag（`system("cat flag")` /
+自读 `open`+`puts` / 带全局门槛）· 菜单式前置交互。
 
-```bash
-# Run + log is auto-written to logs/level3_x64/run.log
-autopwn -l ./Challenge/level3_x64
+**未覆盖**：菜单式堆（tcache/FSOP）、SROP、20 字节极限 fmt、ORW、无 libc 的 ret2libc。
+原因逐条列在 [`PROGRESS.md §4`](./PROGRESS.md)。
 
-# Replay the run with colors
-less -R logs/level3_x64/run.log
-```
+## 容器镜像
 
-### Remote / SSL
+`autopwn:pwn22`（ubuntu 22.04，1.43 GB）：pwntools 4.14 / capstone 6 / gdb / ROPgadget / ropper /
+one_gadget / seccomp-tools / patchelf / i386 多架构库。
 
-> **v4.1.11 change**: Many CTF practice platforms (cyberstages,
-> r3, etc.) wrap the remote binary service in TLS via
-> stunnel/nginx.  Pass `-ssl` to wrap the pwntools `remote()`
-> connection in TLS.  Requires `-ip` + `-p` (local mode is a
-> no-op and raises if combined with `-ssl`).
+GitHub 直连受限，构建时跳过 `pwndbg` / `pwninit` / `libc-database`。前者不影响解题；
+最后一项缺失会限制「无 libc 时按泄漏找 libc」，见 [`PROGRESS.md §4`](./PROGRESS.md)。
 
-```bash
-# Plaintext remote (legacy)
-autopwn -l ./vuln -ip 1.2.3.4 -p 31337
+## 许可
 
-# SSL/TLS remote (e.g. cyberstages-style platforms)
-autopwn -l ./vuln -ip 1.2.3.4 -p 31337 -ssl
-
-# Shorter alias
-autopwn -l ./vuln -ip ctf.example.com -p 443 -ssl
-```
-
----
-
-## 💡 Usage Examples
-
-### 🎪 Local Binary Analysis
-```bash
-# Comprehensive local analysis
-autopwn -l ./vuln_binary
-```
-
-### 🌍 Remote Service Exploitation
-```bash
-# Target remote CTF service
-autopwn -l ./local_binary -ip ctf.example.com -p 31337
-```
-
-### 🔧 Advanced Configuration
-```bash
-# Specify custom libc and manual padding
-autopwn -l ./binary -libc /lib/x86_64-linux-gnu/libc.so.6 -f 88 -v
-```
-
----
-
-## 📋 Command Line Options
-
-| Option | Description | Example |
-|--------|-------------|----------|
-| `-l, --local` | Target binary file (required) | `-l ./vuln_app` |
-| `-ip, --ip` | Remote target IP address | `-ip 192.168.1.100` |
-| `-p, --port` | Remote target port | `-p 9999` |
-| `-libc, --libc` | Custom libc file path | `-libc ./libc-2.27.so` |
-| `-f, --fill` | Manual overflow padding size | `-f 112` |
-| `-v, --verbose` | Enable verbose output | `-v` |
-| `--canary-max-seconds` | Max seconds for canary brute-force detect (`0` = no limit) | `--canary-max-seconds 10` |
-
----
-
-## 🛠️ Technical Arsenal
-
-### Core Dependencies
-- **pwntools** - The ultimate CTF framework
-- **LibcSearcher** - Libc database and version detection
-- **ropper** - Advanced ROP gadget discovery
-- **checksec** - Binary security feature analysis
-
-### System Tools Integration
-- **objdump** - Assembly analysis and disassembly
-- **strings** - String extraction and analysis
-- **ldd** - Dynamic library dependency mapping
-- **gdb** - Advanced debugging capabilities
-
----
-
-## 🎨 Output Preview
-
-
-
-https://github.com/user-attachments/assets/1395d646-eeeb-4342-8b93-e05eed282b92
-
-
-
----
-
-## 🏆 Why Choose AutoPwn?
-
-### 🎯 **Precision & Automation**
-No more manual gadget hunting or address calculation. AutoPwn automates the entire exploitation pipeline with surgical precision.
-
-### 🚀 **Speed & Efficiency**
-From vulnerability detection to shell acquisition in seconds, not hours. Perfect for time-critical CTF scenarios.
-
-### 🧠 **Intelligence & Adaptability**
-Smart fallback mechanisms ensure maximum success rate across different binary configurations and protection schemes.
-
-### 🏛️ **Clean Architecture (v4.0)**
-Refactored from a 3688-line monolith into a layered package:
-- `autopwn.core` — logging / fs / runner
-- `autopwn.recon` — binary protection / libc / ROP gadgets / PLT / BSS / ASM
-- `autopwn.detect` — overflow / fmtstr / canary / binsh
-- `autopwn.primitives` — 9 reusable payload builders (ret2system, ret2libc, fmtstr, …)
-- `autopwn.exp.strategies` — 40 concrete strategies, ranked by `requires_*` metadata
-- `autopwn.report` — dataclass-driven DOCX + code generators
-- `autopwn.orchestrator` — 3-phase dispatch (recon → detect → strategy)
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Whether it's:
-- 🐛 Bug reports and fixes
-- ✨ New exploitation techniques
-- 📚 Documentation improvements
-- 🔧 Performance optimizations
-
-**开发流程**：先读 [`AGENTS.md`](./AGENTS.md) → [`upgraded.md`](./upgraded.md) → [`v5_prd.md`](./v5_prd.md) → [`v5_todo.md`](./v5_todo.md) → [`v5_architecture.md`](./v5_architecture.md)；若需追溯旧决策，再看 [`archive/v4/README.md`](./archive/v4/README.md)。
-
----
-
-## 📜 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## ⚠️ Disclaimer
-
-AutoPwn is designed for **educational purposes** and **authorized security testing** only. Users are responsible for ensuring compliance with applicable laws and regulations. The developers assume no liability for misuse of this tool.
-
----
-
-<div align="center">
-
-**Made with ❤️ by qzdx_soc（衢州电信安全运营中心）**
-
-> 基于开源项目 [heimao-box/autopwn](https://github.com/heimao-box/autopwn) 改造（MIT 协议，原作者 @Ba1_Ma0）
-
-*Star ⭐ this repo if AutoPwn helped you pwn some binaries!*
-
-</div>
-
+见 [`LICENSE`](./LICENSE)。

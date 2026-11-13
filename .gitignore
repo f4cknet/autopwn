@@ -104,3 +104,6 @@ __pycache__/
 # v6 运行副本 / Windows 入口产物
 .*.run/
 .run/
+
+# 容器内靶机的运行目录（serve.sh 生成）
+_target/

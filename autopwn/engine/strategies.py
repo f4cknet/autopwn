@@ -292,7 +292,8 @@ def s_pie_partial_win(ch: Challenge, f: Facts) -> Iterable[Plan]:
 
     # 远程只能猜基址的 0x1000 位；本地进程可直接读 /proc/pid/maps，不用猜
     blind = bool(getattr(ch, "host", None)) or bool(os.environ.get("AUTOPWN_NO_MAPS"))
-    nibs = range(16) if blind else [-1]
+    # 盲打时每次连接都是新基址，每次只有 1/16 命中：多跑两轮把命中率抬到 ~98%
+    nibs = list(range(16)) * 2 if blind else [-1]
     for tgt in targets:
         for nib in nibs:
             yield Plan("pie_partial", [], tag=f"pie:{tgt}:{nib}:{w.kind}",

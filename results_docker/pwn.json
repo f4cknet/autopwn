@@ -1,0 +1,118 @@
+{
+  "name": "pwn",
+  "ok": true,
+  "strategy": "pie_partial",
+  "detail": "flag:CTF2{docker-target-ok}",
+  "elapsed": 5.4,
+  "attempt_count": 11,
+  "flag_only": true,
+  "facts": {
+    "prot": {
+      "arch": "amd64/64",
+      "pie": true,
+      "canary": false,
+      "nx": true,
+      "relro": "Full",
+      "static": false
+    },
+    "vulns": [
+      "read@0x1228 disp=-48 off=56 limit=200"
+    ],
+    "wins": [
+      "flag@0x11e9(system(\"cat flag\"))"
+    ],
+    "binsh": null,
+    "gadgets": {
+      "pop_rdi": "0x1353",
+      "pop_rbp": "0x11d3",
+      "ret": "0x101a",
+      "leave": "0x1244"
+    },
+    "csu": false,
+    "mmap_rwx": null,
+    "fmt_buf": null,
+    "libc": null,
+    "notes": []
+  },
+  "cmds": [],
+  "attempts": [
+    {
+      "strategy": "pie_partial",
+      "desc": "partial ret -> 0x11f3 off=56 (ret=0x12e6, nib=0, kind=flag)",
+      "ok": false,
+      "elapsed": 0.48,
+      "tail": "********************\nå¿ä¸å¼ºèæºä¸è¾¾ï¼è¨ä¸ä¿¡èè¡ä¸æã\n********************\n"
+    },
+    {
+      "strategy": "pie_partial",
+      "desc": "partial ret -> 0x11f3 off=56 (ret=0x12e6, nib=1, kind=flag)",
+      "ok": false,
+      "elapsed": 0.45,
+      "tail": "********************\nå¿ä¸å¼ºèæºä¸è¾¾ï¼è¨ä¸ä¿¡èè¡ä¸æã\n********************\n"
+    },
+    {
+      "strategy": "pie_partial",
+      "desc": "partial ret -> 0x11f3 off=56 (ret=0x12e6, nib=2, kind=flag)",
+      "ok": false,
+      "elapsed": 0.45,
+      "tail": "********************\nå¿ä¸å¼ºèæºä¸è¾¾ï¼è¨ä¸ä¿¡èè¡ä¸æã\n********************\n"
+    },
+    {
+      "strategy": "pie_partial",
+      "desc": "partial ret -> 0x11f3 off=56 (ret=0x12e6, nib=3, kind=flag)",
+      "ok": false,
+      "elapsed": 0.45,
+      "tail": "********************\nå¿ä¸å¼ºèæºä¸è¾¾ï¼è¨ä¸ä¿¡èè¡ä¸æã\n********************\n"
+    },
+    {
+      "strategy": "pie_partial",
+      "desc": "partial ret -> 0x11f3 off=56 (ret=0x12e6, nib=4, kind=flag)",
+      "ok": false,
+      "elapsed": 0.45,
+      "tail": "********************\nå¿ä¸å¼ºèæºä¸è¾¾ï¼è¨ä¸ä¿¡èè¡ä¸æã\n********************\n"
+    },
+    {
+      "strategy": "pie_partial",
+      "desc": "partial ret -> 0x11f3 off=56 (ret=0x12e6, nib=5, kind=flag)",
+      "ok": false,
+      "elapsed": 0.45,
+      "tail": "********************\nå¿ä¸å¼ºèæºä¸è¾¾ï¼è¨ä¸ä¿¡èè¡ä¸æã\n********************\n"
+    },
+    {
+      "strategy": "pie_partial",
+      "desc": "partial ret -> 0x11f3 off=56 (ret=0x12e6, nib=6, kind=flag)",
+      "ok": false,
+      "elapsed": 0.45,
+      "tail": "********************\nå¿ä¸å¼ºèæºä¸è¾¾ï¼è¨ä¸ä¿¡èè¡ä¸æã\n********************\n"
+    },
+    {
+      "strategy": "pie_partial",
+      "desc": "partial ret -> 0x11f3 off=56 (ret=0x12e6, nib=7, kind=flag)",
+      "ok": false,
+      "elapsed": 0.45,
+      "tail": "********************\nå¿ä¸å¼ºèæºä¸è¾¾ï¼è¨ä¸ä¿¡èè¡ä¸æã\n********************\n"
+    },
+    {
+      "strategy": "pie_partial",
+      "desc": "partial ret -> 0x11f3 off=56 (ret=0x12e6, nib=8, kind=flag)",
+      "ok": false,
+      "elapsed": 0.45,
+      "tail": "********************\nå¿ä¸å¼ºèæºä¸è¾¾ï¼è¨ä¸ä¿¡èè¡ä¸æã\n********************\n"
+    },
+    {
+      "strategy": "pie_partial",
+      "desc": "partial ret -> 0x11f3 off=56 (ret=0x12e6, nib=9, kind=flag)",
+      "ok": false,
+      "elapsed": 0.45,
+      "tail": "********************\nå¿ä¸å¼ºèæºä¸è¾¾ï¼è¨ä¸ä¿¡èè¡ä¸æã\n********************\n"
+    },
+    {
+      "strategy": "pie_partial",
+      "desc": "partial ret -> 0x11f3 off=56 (ret=0x12e6, nib=10, kind=flag)",
+      "ok": true,
+      "elapsed": 0.45,
+      "tail": "********************\nå¿ä¸å¼ºèæºä¸è¾¾ï¼è¨ä¸ä¿¡èè¡ä¸æã\n********************\nCTF2{docker-target-ok}}\n"
+    }
+  ],
+  "error": ""
+}

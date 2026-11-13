@@ -62,6 +62,33 @@ solve.bat pwn --host 1.2.3.4 --port 31337 --ssl ^
       CTF2{...}
 ```
 
+### 没有远程地址时：把附件挂成「容器内靶机」
+
+真实比赛结束后地址就没了，但仍要验证远程形态。用下面两条命令即可：
+
+```bat
+:: 起靶机（默认 chellenges\pwn -> 127.0.0.1:4444）
+target.bat
+target.bat chellenges\pwn 5555          :: 换题 / 换端口
+target.bat chellenges\pwn 4444 noaslr   :: 关 ASLR（复现、调参用）
+target.bat stop                          :: 停掉并删除容器
+
+:: 打它（和打真远程完全同一条路径）
+solve.bat chellenges\pwn --host 127.0.0.1 --port 4444 --max-attempts 80
+```
+
+靶机的行为刻意贴近真平台：
+
+| 特性 | 说明 |
+|---|---|
+| `socat TCP-LISTEN,fork` | 每次连接 exec 一个新进程 → **ASLR 每次变化**，所以要按 16 次一轮爆破 |
+| 同目录 `flag` 文件 | `system("cat flag")` 这类 win 能直接取到 |
+| **不给 pty** | 目标 stdout 全缓冲，启动 banner 会卡住（真远程常这样）；只有 `write()` 直写才立刻可见 |
+| `--host 127.0.0.1` | `solve.bat` 会自动给攻击容器加 `--network host` |
+| 其它地址 | 用 `--host host.docker.internal`（solve.bat 自带 `--add-host`） |
+
+> `noaslr` 需要 `--security-opt seccomp=unconfined`（`target.bat` 已自动加），否则 `personality()` 被 Docker 默认 seccomp 拦掉，`setarch` 会报 "Operation not permitted"、程序根本不跑。
+
 ### PIE 题的两种打法（引擎自动选）
 
 | 情况 | 打法 | 次数 |

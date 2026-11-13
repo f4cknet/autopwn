@@ -161,3 +161,17 @@ SROP、20 字节极限输入的 fmt、纯 PIE 局部覆盖（栈对齐）仍需�
 | 强制盲打 `AUTOPWN_NO_MAPS=1` | 第 **8** 次尝试命中，取出 flag（模拟远程） |
 | `bench` 回归 | 13/15，无退化 |
 | `bench_sys` 回归 | 4/4 |
+
+
+### 8.1 用容器靶机验证「远程形态」
+
+真实比赛结束后远程地址失效，改用 `target.bat` 把附件挂成 TCP 靶机（`socat TCP-LISTEN,fork`，
+每连接一个新进程，ASLR 每次变化），再走和真远程完全一样的代码路径：
+
+| 场景 | 命令 | 结果 |
+|---|---|---|
+| 容器靶机 + ASLR on | `solve.bat chellenges\pwn --host 127.0.0.1 --port 4444 --max-attempts 80` | 1 / 2 / 2 次尝试命中，`flag:CTF2{docker-local-target}` |
+| 走 `host.docker.internal` | `--host host.docker.internal` | 7 次尝试命中 |
+| 关 ASLR（`target.bat ... noaslr`） | 同上 | nib=4（基址 `0x555555554000`）固定，1 次命中 |
+
+这一步的价值：验证了「无 `/proc` 访问」时 nib 爆破这条路真的能走通，而不是只在本地读 maps 的捷径上有效。

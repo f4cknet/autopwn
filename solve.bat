@@ -20,8 +20,13 @@ if errorlevel 1 goto nodocker
 docker image inspect autopwn:pwn22 >nul 2>nul
 if errorlevel 1 goto noimage
 
+rem --host 127.0.0.1 / localhost means "a target on the host" -> share host network.
+rem Otherwise reach the host via host.docker.internal (works on Desktop and Linux).
+set "NETARGS=--add-host=host.docker.internal:host-gateway"
+echo %* | findstr /i /c:"127.0.0.1" /c:"localhost" >nul 2>nul && set "NETARGS=--network host"
+
 rem %%* passed through as-is (keeps quotes for --cmd "ls -la /")
-docker run --rm --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -e AUTOPWN_HOST_ROOT="%CD%" -v "%CD%:/work" -w /work autopwn:pwn22 python3 -m autopwn.engine.cli %*
+docker run --rm %NETARGS% --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -e AUTOPWN_HOST_ROOT="%CD%" -v "%CD%:/work" -w /work autopwn:pwn22 python3 -m autopwn.engine.cli %*
 exit /b %errorlevel%
 
 :usage

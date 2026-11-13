@@ -43,9 +43,9 @@
   "attempts": [
     {
       "strategy": "syscall3",
-      "desc": "int80 execve: data=0x80491bc off=32 plant=36 entry_sub=0x10",
+      "desc": "int80 execve 3-stage: data=0x80491bc off=32 plant=36 entry_sub=0x10",
       "ok": true,
-      "elapsed": 4.37,
+      "elapsed": 4.38,
       "tail": "Welcome to 0CTF 2016!\nGood Luck!\n\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000/bin/sh\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000PWNED_42\nctf\nuid=1000(ctf) gid=1000(ctf) groups=1000(ctf)\n"
     }
   ],

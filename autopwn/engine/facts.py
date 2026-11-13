@@ -280,6 +280,25 @@ def _writable_start(ch: Challenge) -> Optional[int]:
     return best
 
 
+def _zero_addr(ch: Challenge, data: Optional[int]) -> Optional[int]:
+    """数据段 memsz 之后、同一页内的零填充区。
+
+    用作 execve 的 argv 数组（内容为 NULL），免得依赖「我们刚写过 0」。
+    """
+    if not data:
+        return None
+    for seg in ch.elf.segments:
+        v = int(seg.header.p_vaddr)
+        m = int(seg.header.p_memsz)
+        if v <= data < v + max(m, 1):
+            end = v + m
+            z = (end + 3) & ~3
+            if z + 4 <= ((end | 0xFFF) + 1):
+                return z
+            return None
+    return None
+
+
 def _entry_sub(ch: Challenge, d: Dis) -> int:
     """_start 开头的 sub esp,imm —— 重入 _start 时整个帧会下移这么多。"""
     if not d.insns:

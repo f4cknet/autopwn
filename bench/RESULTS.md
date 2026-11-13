@@ -106,7 +106,23 @@ SROP、20 字节极限输入的 fmt、纯 PIE 局部覆盖（栈对齐）仍需�
 | 根因 | 引擎只认 `call gets/read@plt`，而这类题 call 的是自写的 `int 0x80` 包装 |
 | 修复 | `facts` 增加 syscall 包装识别（`mov eax,NR ... int 0x80`）；新增策略 `syscall3` |
 | 结果 | 本地 `SHELL syscall3 uid=0(root)`、远程 `uid=1000(ctf)`，均 **1 次尝试** |
+| 泛化 | 拆成两条：`syscall1`（`limit >= off+0x18`，一次 read 拿全三参）/ `syscall3`（`limit == off+0x14`，种 0 + 重入 `_start`） |
 
 `syscall3` 的触发条件很窄（只有真正需要的题才会命中）：i386 + 存在 `mov eax,3` 包装 +
 窗口恰好 `limit == off + 0x14` + `.data` 可写 + `_start` 有 `sub esp,imm`。
 不满足就 return，不会给其它题型制造假 plan。
+
+
+### 7.1 变体回归矩阵（`bench_sys/`，由 `docker/make_sys_variants.py` 生成）
+
+只改立即数、其余字节不动，验证策略是按结构选路而不是写死偏移：
+
+| 变体 | 改动 | off / limit | 命中策略 | 结果 |
+|---|---|---|---|---|
+| `v_fr28` | `sub esp,0x28` / `add esp,0x28` | 24 / 52 | `syscall1` | ✓ shell |
+| `v_fr2c` | `sub esp,0x2c` / `add esp,0x2c` | 28 / 52 | `syscall1` | ✓ shell |
+| `v_lim38` | `read` 数量 0x38 | 32 / 56 | `syscall1` | ✓ shell |
+| `v_lim3c` | `read` 数量 0x3c | 32 / 60 | `syscall1` | ✓ shell |
+| 原始 | 0x30 / 0x34 | 32 / 52 | `syscall3` | ✓ shell |
+
+4/4 变体 + 原始题全部一次打通（本地）。这说明 `limit` 与 `off` 的关系决定走哪条路，而不是靠单题调参。

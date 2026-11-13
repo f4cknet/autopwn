@@ -26,7 +26,7 @@
 环境：Windows + Docker Desktop。镜像构建一次即可。
 
 ```bat
-cd /d D:\ctf\ctf-env\autopwn
+cd /d D:\ctf\hacktools\10-pwn\autopwn
 
 :: 0) 首次或镜像丢失时（8~12 分钟）
 build_pwn.bat
@@ -89,14 +89,24 @@ target.bat stop
 ```
 autopwn/
 ├── autopwn/engine/        引擎主线（facts / strategies / orchestrator / run / model / cli）
-├── docker/                Dockerfile、serve.sh（靶机）、make_sys_variants.py、评测脚本
+├── docker/                Dockerfile、serve.sh（靶机）、make_sys_variants.py、评测入口
 ├── bench/                 15 道比赛原题（<题名>/bin [+ libc/]）
 ├── bench_extra/           8 道经典题型（泛化验证用）
 ├── bench_sys/             4 个「窗口/帧尺寸」变体（syscall 策略回归）
 ├── chellenges/            当前比赛附件（原始 ELF / zip / 平铺目录，可直接跑）
-├── results/               每次尝试的证据（json，gitignore）
-└── archive/               历史版本归档（v4 已归档，v5 待归档）
+├── Challenge/             仓库自带经典题（pytest 依赖，勿移动）
+├── scripts/
+│   ├── test/              评测与回归脚本
+│   └── audit/             一次性审计脚本
+├── bugs/                  修复记录（fix.md 索引 + 单条 fix_<name>.md）
+├── upgraded/              任务详情（v6.0.0、v7.0.0）
+├── results/               证据 json（本地 + chellenges / extra / remote / docker）
+├── archive/               历史归档（v4、v5）
+├── writeups/              解题报告（docx）
+└── *.bat                  solve / target / build_pwn / shell（Windows 入口）
 ```
+
+> 文档职责分工见 [`DOC_MAP.md`](./DOC_MAP.md)：每份文档只负责一件事，避免同一数字写在三处。
 
 ## 覆盖的题型
 

@@ -107,3 +107,9 @@ __pycache__/
 
 # 容器内靶机的运行目录（serve.sh 生成）
 _target/
+
+# ----- 运行产物（每次跑都会变，不入库；本地保留）-----
+/results/*
+!/results/remote/
+/results/remote/*
+!/results/remote/FLAGS.md

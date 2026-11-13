@@ -1,21 +1,20 @@
-# AGENTS.md — AutoMisc
+# AGENTS.md — AutoPwn 项目治理规则
 
-> 本文档保留**核心治理规则**（4 条铁律 + AI Agent 条款 + 治理变更流程）
+> **适用对象**：所有在本仓库工作的 AI Agent（Claude Code / Codex / Cursor 等）与人类 Owner。
+> **项目形态**：个人独立开发，默认流程 = 直接 `commit` 到 `main`，**不要求 PR**。
+> **工作目录**：`D:\hacktools\10-pwn\autopwn`（容器内挂载为 `/work`）。
+> 除非 Owner 明确授权，**不创建额外平行目录 / `git worktree` / 旁路工作树**。
 >
-> **当前阶段说明（治理变更 1.10 / 1.11 / 1.12 / 1.13 / 1.14 · 2026-08-30）**：
-> 本项目当前为**个人独立开发**，默认流程 = **直接 `commit + push` 到 `main`**，**不要求 PR**。
-> 默认工作目录固定为 **`D:\ctf\ctf-env\autopwn`**（容器内对应 **`/data/autopwn`**）；除非 Owner 明确授权的恢复 / 取证场景，**不创建额外 `autopwn-*` 平行目录、`git worktree` 或旁路工作树**。
-> 自治理变更 **1.14** 起，**v4 文档体系统一归档到 `archive/v4/`**；当前规范文档切换为 **`AGENTS.md` + `upgraded.md` + `v5_prd.md` + `v5_todo.md` + `v5_architecture.md`**。
+> **Agent session 启动必读**（按顺序）：
 >
-> **AI Agent session 启动必读**：
+> 1. `AGENTS.md`（本文件）—— 规则
+> 2. [`CLAUDE.md`](./CLAUDE.md) —— 入口指针与最容易违反的 5 条
+> 3. [`HANDOVER.md`](./HANDOVER.md) —— 上手、环境坑、如何加策略
+> 4. [`ARCHITECTURE.md`](./ARCHITECTURE.md) —— 现状架构与数据结构
+> 5. [`PROGRESS.md`](./PROGRESS.md) —— 基线数字与已知边界
+> 6. `upgraded/v7.0.0.md` —— 下一步方向（四层管线提案）
 >
-> 1. 完整读 `AGENTS.md`（本文件）
-> 2. 读 `upgraded.md`（主索引）
-> 3. 读 `v5_prd.md`
-> 4. 读 `v5_todo.md`（独立待办 / 路线图）
-> 5. 读 `v5_architecture.md §3`（目标架构）
-> 6. 读当前任务对应的 `upgraded/vX.Y.Z.md`（需求详情）
-> 7. 仅在历史追溯 / 审计时，再读 `archive/v4/*`
+> v4 / v5 时代文档已归档到 `archive/v4/`、`archive/v5/`，**只在追溯历史时读**。
 
 ---
 
@@ -23,70 +22,75 @@
 
 ### 铁律 1：实施以 `ARCHITECTURE.md` + `upgraded.md §3` 为准
 
-> 2026-11-13 更新：v6 起主线是 `autopwn/engine/`，架构以 [`ARCHITECTURE.md`](./ARCHITECTURE.md) 为准；
-> v5 时代的 `v5_architecture.md` 已归档到 `archive/v5/`（见 [`DOC_MAP.md`](./DOC_MAP.md)）。
-> 进度与基线看 [`PROGRESS.md`](./PROGRESS.md)，接手须知看 [`HANDOVER.md`](./HANDOVER.md)。
-
-- 任何代码改动必须对应 `upgraded.md` §3 中的一个任务索引行（或 Owner 现场新立任务行）；新任务与当前任务的详情写在 `upgraded/vX.Y.Z.md`
-- 在 `upgraded.md` §3 找不到对应项 ⇒ **该任务不存在**
-- 如果你觉得要做的事在 `upgraded.md` 中没有：先 grep 关键字（确认不是漏看）⇒ 该项是**新需求** ⇒ 立即停手，走铁律 2
+- 任何代码改动必须对应 `upgraded.md §3` 里的一个任务行（或 Owner 现场新立任务行）；详情写 `upgraded/vX.Y.Z.md`
+- 在 `upgraded.md §3` 找不到对应项 ⇒ **该任务不存在**
+- 架构以 [`ARCHITECTURE.md`](./ARCHITECTURE.md) 为准（v6 起主线是 `autopwn/engine/`）
+- 觉得要做的事在任务板里没有：先 `grep` 确认不是漏看 ⇒ 属于**新需求** ⇒ 停手，走铁律 2
 
 ### 铁律 2：新需求先更新文档，再实施
 
-**严禁直接实施未经文档记录的新需求**。哪怕需求看起来“显而易见”或“十分钟能搞定”。
+**严禁直接实施未经文档记录的新需求**，哪怕看起来「显而易见」或「十分钟能搞定」。
 
 新需求包括但不限于：
-- 重构过程中冒出的“我顺便改一下这里”
-- 同事 / 业务方 / Issue 跟踪中的临时请求
-- 看到代码 smell 临时起意的优化
-- 工具链调整（CI、依赖、lint 配置、pre-commit）
-- 新增利用方式 / 新增支持的架构 / 新增二进制类型
 
-**强制流程（缺一步都不算完成）**：
-1. **需求层**（如需）：更新 `v5_prd.md`
-2. **架构层**（如需）：更新 `v5_architecture.md`
-3. **执行层**（`upgraded.md §3` + `upgraded/vX.Y.Z.md`）：在索引里加一行任务（含 ID / 状态 / 预估 / Owner），并创建同 ID 详情文件（含背景 / 目标 / 范围 / 风险 / 验收）
-4. **风险层**（如需）：评估风险，写缓解措施
-5. **评审**：Owner 自审（单 Owner 项目，per §2.2 简化）
-6. **实施**：上述步骤完成并通过后，才能写代码
-7. **追溯**：`commit message` 标题格式 `[v{X}.{Y}.{Z}] {动词} {对象}`；如写提交说明，需同时引用 `upgraded.md` 索引行与 `upgraded/vX.Y.Z.md` 详情文件；治理变更需写明“治理变更”
+- 重构过程中冒出的「我顺便改一下这里」
+- 临时请求 / Issue 里的口头需求
+- 看到代码 smell 临时起意的优化
+- 工具链调整（CI、依赖、lint 配置）
+- **新增利用策略 / 新增支持的架构 / 新增二进制类型**
+
+强制流程（缺一步都不算完成）：
+
+1. **架构层**（如需）：更新 `ARCHITECTURE.md`
+2. **执行层**：在 `upgraded.md §3` 加一行任务（ID / 状态 / 预估 / Owner），并创建同 ID 详情文件（背景 / 目标 / 范围 / 风险 / 验收）
+3. **风险层**（如需）：评估风险写缓解措施
+4. **评审**：Owner 自审（单 Owner 项目，见 §2.2）
+5. **实施**：上述完成才能写代码
+6. **追溯**：`commit message` 格式 `[v{X}.{Y}.{Z}] {动词} {对象}`，引用任务行与详情文件
 
 ### 铁律 3：任务必须有状态
-- `upgraded.md §3` 中**每一行**任务都必须有状态（⏳🔄👀✅⚠️❌ 之一）
-- 状态定义：`⏳` 待办 / `🔄` 进行中 / `👀` 待自审 / `✅` 完成 / `⚠️` 阻塞 / `❌` 取消
-- 每次代码 `push` 后，必须在**同一任务的最终提交**中同步更新任务索引与详情文件（任务状态 + 实施记录）
-- 文档更新与代码改动**禁止拆成两次最终 push**
+
+- `upgraded.md §3` **每一行**任务都要有状态：`⏳` 待办 / `🔄` 进行中 / `👀` 待自审 / `✅` 完成 / `⚠️` 阻塞 / `❌` 取消
+- 每次提交后，在同一任务的**最终提交**里同步更新任务索引与详情
+- 文档更新与代码改动**禁止拆成两次最终提交**
 
 ### 铁律 4：未经验证 = 未完成
-“完成”的判定标准（**全部满足**才能把状态改 ✅）：
 
-1. ✅ 代码已 push 到 `main` 分支
-2. ✅ `pytest -m "not integration"` 全绿
-3. ✅ 若涉及行为变化：`pytest -m integration` 跑通对应 `Challenge/` 二进制
-4. ✅ 若涉及 `autopwn` 行为：在至少 1 个 `Challenge/` 二进制上跑一次，对比关键日志（`EXPLOITATION SUCCESSFUL` / 选中的 strategy 名 / 关键地址）一致
-5. ✅ Owner 自审（单 Owner 项目）
+「完成」的判定（**全部满足**才能改 ✅）：
+
+1. ✅ 代码已提交到 `main`
+2. ✅ 回归基线**不低于**当前水平（见 `PROGRESS.md §2`）：
+   - `solve.bat bench` → 13/15
+   - `solve.bat bench_extra` → 5 shell + 1 flag-only
+   - `solve.bat bench_sys` → 4/4
+3. ✅ 新增能力必须带**可复现向量**，并登记到 `bench/RESULTS.md`
+4. ✅ 判定标准是「目标进程里真的执行了命令/真的打印出 flag」，**不是**「策略跑完没报错」
+5. ✅ Owner 自审
 6. ✅ 文档已同步（铁律 3）
 
-**任何一条不满足，状态都不能改 ✅**。
+**任何一条不满足，状态都不能改 ✅。**
 
 ---
 
 ## 2. 衍生规则（强化铁律）
 
 ### 2.1 任务粒度
-- 单个任务 ≤ 400 行 diff（不含 lock 文件）
-- 同一批次 `commit/push` 不跨多个任务 ID
-- 任务粒度过大 ⇒ 在 `upgraded.md` 中拆分（用 `v{X}.{Y}.{Z}a` / `v{X}.{Y}.{Z}b` 标注）
+
+- 单任务 ≤ 400 行 diff（不含 lock 文件）
+- 同一批次提交不跨多个任务 ID
+- 粒度过大 ⇒ 在 `upgraded.md` 拆分（`v{X}.{Y}.{Z}a` / `b`）
 
 ### 2.2 单 Owner 项目简化
-- Owner 自审 = Reviewer（不需要第二人签字）
-- Owner 转让 = 直接修改 `upgraded.md` 中 Owner 字段并在提交说明中说明
-- 默认流程 = 直接向 `main` 执行 `commit + push`，不要求 PR
-- 默认只在仓库主目录 `D:\ctf\ctf-env\autopwn`（容器 `/data/autopwn`）迭代；若主目录不干净，先备份 / 提交 / 回滚 / 澄清，未经 Owner 明确授权不得创建额外 worktree 或平行目录
-- `main` 是唯一长期分支（per 1.5 主干开发）
+
+- Owner 自审 = Reviewer（无需第二人签字）
+- Owner 转让 = 直接改 `upgraded.md` 的 Owner 字段并在提交说明里写明
+- 默认直接向 `main` 提交，不要求 PR
+- 只在主目录 `D:\hacktools\10-pwn\autopwn` 迭代；主目录不干净时先备份/提交/回滚/澄清，不得私建 worktree 或平行目录
+- `main` 是唯一长期分支（主干开发）
 
 ### 2.3 Owner 自审责任
-Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任务粒度
+
+Owner 负责检查提交是否违反本文档 4 条铁律 + `upgraded.md §3` 的任务粒度。
 
 ---
 
@@ -94,180 +98,87 @@ Owner 验证提交是否违反本文档的 4 条铁律 + `upgraded.md` §3 任�
 
 | 等级 | 行为 | 处理 | 恢复 |
 |---|---|---|---|
-| **L1 轻微** | 文档漏更新但任务已 push | 补同任务文档提交 | 补完即恢复 |
-| **L1 轻微** | `commit message` 未引用任务 ID | amend 提交说明并重新 push | 改完即恢复 |
+| **L1 轻微** | 文档漏更新但任务已提交 | 补同任务文档提交 | 补完即恢复 |
+| **L1 轻微** | `commit message` 未引用任务 ID | amend 说明并重推 | 改完即恢复 |
 | **L1 轻微** | 任务粒度超 400 行 | 拆完重做 | 拆完即恢复 |
-| **L2 中度** | 绕过文档直接实施新需求（铁律 2） | 回滚提交；任务走铁律 2 重新立项 | 走完铁律 2 后恢复 |
-| **L2 中度** | 未经 Owner 明确授权创建额外 worktree / 平行目录并把最新变更留在旁路目录 | 立即同步回主目录；删除旁路目录；记录恢复动作 | 主目录与 `origin/main` 对齐后恢复 |
+| **L2 中度** | 绕过文档直接实施新需求（铁律 2） | 回滚提交；走铁律 2 重新立项 | 走完流程后恢复 |
+| **L2 中度** | 未授权创建额外 worktree / 平行目录 | 同步回主目录；删除旁路；记录恢复动作 | 与 `main` 对齐后恢复 |
 | **L2 中度** | 任务标 ✅ 但验收未过 | 状态回退到 👀 或 🔄 | 补完验收恢复 |
-| **L3 严重** | 伪造验收 | 回滚提交；Owner 暂停认领新任务一周 | 一周冷却期后恢复 |
-| **L3 严重** | 反复违反铁律 2 / 4 | 撤销该 Owner 资格 | 需 Owner 重新授权 |
+| **L3 严重** | **伪造验收 / 假成功** | 回滚提交；Owner 暂停认领新任务一周 | 冷却期后恢复 |
+| **L3 严重** | 反复违反铁律 2 / 4 | 撤销 Owner 资格 | 需重新授权 |
+
+> **L3 特别说明**：本项目的「成功」极易自欺（策略跑完没报错 ≠ 打通）。
+> 任何为了让结果好看而放宽判定（例如把 `FAILED` 改判成 `win reached` 而不核实输出）都算伪造验收。
 
 ---
 
 ## 4. 紧急通道
 
-以下三种情况可临时跳过铁律 2（**仅铁律 2**，铁律 1/3/4 永远不能跳过）：
+以下三种情况可临时跳过**铁律 2**（铁律 1/3/4 永远不能跳过）：
 
-1. **线上 / 安全类紧急修复**：必须 24h 内补走铁律 2
-2. **CI 全红且阻塞 push**（hotfix 模式）：文档更新必须同次 `commit/push` 跟上
-3. **Owner 明确授权的临时特批**：必须在提交说明中写明原因 + 授权人
+1. **安全类紧急修复**：必须 24h 内补走铁律 2
+2. **CI 全红且阻塞提交**（hotfix）：文档更新必须同次提交跟上
+3. **Owner 明确授权的临时特批**：提交说明里写明原因 + 授权人
 
-**其他一切情况，铁律不可绕过。**
+其他一切情况，铁律不可绕过。
 
 ---
 
 ## 5. AI Agent 特别条款
 
-### 5.0 角色定位（默认）
+### 5.0 角色定位
 
-本项目中的 AI Agent 默认定位为：**高水平全栈开发工程师 + 产品经理**。
+默认定位：**高水平全栈开发工程师 + 产品经理**。
 
 - 把 Owner 的目标翻译成可执行的需求、架构、迭代计划与任务索引
-- 主动补齐不清晰的 PRD / 架构 / 验收文档
-- 在实施前先做范围拆分、风险提示与验证计划
-- 输出必须可回链到 `v5_prd.md`、`v5_todo.md`、`v5_architecture.md`、`upgraded.md §3` 和对应任务详情
-- 若需求模糊，先澄清或补文档，再进入实现
+- 主动补齐不清晰的架构与验收文档
+- 实施前先做范围拆分、风险提示、验证计划
+- 输出必须可回链到 `ARCHITECTURE.md`、`upgraded.md §3` 与对应任务详情
+- 需求模糊时先澄清或补文档，再进入实现
 
-任何参与本项目的 AI Agent **在每个 session 启动时必须按序执行**：
+### 5.1 本项目的四个高危区（历史踩坑）
 
-1. 读取本文件（`AGENTS.md`）——完整
-2. 读取 `upgraded.md` 整个 §0-§5 —— 完整（主索引 / 流程 / 基线）
-3. 读取 `v5_prd.md` —— 完整
-4. 读取 `v5_architecture.md §3` —— 完整
-5. 读取 `upgraded.md §3` 中**当前活动任务**对应索引行 + 相关 `upgraded/vX.Y.Z.md`
-6. 只有在处理历史追溯 / 审计时，才额外读取 `archive/v4/*`
+| 高危行为 | 后果 | 正确做法 |
+|---|---|---|
+| 事实函数开头就 `return`（如 `if not targets: return`） | 整类题被静默跳过，表现为「0 次尝试」 | 用能力注册表式判断，不要早退 |
+| 判定只看最后一段输出 | 早到的 flag 被判失败（假失败） | 永远扫**累积输出** |
+| `process()` 显式传 `stdin=-1/out=-1/err=-1` | tube 读不到任何输出 | 用 pwnlib 默认共享 PTY |
+| 为了单题通过而写死偏移/地址 | 换题即失效 | 从 `Facts` 推导，参数化 |
 
-> **环境约束补充**（治理变更 1.9 · 2026-08-30）：`ctf-env` 对应的 Docker 环境容器名是 **`ctf_env`**，宿主机 **`D:\ctf\ctf-env\`** 挂载到容器 **`/data`**。仓库工作目录 **`D:\ctf\ctf-env\autopwn`** 在容器中对应 **`/data/autopwn`**。
+### 5.2 输出要求
 
-> **验证环境铁律**：所有单元 / 集成 / smoke / 手工验收都只能在 **`ctf_env`** 容器内执行，容器内默认 Python 版本为 **3.12.11**；宿主机 Windows shell 仅用于编辑、查看与 `git` 操作，不作为验证环境。
-
-**硬性约束**：
-
-| ❌ 禁止 | ✅ 允许 |
-|---|---|
-| 跳过 `v5_prd.md` / `v5_architecture.md` 直接改系统主线 | 对未识别的需求做“需求澄清”提问（不实施，先问） |
-| 跳过 `upgraded.md` 直接生成代码 | 建议“这看起来是新需求，建议走铁律 2” |
-| 在 `commit message` 中遗漏任务 ID | 引用 `upgraded.md §3` 任务行 |
-| 推测 / 编造文件路径、函数名、任务 ID | 引用当前仓库实际文件与任务详情 |
-| 跨多个任务 ID 同时改代码 | 一次只动一个任务 ID |
-| 擅自创建额外 `git worktree` / `autopwn-*` 平行目录继续迭代 | 先在主目录 `D:\ctf\ctf-env\autopwn` / `/data/autopwn` 执行 `git status`，必要时先备份 / 回滚 / 澄清 |
-| 把现有代码逻辑“复述”而不抽到新层 | 严格遵守 `v5_architecture.md §3` 的分层依赖方向 |
-
-> **关键自检**：每次输出代码前，AI Agent 必须在内部回答“这个改动对应 `upgraded.md §3` 哪一行？对应 `v5_architecture.md` 哪一节？”，回答不出就停手。
+- 结论必须带**证据**（回显片段 / JSON 路径），不能只说「成功了」
+- 失败必须**归因**（是没打通、还是打通但条件不满足、还是连接层问题），不能笼统报 FAILED
+- 不要用「应该可以」「理论上」这类措辞替代实测
 
 ---
 
-## 6. 文档引用速查（精简版）
+## 6. 文档速查
 
 | 你想做什么 | 查 |
 |---|---|
-| 怎么开发 autopwn | `AGENTS.md` + `upgraded.md` + `v5_prd.md` + `v5_todo.md` + `v5_architecture.md` + 当前任务 `upgraded/vX.Y.Z.md` |
-| 看长期待办 / 路线图 | `v5_todo.md` |
-| 找当前任务 | `upgraded.md §3` + 对应 `upgraded/vX.Y.Z.md` |
-| 看当前需求边界 | `v5_prd.md` |
-| 看当前架构 | `v5_architecture.md §3` |
-| 文件路径 / 工具 / 模板速查 | `upgraded/appendix.md` |
-| 看 v4 归档入口 | `archive/v4/README.md` / `archive/v4/upgraded.md` |
-| 历史决策 / v3.1 → v4.0 演进 | `archive/v4/refactor.md` + `archive/v4/rebuild.md` |
-| Review 检查清单 | `upgraded.md §5` |
-| **修复记录索引** | [`bugs/fix.md`](./bugs/fix.md)（v4.0+ 治理变更 1.7 起，**只**列已进入 `main` 的 fix） |
-| **单 fix 详细记录** | [`bugs/fix_<bug_name>.md`](./bugs/)（per §6.1） |
+| **第一次上手** | [`HANDOVER.md`](./HANDOVER.md) |
+| 看架构 / 加策略 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) |
+| 看基线数字 / 已知边界 | [`PROGRESS.md`](./PROGRESS.md) |
+| 比赛现场敲命令 | [`CHEATSHEET.md`](./CHEATSHEET.md) |
+| 逐题策略与踩坑 | [`bench/RESULTS.md`](./bench/RESULTS.md) |
+| 找当前任务 | `upgraded.md §3` + `upgraded/vX.Y.Z.md` |
+| 下一步方向 | `upgraded/v7.0.0.md` |
+| Bug 修复记录 | [`bugs/fix.md`](./bugs/fix.md)（索引）+ `bugs/fix_<name>.md` |
+| v4 / v5 历史 | `archive/v4/`、`archive/v5/` |
 
----
+### 6.1 修复记录约定
 
-### 6.1 修复记录文件结构（v4.0+ 治理变更 1.7 · 2026-06-12，**1.8 修订** · 2026-06-13）
-
-**目的**：避免 `bugs/fix.md` 在 v4.0+ 迭代中累积成超大文件（pre-1.7 时 331 行承载 3 个 fix）。改为：
-
-- **`bugs/fix.md` = 索引**（~50 行）—— 只列已进入 `main` 的 fix（含 fix ID / 关联任务行 / 文件链接 / 一句话描述 / 状态）
-- **`bugs/fix_<bug_name>.md` = 单 fix 完整记录**（~80-200 行）—— 类比 git feature branch 命名
-- **未做 / TODO** → 走 `upgraded.md §3` 任务看板（per `upgraded.md` 状态行），**不进** `bugs/fix.md`
-
-**目录位置**（治理变更 1.8 · 2026-06-13）：
-- 所有 fix 文件（索引 + 单 fix 记录）统一放在 **`bugs/` 子目录**下
-- `upgraded.md` / 其他 `.md` 引用时，路径前缀加 `bugs/`（如 `[`fix.md`](./bugs/fix.md)`）
-- 同一目录内的 fix 文件互相引用用 `./fix_<other>.md`（siblings）
-- root 不再放 fix 文件——root 文件清单已含 `writeups/` + `logs/` + `core*` 临时文件 + `*.docx` 输出，再加 `fix*.md` 让 root 杂乱；`writeups/`（结果产物）+ `logs/{题目}/`（过程 trace）+ `bugs/`（修复记录）形成完整三件套目录结构
-
-**命名约定**：
-- `bug_name` 用 snake_case（如 `fmtstr1_routing` / `asm_and_add_padding` / `x64_recv_timeout`）
-- 必须能描述 root cause 或 fix 策略
-- 单 fix 文件 5 段模板：
-
-  1. **现象** (Symptom) — bug 复现命令 + 关键日志
-  2. **根因** (Root Cause) — 代码层定位 + 触发条件
-  3. **修复** (Fix) — 改动文件 + diff 概要 + 备选方案对比
-  4. **验证** (Verification) — 6 关验收结果（关 1-6 一对一）
-  5. **风险与遗留** (Risk & Followup) — 已知 edge case + 引用后续 `fix_<other>.md`
-
-**新增流程**（per 铁律 2）：
-
-1. fix 立项：在 `upgraded.md §3.1` 加任务索引行（状态 `⏳`），并创建对应 `upgraded/vX.Y.Z.md` 详情文件；同时在 `bugs/fix.md` 索引加占位行（status=`⏳ TODO`，文件可暂不创建）
-2. fix 实施：完成代码 + 6 关验收后，在最终 push 到 `main` 的提交里**同时**写 `bugs/fix_<bug_name>.md` + 更新 `bugs/fix.md` 索引（status=`✅`）
-3. 任务行状态同步：fix push 到 `main` 后，`upgraded.md §3.1` 任务行状态改 `✅`
-
-**删除规则**（per `archive/v4/rebuild.md §9.4` 主干开发）：
-- `bugs/fix_<bug_name>.md` 不删除（永久保留 — fix 是事实记录，git blame / 未来 audit 追溯用）
-- 改名 / 拆分 / 合并 走治理变更
-
-**回填规则**：
-- v3.1 时代的 fix 已在 `archive/v4/rebuild.md §3` P 阶段记录中，**不回填**到 `bugs/fix_<bug_name>.md`（避免重复）
-- v4.0+ 第一个 fix 是 `v4.0.5` (FrameContext) 但作为架构变更已记录在 `upgraded.md §3.1` + `bugs/fix.md` 治理变更 1.6 行—— 治理变更 1.7 起，**新** fix 走新文件结构
-
-**例外**（不新建 `bugs/fix_<bug_name>.md` 的 fix）：
-- 单行 typo / 注释错别字
-- 测试 fixture 调整
-- 文档勘误（`AGENTS.md` / `upgraded.md` / `v5_architecture.md` 自身）
-- 治理变更本身（per §7）
-—— 这些直接 `commit + push` 到 `main`，不进 `bugs/fix.md` 索引
+- **`bugs/fix.md` = 索引**：只列已进入 `main` 的修复（ID / 关联任务 / 文件 / 一句话 / 状态）
+- **`bugs/fix_<name>.md` = 单条完整记录**：现象 → 根因 → 修复 → 验证
+- 未做的想法走 `upgraded.md §3` 任务板，**不进** `bugs/`
+- `name` 用 snake_case，能描述 root cause（如 `pie_partial_align` / `menu_interact`）
 
 ---
 
 ## 7. 治理变更
 
-本文件的修改需要：
-
-1. **Owner 起草**变更提案
-2. 在 `commit message` 或 `commit body` 中写明 **“治理变更”** + 原因
-3. Owner 自审（**单 Owner 项目** per §2.2 — 跳过“其他维护者 Review”）
-4. push 到 `main` 后**立即通知**所有 Owner（issue / 群通知；单 Owner 项目 no-op）
-5. 重要变更应回填到 `v5_prd.md` / `v5_architecture.md` / `upgraded.md` / 必要 archive 索引
-
-> 治理变更记录保留在本文件 §8“变更日志”，不允许只写在提交说明里。
-> 治理变更在**主干开发**模式下直接 `commit + push` 到 `main` 即可（per `archive/v4/rebuild.md §9.4`）——不需要“dev 集成分支”或 PR 中间层。
-
----
-
-## 8. 变更日志（精简版）
-
 | 日期 | 版本 | 变更 |
 |---|---|---|
-| 2026-06-06 | 1.0 | 初版：4 条铁律 + L1/L2/L3 违规分级 + 紧急通道 + AI Agent 条款 |
-| 2026-06-10 | 1.5 | 删 §2.6（v3.1 baseline 不在主分支）+ 主干开发（删 dev 角色）+ Owner 自审简化 |
-| 2026-06-10 | **1.6** | **v4.0 重构完成 + 文档瘦身**：AGENTS.md 233→150 行（保留核心铁律 / 违规 / 紧急通道 / AI Agent / 治理变更 / 精简引用速查 + 精简 changelog），删 §0 三层文档契约 + §2 衍生规则 2.4/2.5 + 6 行历史 changelog；新增 `upgraded.md`（v4.0+ 迭代流程）；refactor.md 692→150 行（保留 v4.0 演进史）；rebuild.md 4657→200 行（P0-P11 阶段总结表 + 详简历史） |
-| 2026-06-12 | **1.7** | **修复记录分文件结构**（治理变更 1.7）：新增 §6.1（修复记录文件结构）；`fix.md` 331 → ~50 行（变索引）；3 个 v4.0+ 修复拆为 `fix_<bug_name>.md` 单文件（fix_fmtstr1_routing / fix_asm_and_add_padding / fix_x64_recv_timeout）—— 避免 fix.md 累积成超大文件（pre-1.7 时 331 行承载 3 个 fix） |
-| 2026-06-13 | **1.8** | **修复记录目录化**（治理变更 1.8，per Owner 2026-06-13）：所有 fix 文件从 root 迁移到 `bugs/` 子目录——`fix.md` → `bugs/fix.md`（索引），`fix_<bug_name>.md` → `bugs/fix_<bug_name>.md`；§6.1 新增“目录位置”段；与 v4.1.7 `writeups/`（结果产物）+ v4.1.8 `logs/{题目}/`（过程 trace）形成完整“产物-过程-记录”三件套目录结构 |
-| 2026-08-30 | **1.9** | **补充 ctf-env 容器映射说明**：在 §5 AI Agent 特别条款中明确 `ctf-env` 对应 Docker 容器名 `ctf_env`，宿主机 `D:\ctf\ctf-env\` 挂载到 `/data`，仓库在容器中对应 `/data/autopwn` |
-| 2026-08-30 | **1.10** | **删除单 Owner 项目的默认 PR 流程**：现行规范改为直接 `commit + push` 到 `main`；同步改写铁律 2/3、§2、§3、§4、§5、§6.1、§7 中所有默认 PR 依赖，并注明历史任务行中的 PR / merge / Review 字样仅用于审计追溯 |
-| 2026-08-30 | **1.11** | **明确单目录单人迭代约束**：默认工作目录固定为 `D:\ctf\ctf-env\autopwn` / `/data/autopwn`；未经 Owner 明确授权，不创建额外 `autopwn-*` 平行目录、`git worktree` 或旁路工作树；若发生恢复场景，最新已验证版本必须回到主目录 |
-| 2026-08-30 | **1.12** | **`upgraded.md` 索引化**：`upgraded.md` 只保留阅读入口 / 任务索引 / 验收基线；每次迭代的需求详情、范围、风险、验收记录下沉到 `upgraded/vX.Y.Z.md`；历史未迁移条目按“新建即分文件，触达即迁移”逐步收敛 |
-| 2026-08-30 | **1.13** | **`upgraded.md` 第二轮瘦身**：主文档只保留当前活动任务、待收尾任务、最近完成任务、流程与验证基线；休眠 backlog 下沉到 `upgraded/backlog.md`，详细状态说明下沉到 `upgraded/archive_state.md`，文件路径/工具/模板下沉到 `upgraded/appendix.md`；AI Agent 非追溯场景默认不读历史归档 |
-| 2026-08-30 | **1.14** | **v4 文档统一归档，v5 文档体系生效**：`refactor.md` / `rebuild.md` / v4 历史索引迁入 `archive/v4/`；当前规范切换为 `AGENTS.md` + `upgraded.md` + `v5_prd.md` + `v5_architecture.md` |
-| 2026-09-01 | **1.15** | **补充验证环境铁律**：所有单元 / 集成 / smoke / 手工验收仅可在 `ctf_env` 容器内执行（Python 3.12.11）；宿主机仅用于编辑、查看与 `git` 操作 |
-| 2026-09-01 | **1.16** | **补充 AI Agent 角色定位**：默认将项目内 AI Agent 定位为“高水平全栈开发工程师 + 产品经理”，负责需求拆解、架构协同、迭代计划与进度透明化 |
-| 2026-09-01 | **1.17** | **拆分独立 TODO 文档**：新增 `v5_todo.md` 作为长期待办 / 路线图文档；`upgraded.md` 保留执行板职责，`v5_prd.md` / `v5_architecture.md` 仅保留需求与设计 |
-
-> 完整 changelog 1.0-1.17 见 git log。
-
----
-
-> **最后一条**：
-> 文档先行不是繁文缛节，是为了**让团队（包括未来的你和未来的 AI）能在任何时间点快速进入状态**。一次不遵守的代价是后续十次混乱。
->
-> **签字栏**：
-> - 项目 Owner：@Minzhi_Zhou（2026-06-07 由 @Ba1_Ma0 改名）
-> - 首次发布：2026-06-06
-
-
-
+| 2026-08-30 | 1.14 | v4 文档归档到 `archive/v4/`，切换到 v5 文档体系 |
+| 2026-11-13 | 2.0 | **v6 重构后重写**：主线切到 `autopwn/engine/`；v5 文档归档到 `archive/v5/`；铁律 1 改指 `ARCHITECTURE.md`；铁律 4 的验收改为可执行回归基线（13/15）；新增 §5.1 四个高危区 |

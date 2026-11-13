@@ -10,7 +10,7 @@
 ## 1. 五分钟上手
 
 ```bat
-cd /d D:\ctf\ctf-env\autopwn
+cd /d D:\ctf\hacktools\10-pwn\autopwn
 
 :: 1) 确认镜像在（不在就 build_pwn.bat，8~12 分钟）
 docker images | findstr autopwn

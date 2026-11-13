@@ -1,188 +1,78 @@
-# upgraded.md — AutoPwn v5 迭代索引
+# upgraded.md — 任务看板与迭代索引
 
-> **角色**：v5 的**主索引与流程入口**
-> **状态**：`5.0.dev0` 文档基线已建立（当前活动任务：`v5.0.9`；最近完成：`v5.0.8`，2026-09-01）
-> **配套文档**：
-> - [`AGENTS.md`](./AGENTS.md) — 项目治理与 AI Agent 约束
-> - [`v5_prd.md`](./v5_prd.md) — v5 当前需求
-> - [`v5_todo.md`](./v5_todo.md) — v5 独立待办 / 路线图
-> - [`v5_architecture.md`](./v5_architecture.md) — v5 当前架构
-> - [`upgraded/appendix.md`](./upgraded/appendix.md) — 文件路径 / 工具 / 模板速查
-> - [`archive/v4/README.md`](./archive/v4/README.md) — v4 历史归档入口
+> **职责**：只做「任务 → 状态 → 详情」的索引。
+> 架构看 [`ARCHITECTURE.md`](./ARCHITECTURE.md)，基线数字看 [`PROGRESS.md`](./PROGRESS.md)，
+> 上手看 [`HANDOVER.md`](./HANDOVER.md)，规则看 [`AGENTS.md`](./AGENTS.md)。
 >
-> **治理变更 1.14 · 2026-08-30**：v4 文档已归档到 `archive/v4/`，本文件切换为 v5 当前任务索引。
-
----
+> 本文件**不再重复**架构描述与验证方法（v5 时代的 §4/§5 已删，避免与上面三份文档打架）。
 
 ## 0. 阅读指引
 
-| 你是谁 | 先看什么 |
+| 你想干什么 | 去哪 |
 |---|---|
-| **第一次接触本项目** | `AGENTS.md` → 本文件 → `v5_prd.md` → `v5_todo.md` → `v5_architecture.md §3` |
-| **正在做当前任务** | 本文件 §3.1 → 对应 `upgraded/vX.Y.Z.md` → `v5_architecture.md` |
-| **要看长期待办 / 路线图** | `v5_todo.md` |
-| **要续做历史 backlog** | `archive/v4/upgraded/backlog.md` 对应条目 → **先回填** 本文件 §3 + 新建 `upgraded/vX.Y.Z.md` → 再实施 |
-| **只想找文件路径 / 工具脚本** | `upgraded/appendix.md` |
-| **要追溯旧状态 / 历史决策** | `archive/v4/README.md` / `archive/v4/upgraded.md` / `archive/v4/rebuild.md` |
+| 领任务 / 看进度 | 本文件 §2 |
+| 看某个任务的具体方案 | `upgraded/vX.Y.Z.md` |
+| 看下一步架构方向 | [`upgraded/v7.0.0.md`](./upgraded/v7.0.0.md) |
+| 看当前实测能力 | [`PROGRESS.md §2`](./PROGRESS.md) |
+| 看 v4 / v5 历史 | `archive/v4/`、`archive/v5/` |
 
----
+## 1. 迭代流程
 
-## 1. 当前状态
+### 1.1 任务来源
 
-### 1.1 现状快照
+1. Owner 直接指定
+2. 回归中发现的缺口（`bench/*` 有新题型打不动）
+3. `upgraded/v7.0.0.md` 的四层管线路线
 
-- 当前开发主线：`v5`
-- 当前行为基线：**5/5 SUCCESS**；`v4.1.22` 已为本地 x32 `fmt leak -> second input BOF` 题型补齐 same-session canary 路线，`canary_fuzz()` 仍保留 **20s fail-fast budget** 作为回退
-- 当前治理模式：**单 Owner / 单目录 / 直接 `commit + push` 到 `main`**
-- 主工作目录固定为 `D:\ctf\ctf-env\autopwn`（容器内 `/data/autopwn`）
-- v4 详细状态、旧 backlog 与历史任务已统一归档到 [`archive/v4/`](./archive/v4/)
+### 1.2 单任务工作流
 
-### 1.2 当前主线
+```
+立项（§2 加行 + 建 upgraded/vX.Y.Z.md）
+  → 实施
+  → 回归（bench / bench_extra / bench_sys 不低于基线）
+  → 更新 §2 状态 + 详情文件「实施记录」
+  → 一次提交（代码 + 文档）
+```
 
-- **当前活动任务**：`v5.0.9` — 统一 verifier 主体切片（probe/spec 抽象）
-- **最近完成**：`v5.0.8` 已建立独立 TODO 文档并补全任务板入口；**当前非目标**：统一 verifier 执行层仍未迁移
-- **当前非目标**：统一 verifier 主体迁移仍未完成；legacy strategy adapter 继续作为过渡层
+### 1.3 详情文件要求
 
----
+必须含：背景 / 目标 / 范围（做什么、不做什么）/ 风险 / 验收标准 / 实施记录。
 
-## 2. 迭代流程
+### 1.4 任务粒度
 
-### 2.1 任务来源
+单任务 ≤ 400 行 diff；过大就拆 `a` / `b`。
 
-| 来源 | 要求 |
-|---|---|
-| Owner 新需求 | 先更新 `v5_todo.md`（必要时同步 `v5_prd.md` / `v5_architecture.md`），再在 §3 增加任务索引行 + 创建 `upgraded/vX.Y.Z.md` |
-| 续做历史 backlog | 先从 `v5_todo.md` 或 `archive/v4/upgraded/backlog.md` 找来源，再**回填到 §3** 并新建 `upgraded/vX.Y.Z.md` |
-| AI Agent 发现 | 不直接实施；先走需求澄清 / 立项 |
-| 历史追溯 | 默认读 archive；非追溯场景不主动进入 |
+## 2. 任务看板
 
-### 2.2 单任务工作流
-
-1. **立项**：在 §3 加任务索引行，写状态 / 预估 / 链接；详情写入 `upgraded/vX.Y.Z.md`
-2. **实施**：在主目录 `D:\ctf\ctf-env\autopwn` / `/data/autopwn` 完成改动，并跑对应验收
-3. **收尾**：`commit + push` 后，同提交更新 §3 索引行与详情文件完成记录
-
-### 2.3 详情文件规则
-
-- **当前活动 / 待收尾任务**：必须有专属 `upgraded/vX.Y.Z.md`，或有明确的 backlog 长记录可追溯
-- **历史 backlog**：默认留在 `archive/v4/upgraded/backlog.md`，但**重新开工前必须拆出专属详情文件并回填主索引**
-- 详情文件至少包含：背景、目标、范围、实施方向、风险、6 关验收
-- `commit body` 若存在，需同时引用 `upgraded.md §3` 与对应详情文件
-
-### 2.4 任务粒度
-
-- 单个任务 ≤ 400 行 diff（不含 lock 文件）
-- 同一批次 `commit/push` 不跨多个任务 ID
-- 纯治理 / 文档任务也必须有索引行与状态
-
----
-
-## 3. 任务看板
-
-> **现行规则**：主索引只保留**v5 当前活动任务**；v4 历史任务与 backlog 统一放在 `archive/v4/`。
-
-### 3.1 当前活动任务
+### 2.1 进行中 / 待办
 
 | ID | 摘要 | 状态 | 预估 | Owner | 详情 |
 |---|---|---|---|---|---|
-| `v7.0.0` | 架构提案：四层管线（目标模型/交互规划/能力注册/判定与归因） | 📝 | 3h | @Minzhi_Zhou | [`v7.0.0`](./upgraded/v7.0.0.md) |
-| `v6.4.x` | 自读 flag win / PIE 无泄漏部分覆盖 / 纯 syscall 三段式 / 菜单前置交互 / 容器靶机 | ✅ | 8h | @Minzhi_Zhou | [`PROGRESS.md`](./PROGRESS.md) §1 |
-| `v6.0.0` | 离线自动利用引擎（autopwn.engine）+ pwn 容器 + 15 题回归 | ✅ | 6h | @Minzhi_Zhou | [`v6.0.0`](./upgraded/v6.0.0.md) |
-| `v5.0.9` | 统一 verifier 主体切片（probe/spec 抽象） | 🔄 | 2h | @Minzhi_Zhou | [`v5.0.9`](./upgraded/v5.0.9.md) |
+| `v7.0.0` | 架构提案：四层管线（目标模型 / 交互规划 / 能力注册 / 判定归因） | 📝 | 3h | @Minzhi_Zhou | [`v7.0.0`](./upgraded/v7.0.0.md) |
+| `v7.0.1` | **P0**：`Plan.sends` → `Plan.steps`（交互层，解菜单题与多轮题） | ⏳ | 4h | @Minzhi_Zhou | 待建详情 |
+| `v7.0.2` | **P0**：三处判定合并为统一 `Oracle`（`verify_shell` / `probe_flag` / `_try_pie_partial`） | ⏳ | 3h | @Minzhi_Zhou | 待建详情 |
 
-### 3.2 待收尾 / 待自审
+> 这两项是 `HANDOVER.md §8` 指定的接手起点，均**不需要改 `facts.py`**，风险可控。
 
-_（无 — 已归档到 `archive/v4/`）_
+### 2.2 已完成（v6 系列）
 
-### 3.3 最近完成
+| ID | 摘要 | 状态 | 实际 | 详情 |
+|---|---|---|---|---|
+| `v6.5.0` | 交付文档：README / ARCHITECTURE / PROGRESS / HANDOVER / CLAUDE / DOC_MAP | ✅ | 2h | 本仓库根目录 |
+| `v6.4.1` | 菜单式前置交互（`interact`）自动探测；剔除 win 内部 read 的假漏洞 | ✅ | 1h | [`PROGRESS.md`](./PROGRESS.md) §1 |
+| `v6.4.0` | 自读 flag 型 win：`open+puts` 识别、门槛入口回溯、flag 判定覆盖累积输出 | ✅ | 1.5h | 同上 |
+| `v6.3.x` | PIE 无泄漏部分覆盖（`endbr64` 认函数入口 / `Win.alt` 栈对齐 / nib 爆破）+ 容器靶机 | ✅ | 4h | 同上 |
+| `v6.2.x` | 纯 `int 0x80` 手写汇编：`syscall1` / `syscall3` 三段式 + 变体回归矩阵 | ✅ | 3h | 同上 |
+| `v6.1.x` | 远程 TLS/SNI、远程优先无缓冲泄漏、连接类失败立即中止、`--cmd` | ✅ | 2h | 同上 |
+| `v6.0.x` | 离线自动利用引擎（`autopwn.engine`）+ pwn 容器 + 15 题回归 | ✅ | 6h | [`v6.0.0`](./upgraded/v6.0.0.md) |
 
-| ID | 摘要 | 状态 | 实际 | Owner | 详情 |
-|---|---|---|---|---|---|
-| `v5.0.8` | 建立独立 TODO 文档，分离长期待办与执行板职责 | ✅ | 1h | @Minzhi_Zhou | [`v5.0.8`](./upgraded/v5.0.8.md) |
-| `v5.0.7` | 细化需求清单，补齐架构映射，并收敛 TODO 管理原则 | ✅ | 2h | @Minzhi_Zhou | [`v5.0.7`](./upgraded/v5.0.7.md) |
-| `v5.0.5` | 建立最小 planner 入口，把 capability 链收束为可执行 plan | ✅ | 3h | @Minzhi_Zhou | [`v5.0.5`](./upgraded/v5.0.5.md) |
-| `v5.0.4` | 建立能力层基础层，把 facts + interaction 映射为可解释 exploit capability | ✅ | 3h | @Minzhi_Zhou | [`v5.0.4`](./upgraded/v5.0.4.md) |
-| `v5.0.3` | 建立交互图基础层，并接入 same-session canary 与 2-stage ret2libc 路线 | ✅ | 3h | @Minzhi_Zhou | [`v5.0.3`](./upgraded/v5.0.3.md) |
-| `v5.0.2` | 建立事实作用域 / 生命周期基础层，并接入首批 detect / strategy producer | ✅ | 3h | @Minzhi_Zhou | [`v5.0.2`](./upgraded/v5.0.2.md) |
-| `v5.0.1` | 治理变更实施 + 文档落盘 | ✅ | 1h | @Minzhi_Zhou | [`v5.0.1`](./upgraded/v5.0.1.md) |
-| `v4 archive` | 历史完成任务与 backlog 已统一迁入 `archive/v4/` | ✅ | - | @Minzhi_Zhou | [`archive/v4/README.md`](./archive/v4/README.md) |
+### 2.3 已取消
 
-### 3.4 历史入口
+| ID | 摘要 | 状态 | 原因 |
+|---|---|---|---|
+| `v5.0.9` | 统一 verifier 主体切片（probe/spec 抽象） | ❌ | v6 重构后 `autopwn/engine` 已用另一套实现达成目的；v5 骨架不再演进 |
 
-- v4 归档入口：[`archive/v4/README.md`](./archive/v4/README.md)
-- v4 历史索引：[`archive/v4/upgraded.md`](./archive/v4/upgraded.md)
-- v4 任务详情 / backlog / 状态：[`archive/v4/upgraded/`](./archive/v4/upgraded/)
+### 2.4 历史入口
 
-### 3.5 open 阻塞
-
-_（无 — 2026-08-30）_
-
-### 3.6 独立 TODO 入口
-
-- [`v5_todo.md`](./v5_todo.md) — 长期待办 / 路线图 / 优先级
-- 当前优先级：统一 verifier → explain trace → regression gate → legacy adapter 收敛
-
----
-
-## 4. 当前架构（精简）
-
-详细当前架构：见 [`v5_architecture.md §3`](./v5_architecture.md)
-
-```text
-CLI / Orchestrator
-        ↓
-Planner
-        ↓
-Executor / Legacy Strategy Adapter
-        ↓
-Capability IR
-        ↓
-Interaction Graph
-        ↓
-Scope / Lifetime Facts
-        ↓
-Recon / Detect Producers
-        ↓
-Core
-```
-
-常用入口：
-- CLI：`autopwn/cli.py`
-- 编排：`autopwn/orchestrator/*`
-- 上下文：`autopwn/context.py`
-- 策略注册：`autopwn/exp/registry.py`
-
-完整文件路径、工具脚本与模板已迁到 [`upgraded/appendix.md`](./upgraded/appendix.md)。
-
----
-
-## 5. 验证方法（6 关验收）
-
-1. **关 1**：代码已 push 到 `main`
-2. **关 2**：`pytest tests/unit -m "not integration" -q` 全过
-3. **关 3**：若涉及行为变化，跑对应 integration / `Challenge/` 验证
-4. **关 4**：若涉及 `autopwn` 行为，至少复测 1 个 `Challenge/`；当前 5-binary 基线以 **5/5 SUCCESS** 为准
-5. **关 5**：Owner 自审
-6. **关 6**：同提交同步索引行、详情文件、必要归档
-
-### 5.1 近期参考基线（2026-08-30）
-
-- 单元测试：`763 passed`
-- 相关 integration 子集：`5 passed, 1 skipped`
-- 手工 `Challenge/canary`：detect 阶段会产出 `same-session canary plan`（`stack_index=55 / buffer_to_canary=64 / post_canary_padding=12`），strategy 通过 `whoami` 验证拿到 `root`
-- 手工 `Challenge/level3_x64`：2-stage ret2libc-write 路线可稳定完成，验证输出为 `ID_OUTPUT='PWNED\n'`
-
----
-
-## 6. 速查入口
-
-- 当前需求：[`v5_prd.md`](./v5_prd.md)
-- 当前架构：[`v5_architecture.md`](./v5_architecture.md)
-- 文件路径 / 工具 / 模板：[`upgraded/appendix.md`](./upgraded/appendix.md)
-- v4 归档入口：[`archive/v4/README.md`](./archive/v4/README.md)
-- 修复记录索引：[`bugs/fix.md`](./bugs/fix.md)
-
----
-
-> **最后一条**：
-> `upgraded.md` 现在只负责“把你带到正确的当前信息”；历史长记录与速查内容按需进入 `upgraded/*.md`。
+- v5 归档（架构 / PRD / TODO / 迭代详情）：[`archive/v5/`](./archive/v5/)
+- v4 归档（README / upgraded / 任务详情 / backlog）：[`archive/v4/README.md`](./archive/v4/README.md)

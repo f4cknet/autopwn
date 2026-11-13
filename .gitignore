@@ -113,3 +113,7 @@ _target/
 !/results/remote/
 /results/remote/*
 !/results/remote/FLAGS.md
+
+# ----- v6.0 早期导出的侦察中间件（可用 objdump/strings 随时重生成）-----
+bench/*/disasm.txt
+bench/*/strings.txt

@@ -3,7 +3,7 @@
 > 口径：所有「已解出」都必须有**可复现证据**（`results/*.json` 里有真实回显）。
 > 「策略跑完没报错」不算完成。`SHELL` 与 `FLAG-ONLY` 分开统计。
 
-最后更新：2026-11-13 22:20
+最后更新：2026-11-13 22:50
 
 ## 1. 版本演进
 
@@ -23,6 +23,9 @@
 | `v6.3.1` | `target.bat`：把附件挂成容器内 TCP 靶机；`127.0.0.1` 走 host 网络 | 远程形态可复现 |
 | `v6.4.0` | 「自读 flag」型 win（`open`+`puts`）、门槛入口回溯、flag 判定覆盖累积输出 | `bench_extra/ret2win` |
 | `v6.4.1` | 菜单式前置交互（`interact`）自动探测；剔除 win 内部 read 的假漏洞 | `chellenges/note` |
+| `v6.5.0` | 交付文档：README / ARCHITECTURE / PROGRESS / HANDOVER / CLAUDE / DOC_MAP | 可移交 |
+| `v6.5.1` | 文档与目录整理：v5 归档 `archive/v5/`；`AGENTS`/`upgraded` 瘦身；脚本聚合 `scripts/`；`results/` 移出版本库 | 根目录 30+ → 22 项 |
+| `v6.5.2` | 删除 `bench/*/{disasm,strings}.txt`（7.6 MB）；新增卫生门禁 `scripts/audit/check_hygiene.py`；仓库纪律写入 §铁律 5 | 主目录清洁可执行化 |
 
 ## 2. 当前基线（2026-11-13 22:18 实测，`--max-attempts 80`）
 
@@ -33,7 +36,7 @@
 | `bench_sys/` | 4 | **4** | 0 | — |
 | `chellenges/` | 3 | 0 | 2 | `repeater`（无 libc 可用，见 §4） |
 
-逐题明细：`bench/RESULTS.md`（含每题的策略、偏移、关键参数）；远程实打记录：`results_remote/FLAGS.md`。
+逐题明细：`bench/RESULTS.md`（含每题的策略、偏移、关键参数）；远程实打记录：`results/remote/FLAGS.md`。
 
 > `chellenges/note` 与 `chellenges/pwn` 显示 `win reached (no local flag file)`：
 > 容器内没有 `/flag`，但**链路已打通**（放一个 flag 文件或挂 `target.bat` 就能真取到）。

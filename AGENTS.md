@@ -70,6 +70,24 @@
 
 **任何一条不满足，状态都不能改 ✅。**
 
+### 铁律 5：仓库卫生与每轮交付
+
+Owner 明确要求，**不可协商**。详细白名单见 `CLAUDE.md`「工作纪律」。
+
+1. **主目录清洁**：根目录只允许白名单条目；新的调试脚本、临时数据、日志一律不许落根目录
+   （脚本 → `scripts/test/` 或 `scripts/audit/`；证据 → `results/`）
+2. **自动归档**：版本迭代后旧文档 `git mv` 到 `archive/v<N>/`（含 `upgraded/`、`logs/`），
+   并更新 `DOC_MAP.md §3` 与所有链接。**归档不删除**——文档是「为什么这么设计」的唯一载体
+3. **临时文件用完即删**：`dbg_*.py` / `bf*.py` / `probe_*.py` / `*.tmp` / 反汇编导出，
+   在当轮提交前清除；需要留作回归的改造成 `scripts/` 下的正式脚本
+4. **文档先行**：先改 `upgraded.md §3` 与 `ARCHITECTURE.md`/`PROGRESS.md`，再写代码；
+   代码与文档必须在**同一个 commit**
+5. **每轮 commit + push**：远程 `git@github.com:f4cknet/autopwn.git`，分支 `main`。
+   不允许攒提交过夜，不允许「等全部做完一起推」
+
+**强制门禁**：每轮收尾跑 `python scripts/audit/check_hygiene.py`，非 0 退出则不许提交。
+它检查根目录白名单、临时文件残留、`results/` 误入库、构建产物、版本库内大文件。
+
 ---
 
 ## 2. 衍生规则（强化铁律）

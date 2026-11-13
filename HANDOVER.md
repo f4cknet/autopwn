@@ -143,13 +143,19 @@ if plan.tag.startswith("pie:"):
 
 ## 7. 提交前检查表
 
+> **仓库卫生是硬门禁**（Owner 要求，见 `CLAUDE.md`「工作纪律」与 `AGENTS.md` 铁律 5）：
+> 每轮结束必须跑 `python scripts/audit/check_hygiene.py`，非 0 退出则不许提交；
+> 提交后立刻 `git push origin main`，不许攒提交过夜。
+
 - [ ] `solve.bat bench` ≥ 13/15，且失败项只有 `ch07_acae`、`ch14_easyheap`
 - [ ] `solve.bat bench_extra` ≥ 5 shell + 1 flag-only，失败项只有 `chall`、`fmtstr1`
 - [ ] `solve.bat bench_sys` = 4/4
+- [ ] `python scripts/audit/check_hygiene.py` 退出码 0（根目录白名单 / 临时文件 / results 误入库）
 - [ ] 新增/修改的能力在 `bench/RESULTS.md` 有记录
 - [ ] `PROGRESS.md` 的版本表与基线数字同步
 - [ ] `python -m py_compile autopwn/engine/*.py` 通过
 - [ ] 提交信息 `[vX.Y.Z] 一句话`，中文
+- [ ] 已 `git push origin main`
 
 ## 8. 交接时的未完成项（建议从这里开始）
 

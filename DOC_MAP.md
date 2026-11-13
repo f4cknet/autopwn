@@ -48,13 +48,15 @@
 | 聚合 | `scripts/test/`（`baseline_lock.sh`、`run_verify.sh`）、`scripts/audit/`（3 个 `check_*.py` / `verify_*.py`） | 脚本集中在 `scripts/` |
 | 收敛结果目录 | `results_chellenges/` `results_extra/` `results_remote/` `results_docker/` | → `results/{chellenges,extra,remote,docker}/` |
 | 删除生成物 | `build/`、`autopwn.egg-info/`、`.pytest_cache/`、`rsys_dbg/` | 均在 .gitignore 内，可重建 |
+| 删除派生产物 | `bench/*/disasm.txt` + `strings.txt`（30 文件 / **7.6 MB**） | 已删除并 gitignore；`objdump`/`strings` 可随时重生成 |
+| 新增门禁 | `scripts/audit/check_hygiene.py` | 根目录白名单 / 临时文件 / results 误入库 / 构建产物 / 大文件，非 0 退出则不许提交 |
 
-## 5. 仍待处理（需 Owner 确认）
+## 5. 剩余可选清理
 
 | 项 | 体积 | 建议 | 风险 |
 |---|---|---|---|
-| `bench/*/disasm.txt` + `strings.txt` | 30 文件 / **7.5 MB** | 删除 | 低：v6.0 早期导出的侦察中间件，`grep` 确认零代码依赖，随时可重生成 |
 | `Challenge/` | 10 项 | **保留** | 不可删：`tests/conftest.py` 硬依赖它（可用 `AUTOPWN_CHALLENGE_DIR` 覆盖） |
+| `writeups/*.docx` | 5 份 | 保留 | 解题报告，属内容资产，不是噪音 |
 | `results/*`、`_target/`、`.*.run/` | — | 已在 .gitignore，本地保留 | 无 |
 
 ## 6. 目录约定
@@ -70,7 +72,7 @@ autopwn/
 ├── Challenge/          仓库自带经典题（pytest 依赖，勿移动）
 ├── scripts/
 │   ├── test/           评测与回归脚本
-│   └── audit/          一次性审计脚本
+│   └── audit/          审计脚本（含 `check_hygiene.py` 仓库卫生门禁）
 ├── bugs/               修复记录（fix.md 索引 + 单条 fix_<name>.md）
 ├── upgraded/           任务详情（v6.0.0、v7.0.0）
 ├── results/            每次尝试的证据（本地 / chellenges / extra / remote / docker）

@@ -205,3 +205,28 @@ SROP、20 字节极限输入的 fmt、纯 PIE 局部覆盖（栈对齐）仍需�
 | 门槛入口算成 `mov [rip+X],rax` | 直接进去 `rax` 是垃圾，门槛永远不满足 → 只打印 "lock closed" | 回溯一条：用前面的 `mov eax, imm` 作入口 |
 | `probe_flag` 只看新读到的数据 | flag 在前一段 `recvrepeat` 就到达 → **成功被判失败** | 判定改为对整个累积输出做正则 |
 | 无 shell 可判、flag 文件又不存在 | 明明打到 win 却报 FAILED | 输出含 `No such file`/`unavailable` → 记 `win reached` |
+
+
+---
+
+## 10. 菜单式题：`chellenges/note`（2026-11-13 深夜）
+
+| 项 | 值 |
+|---|---|
+| 特征 | amd64 non-PIE / NX / Partial RELRO / not stripped / 16536 字节 |
+| 结构 | main 读一个命令字符：`'w'`→`write_note`，`'p'`→`preview_note`，**只跑一次** |
+| 漏洞 1 | `write_note`: `read(0, rbp-0x40, 0x200)` → off=72，可直接 ret2win |
+| 漏洞 2 | `preview_note`: `printf(buf)` 格式化字符串，但 127 字节到不了返回地址，且 main 不循环 → 不可用 |
+| win | `print_flag` @ `0x401256`：`getenv("FLAG_PATH")` 默认 `/flag`，`open`+`read`+打印，**无门槛** |
+| 原症状 | `s_ret2win_flag: 10 plans` 全空，程序只回 `Bye.` |
+| 根因 | **没发菜单选择字符**：main 先 `fgets` 读一行，payload 的第一个字节不是 `w` 就走到 usage 分支 |
+| 修法 | `Facts.interact`：扫 `cmp al,imm; jne <跳过 call>` 得出「进该函数要发的字符」（`'w'`/`'p'`），策略在 payload 前自动补 `b"w\n"` |
+| 附带清理 | `print_flag` 内部 `read(fd, buf, 0x7f)` 曾被当成漏洞点（`vulns=4`）；现在按「函数入口 ∈ wins」剔除 → `vulns=3` |
+
+结果：
+
+| 场景 | 结果 |
+|---|---|
+| 本地（容器内造 `/flag`） | `FLAG-ONLY ret2flag flag:CTF2{note-test-flag}`，**1 次尝试** |
+| 容器靶机（`target.bat` + `--host 127.0.0.1`） | `flag:CTF2{note-target-flag}`，**1 次尝试** |
+| `bench` 回归 | 13/15，无退化 |

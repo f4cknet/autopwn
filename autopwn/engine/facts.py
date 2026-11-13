@@ -87,6 +87,7 @@ class Facts:
     callers: dict = field(default_factory=dict)   # 函数入口 -> [调用点之后的下一条地址]
     gadget_alts: dict = field(default_factory=dict)  # gadget 名 -> 全部可用地址（用于挑无坏字节的）
     gates: list = field(default_factory=list)   # [(rbp 相对位移, 值)] 溢出后必须满足的 cmp 校验
+    interact: dict = field(default_factory=dict)  # 函数入口 -> [b"w\n"] 菜单式题的前置选择字符
     sys_read: Optional[int] = None       # read 包装入口（mov eax,3 处）；无 libc 的题只有这个
     sys_load: Optional[int] = None       # 「mov ebx,[esp+4]; mov ecx,[esp+8]; mov edx,[esp+0xc]; int 0x80」入口
     sys_wrappers: dict = field(default_factory=dict)   # syscall 号 -> (entry, load, int80)
@@ -213,6 +214,13 @@ def analyse(ch: Challenge) -> Facts:
     # ---- win 函数
     f.wins = _find_wins(ch, d)
 
+    # ---- 菜单式前置交互（先发 'w\n' 才进 write_note 这类）
+    f.interact = _find_interact(d)
+
+    # print_flag 自己 read(fd, buf, n) 不是漏洞点，从 vulns 里剔掉
+    win_addrs = {w.addr for w in f.wins}
+    f.vulns = [v for v in f.vulns if v.func_entry not in win_addrs]
+
     # ---- gadget
     f.gadgets = _find_gadgets(ch)
     f.gadget_alts = _scan_gadget_alts(ch)
@@ -281,6 +289,47 @@ def _writable_start(ch: Challenge) -> Optional[int]:
         if best is None or sec.header.sh_addr < best:
             best = int(sec.header.sh_addr)
     return best
+
+
+def _find_interact(d: Dis) -> dict:
+    """菜单式程序：`cmp al,'w'; jne <跳过 call>; call write_note` —— 必须发 'w' 才进得去。
+
+    返回 {被调用函数入口: [b"w\n"]}。只认「相等则落进 call」的方向（jne/jnz 向前跳）。
+    """
+    out: dict[int, list] = {}
+    for n, ins in enumerate(d.insns):
+        if ins.mnemonic != "call" or not ins.operands:
+            continue
+        if ins.operands[0].type != X86_OP_IMM:
+            continue
+        target = int(ins.operands[0].imm)
+        for k in range(n - 1, max(-1, n - 14), -1):
+            p = d.insns[k]
+            if p.mnemonic != "cmp":
+                continue
+            m = re.match(r"^(?:al|eax|byte ptr \[rbp [-+] (?:0x[0-9a-f]+|\d+)\]), (0x[0-9a-f]+|\d+)$",
+                         p.op_str)
+            if not m:
+                break
+            try:
+                val = _imm(m.group(1))
+            except Exception:
+                break
+            if not (0x20 <= val < 0x7F):
+                break
+            nxt = d.insns[k + 1] if k + 1 < len(d.insns) else None
+            if nxt is None or nxt.mnemonic not in ("jne", "jnz", "je", "jz"):
+                break
+            fwd = True
+            try:
+                fwd = int(nxt.operands[0].imm) > int(ins.address)
+            except Exception:
+                pass
+            # jne 向前跳 => 相等就落进 call；je 向前跳 => 不等才落进 call（这种没有确定的字符）
+            if (nxt.mnemonic in ("jne", "jnz")) and fwd:
+                out.setdefault(target, []).append(bytes([val]) + b"\n")
+            break
+    return out
 
 
 def _find_gates(d: Dis) -> list:
@@ -527,6 +576,23 @@ def _collect_callers(d: Dis, entries: list[int]) -> dict:
     return out
 
 
+def _alt_entry(body: list, lo: int) -> int:
+    """跳过 endbr64/push rbp/mov rbp,rsp/nop 后的入口。
+
+    ret 进入函数时 rsp 比 call 进入高 8 字节，`system` 里的 movaps 会崩；
+    从 alt 进去就对齐了。
+    """
+    alt = lo
+    for q in body[:8]:
+        if (q.mnemonic in ("endbr64", "endbr32", "nop")
+                or (q.mnemonic == "push" and q.op_str == "rbp")
+                or (q.mnemonic == "mov" and q.op_str.replace(" ", "") == "rbp,rsp")):
+            alt = int(q.address) + int(q.size)
+        else:
+            break
+    return alt if alt != lo else 0
+
+
 def _find_wins(ch: Challenge, d: Dis) -> list[Win]:
     """找「函数体里直接 system/execve 一个 shell 字符串」的函数。"""
     wins: list[Win] = []
@@ -567,16 +633,7 @@ def _find_wins(ch: Challenge, d: Dis) -> list[Win]:
                 kind = "shell"
             else:
                 continue
-            alt = lo
-            for q in body[:8]:
-                if (q.mnemonic in ("endbr64", "endbr32", "nop")
-                        or (q.mnemonic == "push" and q.op_str == "rbp")
-                        or (q.mnemonic == "mov" and q.op_str.replace(" ", "") == "rbp,rsp")):
-                    alt = int(q.address) + int(q.size)
-                else:
-                    break
-            wins.append(Win(lo, kind, f"{targets[op.imm]}(\"{text}\")",
-                            alt if alt != lo else 0))
+            wins.append(Win(lo, kind, f"{targets[op.imm]}(\"{text}\")", _alt_entry(body, lo)))
     # ---- 还有一种 win：程序自己 open()/fopen() 读文件再 puts()/write() 打出来
     io_in, io_out = _io_in, _io_out
     if io_in and io_out:
@@ -612,7 +669,7 @@ def _find_wins(ch: Challenge, d: Dis) -> list[Win]:
                     has_flag = True
                     break
             if has_in and has_out and has_flag and not any(w.addr == lo for w in wins):
-                wins.append(Win(lo, "flag", f"open+print flag (self-read)"))
+                wins.append(Win(lo, "flag", "open+print flag (self-read)", _alt_entry(body, lo)))
                 continue
             # 门槛形态： `mov [rip+X], imm` 紧跟着 call 到上面那个 win
             for n, ins in enumerate(body):

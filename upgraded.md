@@ -85,6 +85,7 @@
 
 | ID | 摘要 | 状态 | 预估 | Owner | 详情 |
 |---|---|---|---|---|---|
+| `v7.0.0` | 架构提案：四层管线（目标模型/交互规划/能力注册/判定与归因） | 📝 | 3h | @Minzhi_Zhou | [`v7.0.0`](./upgraded/v7.0.0.md) |
 | `v6.0.0` | 离线自动利用引擎（autopwn.engine）+ pwn 容器 + 15 题回归 | ✅ | 6h | @Minzhi_Zhou | [`v6.0.0`](./upgraded/v6.0.0.md) |
 | `v5.0.9` | 统一 verifier 主体切片（probe/spec 抽象） | 🔄 | 2h | @Minzhi_Zhou | [`v5.0.9`](./upgraded/v5.0.9.md) |
 

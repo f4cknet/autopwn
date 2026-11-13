@@ -66,6 +66,7 @@ class Win:
     addr: int
     kind: str            # shell | flag
     evidence: str
+    alt: int = 0         # 跳过 push rbp / mov rbp,rsp 后的入口（ret 进来栈对齐差 8 时用它）
 
     def __str__(self) -> str:
         return f"{self.kind}@{hex(self.addr)}({self.evidence})"
@@ -85,6 +86,7 @@ class Facts:
     static_binsh: bool = False
     callers: dict = field(default_factory=dict)   # 函数入口 -> [调用点之后的下一条地址]
     gadget_alts: dict = field(default_factory=dict)  # gadget 名 -> 全部可用地址（用于挑无坏字节的）
+    gates: list = field(default_factory=list)   # [(rbp 相对位移, 值)] 溢出后必须满足的 cmp 校验
     sys_read: Optional[int] = None       # read 包装入口（mov eax,3 处）；无 libc 的题只有这个
     sys_load: Optional[int] = None       # 「mov ebx,[esp+4]; mov ecx,[esp+8]; mov edx,[esp+0xc]; int 0x80」入口
     sys_wrappers: dict = field(default_factory=dict)   # syscall 号 -> (entry, load, int80)
@@ -224,6 +226,7 @@ def analyse(ch: Challenge) -> Facts:
     except Exception:
         pass
     f.mmap_rwx = _find_mmap_rwx(ch, d)
+    f.gates = _find_gates(d)
 
     # ---- printf(user_buf)
     f.fmt_buf = _find_fmt(ch, d)
@@ -278,6 +281,25 @@ def _writable_start(ch: Challenge) -> Optional[int]:
         if best is None or sec.header.sh_addr < best:
             best = int(sec.header.sh_addr)
     return best
+
+
+def _find_gates(d: Dis) -> list:
+    """`cmp dword ptr [rbp-X], imm` —— 溢出后要写进去的「暗号」。
+
+    只认后面紧跟条件跳转的，避免把普通比较也当门槛。
+    """
+    out = []
+    for n, ins in enumerate(d.insns):
+        if ins.mnemonic != "cmp":
+            continue
+        m = re.match(r"^dword ptr \[rbp - (0x[0-9a-f]+|\d+)\], (0x[0-9a-f]+|\d+)$", ins.op_str)
+        if not m:
+            continue
+        nxt = d.insns[n + 1] if n + 1 < len(d.insns) else None
+        if nxt is None or not nxt.mnemonic.startswith("j"):
+            continue
+        out.append((-_imm(m.group(1)), _imm(m.group(2))))
+    return out
 
 
 def _zero_addr(ch: Challenge, data: Optional[int]) -> Optional[int]:
@@ -473,6 +495,9 @@ def _func_entries(ch: Challenge, d: Dis) -> list[int]:
     text = ch.elf.get_section_by_name(".text")
     lo, hi = text.header.sh_addr, text.header.sh_addr + text.header.sh_size
     for ins in d.insns:
+        # endbr64/endbr32 是编译器插在函数首地址的 CET 标记，stripped 时它是唯一可靠的入口线索
+        if ins.mnemonic in ("endbr64", "endbr32"):
+            entries.add(int(ins.address))
         if ins.mnemonic == "call" and ins.operands and ins.operands[0].type == X86_OP_IMM:
             t = ins.operands[0].imm
             if lo <= t < hi:
@@ -539,7 +564,16 @@ def _find_wins(ch: Challenge, d: Dis) -> list[Win]:
                 kind = "shell"
             else:
                 continue
-            wins.append(Win(lo, kind, f"{targets[op.imm]}(\"{text}\")"))
+            alt = lo
+            for q in body[:8]:
+                if (q.mnemonic in ("endbr64", "endbr32", "nop")
+                        or (q.mnemonic == "push" and q.op_str == "rbp")
+                        or (q.mnemonic == "mov" and q.op_str.replace(" ", "") == "rbp,rsp")):
+                    alt = int(q.address) + int(q.size)
+                else:
+                    break
+            wins.append(Win(lo, kind, f"{targets[op.imm]}(\"{text}\")",
+                            alt if alt != lo else 0))
     # 去重：同一地址只留一条（优先 shell）
     uniq: dict[int, Win] = {}
     for w in wins:

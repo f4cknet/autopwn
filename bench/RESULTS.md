@@ -126,3 +126,38 @@ SROP、20 字节极限输入的 fmt、纯 PIE 局部覆盖（栈对齐）仍需�
 | 原始 | 0x30 / 0x34 | 32 / 52 | `syscall3` | ✓ shell |
 
 4/4 变体 + 原始题全部一次打通（本地）。这说明 `limit` 与 `off` 的关系决定走哪条路，而不是靠单题调参。
+
+
+---
+
+## 8. PIE + 无泄漏 + win 函数（`chellenges/pwn`，2026-11-13 晚）
+
+| 项 | 值 |
+|---|---|
+| 特征 | amd64 PIE / Full RELRO / NX / 无 canary / stripped / 14472 字节 |
+| 漏洞 | `read(0, rbp-0x30, 0xc8)`；`cmp dword [rbp-4], 0x7024f984` 校验 |
+| win | `0x11e9`：`system("cat flag")` —— **是死代码，没有任何 call 指向它** |
+| 原症状 | `vulns=1 wins=1` 但 **0 次尝试** |
+| 根因 1 | 三条 ret2win 路线全部跳过：`s_ret2win` 见 PIE 就退、`s_ret2win_flag` 同理、`s_ret2win_pie` 只认 `kind=shell`（这题是 flag） |
+| 根因 2 | win 地址被算成 `0x1130`：`_func_entries` 只认「符号 ∪ call 目标 ∪ entrypoint」，而 win 没人调用 → `call system` 被归到上一个函数 |
+| 根因 3 | 就算跳到正确的 `0x11e9` 也会崩：`ret` 进入比 `call` 进入的 `rsp` 高 8 字节，`system` 内 `movaps` 对不齐 |
+| 根因 4 | PIE + 零泄漏：返回地址 `0x12e6` 与 win `0x11e9` 在同一个 64K、但不同 0x100 页 → 必须 2 字节覆盖，而低 16 位里的 `0x1000` 位随基址变化 |
+
+修复：
+
+| 改动 | 内容 |
+|---|---|
+| `_func_entries` | 把 `endbr64/endbr32` 也算函数入口（CET 标记就在函数首地址，stripped 时的唯一线索）→ win 变成 `0x11e9` |
+| `Win.alt` | 记录「跳过 `push rbp; mov rbp,rsp`」后的入口 → 这题是 `0x11f3`，用它栈就对得齐 |
+| `Facts.gates` | 识别 `cmp dword [rbp-X], imm` + 条件跳转，换算成缓冲区偏移（这题 = 偏移 44 写 `0x7024f984`） |
+| `s_pie_partial_win` | 只覆盖栈上已有返回地址的低 2 字节；本地读 `/proc/pid/maps` 拿精确基址（1 次），远程枚举 16 个 nib（32 个 plan） |
+
+结果：
+
+| 场景 | 结果 |
+|---|---|
+| 本地（有 flag 文件） | `FLAG-ONLY pie_partial flag:CTF2{local-test-flag}`，**1 次尝试 / 0.7s** |
+| 本地（无 flag 文件） | `win reached (no local flag file)`，1 次尝试 —— 证明利用链成立 |
+| 强制盲打 `AUTOPWN_NO_MAPS=1` | 第 **8** 次尝试命中，取出 flag（模拟远程） |
+| `bench` 回归 | 13/15，无退化 |
+| `bench_sys` 回归 | 4/4 |

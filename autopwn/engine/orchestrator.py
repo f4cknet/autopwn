@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import traceback
 from dataclasses import dataclass, field
@@ -252,6 +253,9 @@ def _try_pie_partial(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = No
             out += r.output
             if r.ok:
                 return True, r.note, out, []
+            m = re.search(rb"(?:flag|ctf|FLAG|CTF)[A-Za-z0-9_]{0,20}\{[^}\n]{4,}\}", out)
+            if m:
+                return True, "flag:" + m.group(0).decode("latin-1", "replace"), out, []
             # 本地没有 flag 文件时 system() 会报 "No such file" —— 这说明 win 已经打到了
             if b"No such file" in out or b"cat: " in out:
                 return True, "win reached (no local flag file)", out, []

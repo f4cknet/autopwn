@@ -231,8 +231,16 @@ def execute_flag(ch: Challenge, sends: list[bytes]) -> Result:
             time.sleep(0.15)
             out += p.recvrepeat(0.05)
         r = probe_flag(p)
-        r.output = out + r.output
-        return r
+        blob = out + r.output
+        # ★ flag 可能在前面的 recvrepeat 里就到了（probe_flag 只看新数据），这里要兜住
+        m = FLAG_RE.search(blob)
+        if m:
+            return Result(True, blob,
+                          note="flag:" + m.group(0).decode("latin-1", "replace"))
+        # 打到了 win 但本地没有 flag 文件 —— 也算「链路成立」，但如实标注
+        if re.search(rb"No such file|Permission denied|unavailable", blob):
+            return Result(True, blob, note="win reached (no flag file)")
+        return Result(False, blob)
     finally:
         try:
             p.close()

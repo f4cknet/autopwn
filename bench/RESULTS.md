@@ -175,3 +175,33 @@ SROP、20 字节极限输入的 fmt、纯 PIE 局部覆盖（栈对齐）仍需�
 | 关 ASLR（`target.bat ... noaslr`） | 同上 | nib=4（基址 `0x555555554000`）固定，1 次命中 |
 
 这一步的价值：验证了「无 `/proc` 访问」时 nib 爆破这条路真的能走通，而不是只在本地读 maps 的捷径上有效。
+
+
+---
+
+## 9. 「只要 flag、不落 shell」的三种形态（2026-11-13 晚）
+
+结论先说：**只有前两种是同一种打法（ret2win 的变体），第三种难度等同交互 shell。**
+
+| 形态 | 典型代码 | 打法 | 引擎策略 |
+|---|---|---|---|
+| ① 内置 `system("cat flag")` | `lea rdi,"cat flag"; call system` | 直接跳函数入口；注意 `system` 的栈对齐 | `ret2win_flag` / `pie_partial:flag` |
+| ② 程序自己 `open()`+`puts()` 打印 flag，但**带全局/参数门槛** | `if (clearance != 0xdecafbad) return; open(FLAG_PATH); puts(buf)` | 跳「设门槛 + call win」的那条指令，**不是** win 本身 | `ret2win_flag`（win 排序会把门槛入口提前） |
+| ③ 什么都没内置 | 只有 `read`/`printf` | 自己拼 ORW（open/read/write）ROP | 无（等同 ret2libc 难度） |
+
+本批实测（`bench_extra/`）：
+
+| 样例 | 形态 | 本轮结果 |
+|---|---|---|
+| `ret2win` | ②（`clearance==0xdecafbad` 才 `open("/home/ctf/flag")`） | ✓ 1 次尝试；本地无该文件 → `win reached (no flag file)`；放入文件后实取 `CTF2{self-read-flag}` |
+| `pie` | ① + PIE | ✓ 之前因栈对齐崩，现在走 `pie_partial` 用 `alt` 入口修复 |
+| `rip` / `ret2libc` / `level3_x64` / `canary` | 落 shell | ✓ |
+
+本轮新修的真 bug：
+
+| bug | 影响 | 修法 |
+|---|---|---|
+| `_find_wins` 顶部 `if not targets: return` 早退 | 没有 `system/execve` 的题（②型）永远识别不到 win | 改成「既没 system 也没 open+puts 才早退」 |
+| 门槛入口算成 `mov [rip+X],rax` | 直接进去 `rax` 是垃圾，门槛永远不满足 → 只打印 "lock closed" | 回溯一条：用前面的 `mov eax, imm` 作入口 |
+| `probe_flag` 只看新读到的数据 | flag 在前一段 `recvrepeat` 就到达 → **成功被判失败** | 判定改为对整个累积输出做正则 |
+| 无 shell 可判、flag 文件又不存在 | 明明打到 win 却报 FAILED | 输出含 `No such file`/`unavailable` → 记 `win reached` |

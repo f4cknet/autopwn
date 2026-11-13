@@ -534,7 +534,10 @@ def _find_wins(ch: Challenge, d: Dis) -> list[Win]:
     for addr, name in ch.plt_map.items():
         if name in ("system", "execve", "execl", "execv", "execvp", "popen"):
             targets[addr] = name
-    if not targets:
+    # 没有 system/execve 也不能直接放弃：还有一种 win 是自己 open+puts 打印 flag
+    _io_in = {a for a, n in ch.plt_map.items() if n in ("open", "fopen", "fread", "read")}
+    _io_out = {a for a, n in ch.plt_map.items() if n in ("puts", "printf", "write", "fwrite", "fputs")}
+    if not targets and not (_io_in and _io_out):
         return wins
     entries = _func_entries(ch, d)
     bounds = list(zip(entries, entries[1:] + [ch.elf.entry + 0x100000]))
@@ -574,12 +577,76 @@ def _find_wins(ch: Challenge, d: Dis) -> list[Win]:
                     break
             wins.append(Win(lo, kind, f"{targets[op.imm]}(\"{text}\")",
                             alt if alt != lo else 0))
+    # ---- 还有一种 win：程序自己 open()/fopen() 读文件再 puts()/write() 打出来
+    io_in, io_out = _io_in, _io_out
+    if io_in and io_out:
+        for lo, hi in bounds:
+            start = d.by_addr.get(lo)
+            if start is None:
+                continue
+            body = []
+            for ins in d.insns[start:start + 400]:
+                if ins.address >= hi:
+                    break
+                body.append(ins)
+            has_in = has_out = has_flag = False
+            for ins in body:
+                if ins.mnemonic != "call" or not ins.operands:
+                    continue
+                if ins.operands[0].type != X86_OP_IMM:
+                    continue
+                t = int(ins.operands[0].imm)
+                if t in io_in:
+                    has_in = True
+                if t in io_out:
+                    has_out = True
+            for ins in body:
+                if ins.mnemonic != "lea":
+                    continue
+                m = re.match(r"^[re][a-z0-9]*, \[rip \+ (0x[0-9a-f]+|\d+)\]$", ins.op_str)
+                if not m:
+                    continue
+                addr = ins.address + ins.size + _imm(m.group(1))
+                txt = read_cstr(ch, addr) or ""
+                if "flag" in txt.lower():
+                    has_flag = True
+                    break
+            if has_in and has_out and has_flag and not any(w.addr == lo for w in wins):
+                wins.append(Win(lo, "flag", f"open+print flag (self-read)"))
+                continue
+            # 门槛形态： `mov [rip+X], imm` 紧跟着 call 到上面那个 win
+            for n, ins in enumerate(body):
+                if ins.mnemonic != "mov" or not ins.op_str.startswith(("qword ptr [rip", "dword ptr [rip")):
+                    continue
+                for q in body[n + 1:n + 10]:
+                    if q.mnemonic != "call" or not q.operands:
+                        continue
+                    if q.operands[0].type == X86_OP_IMM and int(q.operands[0].imm) in {w.addr for w in wins}:
+                        # 真正能跳的入口是「把值装进寄存器」那条：mov eax,imm; mov [rip+X],rax
+                        entry = int(ins.address)
+                        prev = body[n - 1] if n > 0 else None
+                        if prev is not None and prev.mnemonic == "mov":
+                            p_reg = prev.op_str.split(",")[0].strip()
+                            d_reg = ins.op_str.split(",")[-1].strip()
+                            if p_reg[-2:] == d_reg[-2:]:
+                                entry = int(prev.address)
+                        if not any(w.addr == entry for w in wins):
+                            wins.append(Win(entry, "flag",
+                                            f"set global + call win({hex(int(q.operands[0].imm))})"))
+                        break
+
     # 去重：同一地址只留一条（优先 shell）
     uniq: dict[int, Win] = {}
     for w in wins:
         if w.addr not in uniq or (uniq[w.addr].kind != "shell" and w.kind == "shell"):
             uniq[w.addr] = w
-    return list(uniq.values())
+    # 排序：shell 优先；同为 flag 时「先设全局再 call」比裸 win 函数更好用
+    # （裸函数可能被全局校验挡住，进去只会打印 "lock closed" 之类）
+    def _rank(w: Win):
+        return (0 if w.kind == "shell" else 1,
+                0 if "set global" in w.evidence else 1,
+                w.addr)
+    return sorted(uniq.values(), key=_rank)
 
 
 def _first_arg_string(ch: Challenge, win: list):

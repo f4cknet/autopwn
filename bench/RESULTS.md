@@ -93,3 +93,20 @@ SROP、20 字节极限输入的 fmt、纯 PIE 局部覆盖（栈对齐）仍需�
 - **SHELL**：payload 后在目标进程执行 `echo PWNED_$((6*7))` / `whoami` / `id` 有正确回显 → 计入成功率
 - **FLAG-ONLY**：只跳到 `system("cat flag")` 并匹配 `flag{...}` → 单独记账，**不计入** shell 成功率
 - **FAILED**：以上都不成立
+
+
+---
+
+## 7. 2026-11-13 新增：纯 int 0x80 手写汇编（`chellenges/7a4abf36…`）
+
+| 项 | 值 |
+|---|---|
+| 特征 | 724 字节、stripped、i386 静态、**无 libc**、`.data`/栈均不可执行 |
+| 原症状 | `vulns=0 goggles=0` → **0 次尝试**，直接 FAILED |
+| 根因 | 引擎只认 `call gets/read@plt`，而这类题 call 的是自写的 `int 0x80` 包装 |
+| 修复 | `facts` 增加 syscall 包装识别（`mov eax,NR ... int 0x80`）；新增策略 `syscall3` |
+| 结果 | 本地 `SHELL syscall3 uid=0(root)`、远程 `uid=1000(ctf)`，均 **1 次尝试** |
+
+`syscall3` 的触发条件很窄（只有真正需要的题才会命中）：i386 + 存在 `mov eax,3` 包装 +
+窗口恰好 `limit == off + 0x14` + `.data` 可写 + `_start` 有 `sub esp,imm`。
+不满足就 return，不会给其它题型制造假 plan。

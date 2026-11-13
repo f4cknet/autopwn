@@ -85,6 +85,11 @@ class Facts:
     static_binsh: bool = False
     callers: dict = field(default_factory=dict)   # 函数入口 -> [调用点之后的下一条地址]
     gadget_alts: dict = field(default_factory=dict)  # gadget 名 -> 全部可用地址（用于挑无坏字节的）
+    sys_read: Optional[int] = None       # read 包装入口（mov eax,3 处）；无 libc 的题只有这个
+    sys_load: Optional[int] = None       # 「mov ebx,[esp+4]; mov ecx,[esp+8]; mov edx,[esp+0xc]; int 0x80」入口
+    sys_wrappers: dict = field(default_factory=dict)   # syscall 号 -> (entry, load, int80)
+    data_addr: Optional[int] = None      # 可写数据段起始地址
+    entry_sub: int = 0                   # _start 开头的 sub esp,imm（重入时帧下移的量）
 
     @property
     def shell_win(self) -> Optional[Win]:
@@ -175,6 +180,23 @@ def analyse(ch: Challenge) -> Facts:
             tgt = ins.operands[0].imm if ins.operands else 0
             f.vulns.append(Vuln(sink, ins.address, disp, offset, limit, int(tgt)))
 
+    # ---- 无 libc 的手写汇编题：call 的是自写的 int 0x80 包装，PLT 里什么都没有
+    f.sys_wrappers = _find_sys_wrappers(d)
+    rd = f.sys_wrappers.get(3)
+    if rd:
+        f.sys_read = rd[0]
+        f.sys_load = rd[1] or None
+    wr = f.sys_wrappers.get(4)
+    if wr and not f.sys_load:
+        f.sys_load = wr[1] or None
+    f.data_addr = _writable_start(ch)
+    f.entry_sub = _entry_sub(ch, d)
+
+    if not f.vulns:
+        v = _find_sys_vuln(ch, d, f)
+        if v:
+            f.vulns.append(v)
+
     if not f.vulns and ch.prot.static:
         v = _static_vuln(ch, d)
         if v:
@@ -206,6 +228,101 @@ def analyse(ch: Challenge) -> Facts:
     # ---- printf(user_buf)
     f.fmt_buf = _find_fmt(ch, d)
     return f
+
+
+# --------------------------------------------------------------------------- 无 libc：int 0x80 包装
+def _find_sys_wrappers(d: Dis) -> dict:
+    """识别「mov eax,NR ... int 0x80」这种自写 syscall 包装。
+
+    返回 {NR: (entry, load, int80)}：
+      entry = mov eax,NR 的地址（从这进就是完整包装）
+      load  = 装载 ebx/ecx/edx 的第一条 mov 的地址（从这进可保留 eax，用于 execve）
+      int80 = int 0x80 的地址
+    """
+    out: dict[int, tuple] = {}
+    for n, ins in enumerate(d.insns):
+        if ins.mnemonic != "int" or not ins.op_str.startswith("0x80"):
+            continue
+        nr, entry = None, 0
+        for k in range(n - 1, max(-1, n - 24), -1):
+            p = d.insns[k]
+            if p.mnemonic == "mov" and p.op_str.startswith("eax, "):
+                try:
+                    nr = _imm(p.op_str.split(", ", 1)[1])
+                except Exception:
+                    nr = None
+                entry = int(p.address)
+                break
+            if p.mnemonic in ("call", "ret", "int"):
+                break
+        load = 0
+        for k in range(n - 1, max(-1, n - 16), -1):
+            p = d.insns[k]
+            if p.mnemonic == "mov" and p.op_str.startswith("ebx, dword ptr [esp + 4]"):
+                load = int(p.address)
+                break
+            if p.mnemonic == "int":
+                break
+        if nr is not None:
+            out.setdefault(int(nr), (entry, load, int(ins.address)))
+    return out
+
+
+def _writable_start(ch: Challenge) -> Optional[int]:
+    best = None
+    for sec in ch.elf.sections:
+        if not (sec.header.sh_flags & 0x1) or not (sec.header.sh_flags & 0x2):
+            continue
+        if sec.header.sh_size == 0:
+            continue
+        if best is None or sec.header.sh_addr < best:
+            best = int(sec.header.sh_addr)
+    return best
+
+
+def _entry_sub(ch: Challenge, d: Dis) -> int:
+    """_start 开头的 sub esp,imm —— 重入 _start 时整个帧会下移这么多。"""
+    if not d.insns:
+        return 0
+    for ins in d.insns[:6]:
+        m = re.match(r"^esp, (0x[0-9a-f]+|\d+)$", ins.op_str) if ins.mnemonic == "sub" else None
+        if m:
+            return _imm(m.group(1))
+    return 0
+
+
+def _find_sys_vuln(ch: Challenge, d: Dis, f: Facts) -> Optional[Vuln]:
+    """call 的是自写 read 包装时，从 lea/mov 的立即数推缓冲位移、从 sub esp 推帧大小。"""
+    rd = f.sys_wrappers.get(3)
+    if not rd:
+        return None
+    for n, ins in enumerate(d.insns):
+        if ins.mnemonic != "call" or not ins.operands:
+            continue
+        if ins.operands[0].type != X86_OP_IMM or ins.operands[0].imm != rd[0]:
+            continue
+        win = d.window(n, 20)
+        buf_disp, count, frame = None, None, None
+        for p in win:
+            if p.mnemonic == "lea":
+                m = re.match(r"^eax, \[esp \+ (0x[0-9a-f]+|\d+)\]$", p.op_str)
+                if m:
+                    buf_disp = _imm(m.group(1))
+            elif p.mnemonic == "mov":
+                m = re.match(r"^dword ptr \[esp \+ 8\], (0x[0-9a-f]+|\d+)$", p.op_str)
+                if m:
+                    count = _imm(m.group(1))
+        for p in reversed(win):
+            m = re.match(r"^esp, (0x[0-9a-f]+|\d+)$", p.op_str) if p.mnemonic == "sub" else None
+            if m:
+                frame = _imm(m.group(1))
+                break
+        if buf_disp is None or not frame:
+            continue
+        off = frame - buf_disp
+        if 0 < off < 0x400:
+            return Vuln("read", ins.address, buf_disp, off, count, int(rd[0]))
+    return None
 
 
 def _static_vuln(ch: Challenge, d: Dis) -> Optional[Vuln]:

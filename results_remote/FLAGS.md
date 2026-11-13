@@ -41,13 +41,45 @@ $ cat /flag
   `This address has no running target. Return to the challenge page, start or renew it, then reconnect.`
   —— 属于平台侧实例生命周期，不是利用失败（引擎已能识别并提示）。
 
-## 3. 已验证 / 未验证的边界
+
+## 3. `7a4abf36…`（0CTF 2016 "welcome" 型：724B 手写汇编 / 只有 int 0x80）
+
+- 目标：`db7f604154c9c7a6971c7aa6.tcp-ctf2.dasctf.com:9999`（TLS）
+- 二进制：i386、stripped、静态、**无 libc**、`.data` 与栈都不可执行
+  流程：`alarm(10)` → `write("Welcome to 0CTF 2016!")` → `read(0, esp+0x10, 0x34)` → 全寄存器
+  写成 `0xdeadbeaf` → `ret`
+- 为什么常规链全废：
+  - 没有 PLT，`gets/read@plt` 一个都没有 → 引擎原来的 `vulns=0`，0 次尝试
+  - 只有 `read(3)/write(4)/exit(1)/alarm(27)` 四个包装，代码里没有 `mov eax, 11`
+  - 窗口 52 字节，返回地址在 offset 32，之后只剩 4 个 dword；
+    而「用 read 返回 11 设 eax」会让栈帧整体右移 4 字节，`envp` 槽位正好掉出窗口一个 dword
+  - `.data`（RW）和栈（`GNU_STACK RW`）都不可执行，shellcode 无路
+- 解法（三段，引擎已内置 `syscall3`）：
+  1. `read(0, .data, 0x34)` 写入 `"/bin/sh\0"` + 0 填充，回漏洞函数
+  2. 把 0 种在 `anchor+4`（下一段窗口外一格），再 `ret` 到 `_start` 让帧下移 `0x10`
+     → 下一段里 `execve` 的 `envp` 槽位读到的正好是这个 0
+  3. `read(0, .data, argv_ptr)` 只喂 **11 字节** → 返回 11 → `eax=11`；
+     紧跟 `0x804813a`（`mov ebx,[esp+4]; mov ecx,[esp+8]; mov edx,[esp+0xc]; int 0x80`）
+     → `execve("/bin/sh", {NULL}, NULL)`
+- 远端回显：
+
+```
+$ id
+  uid=1000(ctf) gid=1000(ctf) groups=1000(ctf)
+$ cat /flag
+  CTF2{e95e6c3a-94ce-423a-be7e-0ac805f14294}
+```
+
+- 引擎结果：`=> SHELL syscall3 uid=1000(ctf) (4.5s / 1 attempts)`
+
+## 4. 已验证 / 未验证的边界
 
 | 链路 | 远程验证 |
 |---|---|
 | ret2win（amd64） | ✓ 真实远程 |
 | ret2sys_write（i386 静态，无 `/bin/sh`） | ✓ 真实远程 |
 | ret2libc | 未验证（需远程同版本 libc 才能算 system） |
+| 纯 int 0x80 三段式（`syscall3`） | ✓ 真实远程 |
 | ret2csu / shellcode / canary+fmt / fmtstr GOT | 未验证 |
 
 不把「本地 14/16」等价成「远程 14/16」。

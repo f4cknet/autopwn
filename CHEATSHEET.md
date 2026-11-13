@@ -3,7 +3,7 @@
 > ⚠️ 不要在 CMD 里敲 `bash xxx.sh`：这台机器的 `bash` 指向 **WSL**，而 WSL 没装发行版，
 > 会报 `execvpe(/bin/bash) failed`。**用下面的 `.bat`**，或在 Git Bash（MINGW64）里跑 `.sh`。
 
-工作目录：`D:\ctf\hacktools\10-pwn\autopwn`
+工作目录：`D:\hacktools\10-pwn\autopwn`
 
 ## 1. 拿到题目后三步（CMD / 双击都行）
 

@@ -1,7 +1,7 @@
 # HANDOVER — 交接说明（给接手的开发者）
 
 > 一句话：这是一个**离线 pwn 自动利用引擎**，输入题目二进制，输出「真的拿到了 shell / flag」的证据。
-> 主线代码只有 `autopwn/engine/` 四个文件（约 3000 行），其余都是题库、容器和文档。
+> 主线代码只有 `autopwn/engine/` 六个文件（约 2960 行），其余都是题库、容器和文档。
 
 交接时间：2026-11-13 22:20 · 交接前状态：`PROGRESS.md §2` 的基线全部通过。
 
@@ -10,7 +10,7 @@
 ## 1. 五分钟上手
 
 ```bat
-cd /d D:\ctf\hacktools\10-pwn\autopwn
+cd /d D:\hacktools\10-pwn\autopwn
 
 :: 1) 确认镜像在（不在就 build_pwn.bat，8~12 分钟）
 docker images | findstr autopwn
@@ -83,6 +83,7 @@ solve.bat bench_sys
 | 现象 | 原因 | 处理 |
 |---|---|---|
 | `execvpe(/bin/bash) failed` | 本机 `bash` 指向未安装发行版的 WSL | 用 `.bat`，别用 `bash *.sh` |
+| `No global/local python version has been set` | 本机 `python` 是 pyenv-win shim，未设版本 | 用 `py -3` 跑宿主机脚本；容器内仍用 `python3` |
 | `Warning: _curses.error: setupterm` | 容器缺 terminfo | 无害，忽略 |
 | `.sh` 报 `set: Illegal option -` | 文件被写成 CRLF | 统一 LF（`write_text` 后跑一次 `\r\n → \n`） |
 | `setarch: failed to set personality` | Docker 默认 seccomp 拦 `personality()` | 容器加 `--security-opt seccomp=unconfined` |
@@ -144,16 +145,16 @@ if plan.tag.startswith("pie:"):
 ## 7. 提交前检查表
 
 > **仓库卫生是硬门禁**（Owner 要求，见 `CLAUDE.md`「工作纪律」与 `AGENTS.md` 铁律 5）：
-> 每轮结束必须跑 `python scripts/audit/check_hygiene.py`，非 0 退出则不许提交；
+> 每轮结束必须跑 `py -3 scripts/audit/check_hygiene.py`，非 0 退出则不许提交；
 > 提交后立刻 `git push origin main`，不许攒提交过夜。
 
 - [ ] `solve.bat bench` ≥ 13/15，且失败项只有 `ch07_acae`、`ch14_easyheap`
 - [ ] `solve.bat bench_extra` ≥ 5 shell + 1 flag-only，失败项只有 `chall`、`fmtstr1`
 - [ ] `solve.bat bench_sys` = 4/4
-- [ ] `python scripts/audit/check_hygiene.py` 退出码 0（根目录白名单 / 临时文件 / results 误入库）
+- [ ] `py -3 scripts/audit/check_hygiene.py` 退出码 0（根目录白名单 / 临时文件 / results 误入库）
 - [ ] 新增/修改的能力在 `bench/RESULTS.md` 有记录
 - [ ] `PROGRESS.md` 的版本表与基线数字同步
-- [ ] `python -m py_compile autopwn/engine/*.py` 通过
+- [ ] `py -3 -m py_compile autopwn/engine/*.py` 通过
 - [ ] 提交信息 `[vX.Y.Z] 一句话`，中文
 - [ ] 已 `git push origin main`
 

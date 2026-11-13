@@ -3,7 +3,8 @@
 
 用法（在仓库根目录或任意位置运行均可）：
 
-    python scripts/audit/check_hygiene.py
+    py -3 scripts/audit/check_hygiene.py      # Windows 本机（python 是 pyenv shim）
+    python3 scripts/audit/check_hygiene.py    # 容器内
 
 退出码：
     0 = 干净
@@ -43,6 +44,8 @@ ALLOWED_ROOT = {
     "LICENSE", "pyproject.toml", "requirements.txt", "setup.py",
     ".gitignore", ".gitattributes", ".venv", ".github", ".coveragerc",
     ".python-version", ".git",
+    # Claude Code 本地配置（settings.local.json 已在 .gitignore，不入库）
+    ".claude",
 }
 
 # 根目录里出现即算违规的临时文件特征

@@ -26,7 +26,7 @@
 环境：Windows + Docker Desktop。镜像构建一次即可。
 
 ```bat
-cd /d D:\ctf\hacktools\10-pwn\autopwn
+cd /d D:\hacktools\10-pwn\autopwn
 
 :: 0) 首次或镜像丢失时（8~12 分钟）
 build_pwn.bat

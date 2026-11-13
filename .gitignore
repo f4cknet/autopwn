@@ -33,6 +33,9 @@ env/
 ENV/
 .python-version
 
+# ----- Claude Code 本地配置（不入库） -----
+.claude/settings.local.json
+
 # ----- IDE / Editor -----
 .vscode/
 .idea/

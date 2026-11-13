@@ -26,6 +26,7 @@
 | `v6.5.0` | 交付文档：README / ARCHITECTURE / PROGRESS / HANDOVER / CLAUDE / DOC_MAP | 可移交 |
 | `v6.5.1` | 文档与目录整理：v5 归档 `archive/v5/`；`AGENTS`/`upgraded` 瘦身；脚本聚合 `scripts/`；`results/` 移出版本库 | 根目录 30+ → 22 项 |
 | `v6.5.2` | 删除 `bench/*/{disasm,strings}.txt`（7.6 MB）；新增卫生门禁 `scripts/audit/check_hygiene.py`；仓库纪律写入 §铁律 5 | 主目录清洁可执行化 |
+| `v6.5.3` | 文档与卫生清理：`.claude` 白名单、`py -3` 命令、路径/章节引用修正 | 收尾清单可在本机原样执行 |
 
 ## 2. 当前基线（2026-11-13 22:18 实测，`--max-attempts 80`）
 

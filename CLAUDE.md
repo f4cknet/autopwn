@@ -80,7 +80,7 @@ LICENSE  pyproject.toml  requirements.txt  setup.py  .gitignore  .venv  .github 
 
 ### 4. 文档先行，实施在后
 
-- 先改 `upgraded.md §3` 加任务行 + 建 `upgraded/vX.Y.Z.md`，再写代码
+- 先改 `upgraded.md §2` 加任务行 + 建 `upgraded/vX.Y.Z.md`，再写代码
 - 架构变了先改 `ARCHITECTURE.md`，基线变了先改 `PROGRESS.md`
 - 提交时**代码与文档必须在同一个 commit 里**
 - 「我先把功能做完再补文档」= 违规
@@ -104,7 +104,7 @@ git push origin main
 solve.bat bench && solve.bat bench_extra && solve.bat bench_sys
 
 :: 2) 清洁检查：根目录白名单 + 临时文件 + 误提交
-python scripts\audit\check_hygiene.py
+py -3 scripts\audit\check_hygiene.py
 
 :: 3) 文档同步：upgraded.md 状态 + PROGRESS.md 基线（如变）
 git diff --stat

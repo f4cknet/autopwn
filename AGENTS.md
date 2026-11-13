@@ -20,10 +20,10 @@
 
 ## 1. 铁律（不可绕过）
 
-### 铁律 1：实施以 `ARCHITECTURE.md` + `upgraded.md §3` 为准
+### 铁律 1：实施以 `ARCHITECTURE.md` + `upgraded.md §2` 为准
 
-- 任何代码改动必须对应 `upgraded.md §3` 里的一个任务行（或 Owner 现场新立任务行）；详情写 `upgraded/vX.Y.Z.md`
-- 在 `upgraded.md §3` 找不到对应项 ⇒ **该任务不存在**
+- 任何代码改动必须对应 `upgraded.md §2` 里的一个任务行（或 Owner 现场新立任务行）；详情写 `upgraded/vX.Y.Z.md`
+- 在 `upgraded.md §2` 找不到对应项 ⇒ **该任务不存在**
 - 架构以 [`ARCHITECTURE.md`](./ARCHITECTURE.md) 为准（v6 起主线是 `autopwn/engine/`）
 - 觉得要做的事在任务板里没有：先 `grep` 确认不是漏看 ⇒ 属于**新需求** ⇒ 停手，走铁律 2
 
@@ -42,7 +42,7 @@
 强制流程（缺一步都不算完成）：
 
 1. **架构层**（如需）：更新 `ARCHITECTURE.md`
-2. **执行层**：在 `upgraded.md §3` 加一行任务（ID / 状态 / 预估 / Owner），并创建同 ID 详情文件（背景 / 目标 / 范围 / 风险 / 验收）
+2. **执行层**：在 `upgraded.md §2` 加一行任务（ID / 状态 / 预估 / Owner），并创建同 ID 详情文件（背景 / 目标 / 范围 / 风险 / 验收）
 3. **风险层**（如需）：评估风险写缓解措施
 4. **评审**：Owner 自审（单 Owner 项目，见 §2.2）
 5. **实施**：上述完成才能写代码
@@ -50,7 +50,7 @@
 
 ### 铁律 3：任务必须有状态
 
-- `upgraded.md §3` **每一行**任务都要有状态：`⏳` 待办 / `🔄` 进行中 / `👀` 待自审 / `✅` 完成 / `⚠️` 阻塞 / `❌` 取消
+- `upgraded.md §2` **每一行**任务都要有状态：`⏳` 待办 / `🔄` 进行中 / `👀` 待自审 / `✅` 完成 / `⚠️` 阻塞 / `❌` 取消
 - 每次提交后，在同一任务的**最终提交**里同步更新任务索引与详情
 - 文档更新与代码改动**禁止拆成两次最终提交**
 
@@ -80,12 +80,12 @@ Owner 明确要求，**不可协商**。详细白名单见 `CLAUDE.md`「工作�
    并更新 `DOC_MAP.md §3` 与所有链接。**归档不删除**——文档是「为什么这么设计」的唯一载体
 3. **临时文件用完即删**：`dbg_*.py` / `bf*.py` / `probe_*.py` / `*.tmp` / 反汇编导出，
    在当轮提交前清除；需要留作回归的改造成 `scripts/` 下的正式脚本
-4. **文档先行**：先改 `upgraded.md §3` 与 `ARCHITECTURE.md`/`PROGRESS.md`，再写代码；
+4. **文档先行**：先改 `upgraded.md §2` 与 `ARCHITECTURE.md`/`PROGRESS.md`，再写代码；
    代码与文档必须在**同一个 commit**
 5. **每轮 commit + push**：远程 `git@github.com:f4cknet/autopwn.git`，分支 `main`。
    不允许攒提交过夜，不允许「等全部做完一起推」
 
-**强制门禁**：每轮收尾跑 `python scripts/audit/check_hygiene.py`，非 0 退出则不许提交。
+**强制门禁**：每轮收尾跑 `py -3 scripts/audit/check_hygiene.py`，非 0 退出则不许提交。
 它检查根目录白名单、临时文件残留、`results/` 误入库、构建产物、版本库内大文件。
 
 ---
@@ -108,7 +108,7 @@ Owner 明确要求，**不可协商**。详细白名单见 `CLAUDE.md`「工作�
 
 ### 2.3 Owner 自审责任
 
-Owner 负责检查提交是否违反本文档 4 条铁律 + `upgraded.md §3` 的任务粒度。
+Owner 负责检查提交是否违反本文档 5 条铁律 + `upgraded.md §2` 的任务粒度。
 
 ---
 
@@ -151,7 +151,7 @@ Owner 负责检查提交是否违反本文档 4 条铁律 + `upgraded.md §3` �
 - 把 Owner 的目标翻译成可执行的需求、架构、迭代计划与任务索引
 - 主动补齐不清晰的架构与验收文档
 - 实施前先做范围拆分、风险提示、验证计划
-- 输出必须可回链到 `ARCHITECTURE.md`、`upgraded.md §3` 与对应任务详情
+- 输出必须可回链到 `ARCHITECTURE.md`、`upgraded.md §2` 与对应任务详情
 - 需求模糊时先澄清或补文档，再进入实现
 
 ### 5.1 本项目的四个高危区（历史踩坑）
@@ -180,7 +180,7 @@ Owner 负责检查提交是否违反本文档 4 条铁律 + `upgraded.md §3` �
 | 看基线数字 / 已知边界 | [`PROGRESS.md`](./PROGRESS.md) |
 | 比赛现场敲命令 | [`CHEATSHEET.md`](./CHEATSHEET.md) |
 | 逐题策略与踩坑 | [`bench/RESULTS.md`](./bench/RESULTS.md) |
-| 找当前任务 | `upgraded.md §3` + `upgraded/vX.Y.Z.md` |
+| 找当前任务 | `upgraded.md §2` + `upgraded/vX.Y.Z.md` |
 | 下一步方向 | `upgraded/v7.0.0.md` |
 | Bug 修复记录 | [`bugs/fix.md`](./bugs/fix.md)（索引）+ `bugs/fix_<name>.md` |
 | v4 / v5 历史 | `archive/v4/`、`archive/v5/` |
@@ -189,7 +189,7 @@ Owner 负责检查提交是否违反本文档 4 条铁律 + `upgraded.md §3` �
 
 - **`bugs/fix.md` = 索引**：只列已进入 `main` 的修复（ID / 关联任务 / 文件 / 一句话 / 状态）
 - **`bugs/fix_<name>.md` = 单条完整记录**：现象 → 根因 → 修复 → 验证
-- 未做的想法走 `upgraded.md §3` 任务板，**不进** `bugs/`
+- 未做的想法走 `upgraded.md §2` 任务板，**不进** `bugs/`
 - `name` 用 snake_case，能描述 root cause（如 `pie_partial_align` / `menu_interact`）
 
 ---

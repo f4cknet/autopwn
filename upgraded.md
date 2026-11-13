@@ -58,6 +58,9 @@
 
 | ID | 摘要 | 状态 | 实际 | 详情 |
 |---|---|---|---|---|
+| `v6.5.3` | 文档与卫生清理：`.claude` 白名单、`py -3` 命令、路径 / 章节引用修正 | ✅ | 0.5h | [`v6.5.3`](./upgraded/v6.5.3.md) |
+| `v6.5.2` | 删除 `bench/*/{disasm,strings}.txt`（7.6 MB）；新增卫生门禁 `scripts/audit/check_hygiene.py`；仓库纪律写入铁律 5 | ✅ | 1h | [`PROGRESS.md`](./PROGRESS.md) §1 |
+| `v6.5.1` | 文档与目录整理：v5 归档 `archive/v5/`；AGENTS / upgraded 瘦身；脚本聚合 `scripts/`；`results/` 移出版本库 | ✅ | 1h | 同上 |
 | `v6.5.0` | 交付文档：README / ARCHITECTURE / PROGRESS / HANDOVER / CLAUDE / DOC_MAP | ✅ | 2h | 本仓库根目录 |
 | `v6.4.1` | 菜单式前置交互（`interact`）自动探测；剔除 win 内部 read 的假漏洞 | ✅ | 1h | [`PROGRESS.md`](./PROGRESS.md) §1 |
 | `v6.4.0` | 自读 flag 型 win：`open+puts` 识别、门槛入口回溯、flag 判定覆盖累积输出 | ✅ | 1.5h | 同上 |

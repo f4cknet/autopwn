@@ -3,7 +3,7 @@
 > **角色**：所有 `fix_<bug_name>.md` 的入口（**不承载 fix 本身内容**）。
 > **配套文档**：
 > - [`AGENTS.md`](../AGENTS.md) §6.1 — 修复记录文件结构（命名约定 / 新增流程 / 删除规则 / 模板）
-> - [`upgraded.md §3`](../upgraded.md) — 任务看板（每个 fix 关联一个任务行 `v4.0.X.Y`）
+> - [`upgraded.md §2`](../upgraded.md) — 任务看板（每个 fix 关联一个任务行 `v4.0.X.Y`）
 > - [`archive/v4/refactor.md §3`](../archive/v4/refactor.md) — v4.0 已落地的目标架构
 > - [`archive/v4/rebuild.md §3`](../archive/v4/rebuild.md) — v3.1 → v4.0.dev0 重构历史（v3.1 fix 不回填本文件）
 >
@@ -19,7 +19,7 @@
 | 你是谁 | 先看哪节 |
 |---|---|
 | **想看某个 fix 的细节** | §1 表格找 fix ID → 点开对应 `fix_<bug_name>.md` |
-| **想看任务看板的 fix 候选** | `upgraded.md §3`（**未做**的 fix 不进本文件） |
+| **想看任务看板的 fix 候选** | `upgraded.md §2`（**未做**的 fix 不进本文件） |
 | **理解 "为什么这样组织 fix 记录"** | `AGENTS.md §6.1` |
 | **v3.1 时代 fix 的位置** | `archive/v4/rebuild.md §3`（不回填本文件） |
 
@@ -34,7 +34,7 @@
 | `fix_x64_recv_timeout` | v4.0.2c4 | [fix_x64_recv_timeout.md](./fix_x64_recv_timeout.md) | ✅ | x64 ret2libc strategies (`io.recv()` + `io.recvuntil(b"\x7f")` / `io.recv(8)`) 无 timeout hang（mirror v4.0.2c1 x32 fix） |
 | `fix_tee_bytes_repr` | v4.1.10 | [fix_tee_bytes_repr.md](./fix_tee_bytes_repr.md) | ✅ | `core/tee.py::Tee.write()` 用 `str(bytes)` 把 pwntools shell 输出变 repr（v4.1.8 引入 bug）|
 
-> **未做 / TODO** → 走 `upgraded.md §3` 任务看板，**不进**本文件。
+> **未做 / TODO** → 走 `upgraded.md §2` 任务看板，**不进**本文件。
 
 ---
 

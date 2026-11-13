@@ -16,7 +16,7 @@ set -e
 # Windows 风格的路径（chellenges\pwn 或 D:/.../chellenges/pwn）统一成正斜杠
 BIN=$(printf '%s' "${1:-}" | tr '\\' '/')
 PORT="${2:-4444}"
-FLAG="${3:-CTF2{docker-local-target}}"
+FLAG="${TARGET_FLAG:-${3:-CTF2{docker-local-target}}}"
 
 if [ -z "$BIN" ]; then
     echo "[error] usage: serve.sh <binary> <port> [flag]" >&2

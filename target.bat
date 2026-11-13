@@ -7,6 +7,7 @@ rem  Usage:
 rem     target.bat                                    :: chellenges\pwn on 4444
 rem     target.bat chellenges\pwn 4444
 rem     target.bat chellenges\pwn 4444 noaslr         :: ASLR off, reproducible
+rem     set TARGET_FLAG=CTF2{your-flag}  &  target.bat    :: custom flag file
 rem     target.bat stop                               :: stop and remove
 rem
 rem  Then attack it:
@@ -33,7 +34,7 @@ if /i "%MODE%"=="noaslr" set EXTRA=-e NO_ASLR=1 --security-opt seccomp=unconfine
 
 echo [*] restarting target container pwn-target ...
 docker rm -f pwn-target >nul 2>nul
-docker run -d --name pwn-target -p %PORT%:%PORT% %EXTRA% -v "%CD%:/work" -w /work autopwn:pwn22 sh /work/docker/serve.sh "%BIN%" %PORT% "CTF2{docker-local-target}"
+docker run -d --name pwn-target -p %PORT%:%PORT% %EXTRA% -v "%CD%:/work" -w /work autopwn:pwn22 sh /work/docker/serve.sh "%BIN%" %PORT%
 if errorlevel 1 goto runfail
 
 echo [*] waiting for listener ...

@@ -81,7 +81,7 @@ bash docker/solve.sh ./你的/bin --host 1.2.3.4 --port 31337 --libc ./libc.so.6
 | level3_x64 | NX / No RELRO | ✓ shell | 只有 write 没有 puts：用 `__libc_csu_init` 拼 `write(1, got, 8)` 泄漏（新策略 `ret2libc_write`） |
 | pie | PIE / Partial RELRO | ✗ | 局部覆盖 ret 到 `backdoor` 时栈未对齐，`system` 内 `movaps` 崩溃；无泄漏无法补 ret 滑板 |
 | canary | i386 + canary | ✓ shell | 新策略 `canary_fmt`：`%p` 泄漏 canary → 带 canary 溢出泄漏 `puts@got` → 回 main → `system("/bin/sh")` |
-| fmtstr1 | i386 + canary / 20 字节输入 | ✗ | 同上，且输入长度限制严格 |
+| fmtstr1 | i386 + canary / 20 字节输入 | ✓ shell | v7.4.0 `guard_fmt`：fmt 写全局门；与 `chellenges/71b6d3ae…` 同一二进制（md5 `eaef2247796c11db798a579396482399`），见 §17 |
 | chall | NX / No RELRO / 仅 syscall gadget | ✗ | 需要 SROP（`rax=15`）路线，未实现 |
 | ret2win | Full RELRO / 只打 flag | ✗ | 函数只 `cat /home/ctf/flag`，容器内无该文件；也不是 shell |
 

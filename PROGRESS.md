@@ -45,15 +45,17 @@
 | `bench/` | 15 | **13** | 0 | `ch07_acae`、`ch14_easyheap`（菜单式堆） |
 | `bench_extra/` | 8 | **6** | 1 | `chall`（SROP） |
 | `bench_sys/` | 4 | **4** | 0 | — |
-| `chellenges/`（原始赛题，**样本外**） | 33 | **3+（抽测）** | 0 | 全量未逐题重跑 |
+| `chellenges/`（原始赛题，**样本外**） | 33 | **2（抽测）** | 0 | 全量未逐题重跑 |
 
 > **`chellenges/` 自 v7.0.3 起是样本外题目，不是验收集。**
 > v7.3.0 抽 10 题实测 0 shell / 0 flag，逐题归因见
 > [`upgraded/v7.3.0.md`](./upgraded/v7.3.0.md) §1.1 与 [`v7.3.1`](./upgraded/v7.3.1.md) §7.2。
-> **v7.4.0 抽 5 题（样本外）**：`492fad50` / `4ee0fc91` / `71b6d3ae` → **SHELL**（各 1 次），
-> `434ced45` → **GATE**（`good job!!`，不记 SHELL），`fdfaa93a` → **win_executed**（诱饵 win，不记 AC）。
+> **v7.4.0 抽 5 个 `chellenges/` 二进制**：`492fad50` / `4ee0fc91` → **SHELL**（各 1 次），
+> `71b6d3ae` 与 `bench_extra/fmtstr1` 是**同一二进制**（md5 `eaef2247796c11db798a579396482399`，
+> 已在基线内，不重复计样本外新解）；`434ced45` → **GATE**（`good job!!`，不记 SHELL），
+> `fdfaa93a` → **win_executed**（诱饵 win，不记 AC）。
 > 其余题未逐题重跑，不写「已覆盖」。现存已知可解项：`repeater`（v7.0.3 `canary_echo`）、
-> `note`/`pwn`（flag-only）、上述 5 题（v7.4.0）。
+> `note`/`pwn`（flag-only）、上述题（v7.4.0）。
 
 逐题明细：`bench/RESULTS.md`（含每题的策略、偏移、关键参数）；远程实打记录：`results/remote/FLAGS.md`。
 

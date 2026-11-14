@@ -3,7 +3,7 @@
 > 口径：所有「已解出」都必须有**可复现证据**（`results/*.json` 里有真实回显）。
 > 「策略跑完没报错」不算完成。`SHELL` 与 `FLAG-ONLY` 分开统计。
 
-最后更新：2026-11-14（v7.0.3）
+最后更新：2026-11-14（v7.0.4）
 
 ## 1. 版本演进
 
@@ -31,6 +31,7 @@
 | `v7.0.1` | L1 交互层：`Plan.steps`（`Send`/`Wait`）、统一收发时序、修复 `_try_ret2libc` 丢弃前缀 | 菜单/多轮题可表达；独立向量 13/13；基线不变 |
 | `v7.0.2` | L3 判定统一：`oracle.py`（`judge_shell`/`judge_flag`/`Verdict`）+ 唯一 `FLAG_RE` + attempts 带 `cause` | 4 份判定收成 1 份；向量 15/15；基线不变 |
 | `v7.0.3` | repeater 解锁：`_find_fmt` 误报修复、`_start` 推 main、新策略 `canary_echo`（canary-echo 泄漏 + 对齐重入 ret2libc） | **chellenges 首次 1/3**（repeater 真拿 shell 3/3）；基线不变 |
+| `v7.0.4` | 远程 libc 识别：`libcsearch.py` 双符号 low12 指纹 + 候选轮换；ret2libc/canary_echo 接入 | repeater 远程真取 flag（2.23 自动识别）；基线不变 |
 
 ## 2. 当前基线（2026-11-14 v7.0.3 实测，`--max-attempts 80`）
 
@@ -75,7 +76,7 @@
 | **SROP** | ❌ | — | `bench_extra/chall` |
 | **20 字节极限 fmt** | ❌ | — | `bench_extra/fmtstr1` |
 | **ORW（无现成 win）** | ❌ | — | 需人工 |
-| **无 libc + 需 ret2libc** | ❌ | — | `chellenges/repeater` |
+| **无 libc + 需 ret2libc** | ✅ | `libcsearch`（v7.0.4） | `chellenges/repeater`（本地 + 远程均解） |
 
 ## 4. 已知边界（逐条原因）
 
@@ -84,7 +85,7 @@
 | 菜单式堆 `ch07_acae` / `ch14_easyheap` | glibc 2.35 移除了 `__free_hook`/`__malloc_hook`；程序不打印堆内容，safe-linking 下无堆地址泄漏。堆策略完全没实现 |
 | `bench_extra/chall` | 只有 syscall gadget，需要 `rax=15` 的 SROP；未实现 |
 | `bench_extra/fmtstr1` | 输入限制 20 字节，写不动 GOT |
-| `chellenges/repeater` | ✅ v7.0.3 已解（`canary_echo`）。复盘结论：①stripped 无 main 符号 → `_start` 推导；②`fmt=48` 是误报（`_find_fmt` 已修）；③canary 在 buf+40 → 盖 LSB 后 puts 回显带出高 7 字节。远程形态仍需 `--libc`（远程 libc 未必等于容器 2.35） |
+| `chellenges/repeater` | ✅ v7.0.3 已解（`canary_echo`）；远程形态 v7.0.4 已解（`libcsearch` 自动识别 2.23，dasctf TLS 实例真取 flag）。复盘结论：①stripped 无 main 符号 → `_start` 推导；②`fmt=48` 是误报（`_find_fmt` 已修）；③canary 在 buf+40 → 盖 LSB 后 puts 回显带出高 7 字节；④远程 libc≠本地 → 双符号 low12 指纹 + 候选轮换 |
 | ORW 型 | 需要自拼 open/read/write，属人工范畴（见 v7 文档 §5「明确不做的事」） |
 
 ## 5. 下一步（按投入产出）

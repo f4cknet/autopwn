@@ -51,8 +51,9 @@
 | `v7.0.0` | 架构提案：四层管线（目标模型 / 交互规划 / 能力注册 / 判定归因） | 📝 | 3h | @Minzhi_Zhou | [`v7.0.0`](./upgraded/v7.0.0.md) |
 | `v7.0.2` | **P0**：三处判定合并为统一 `Oracle`（`verify_shell` / `probe_flag` / `_try_pie_partial`） | ✅ | 1.5h | @Minzhi_Zhou | [`v7.0.2`](./upgraded/v7.0.2.md) |
 | `v7.0.3` | P1：repeater 解锁——`_find_fmt` 误报修复（printf 参数是常量串）、`_start` 推导 main、canary-echo 泄漏 + 对齐重入 ret2libc 策略 | ✅ | 5h | @Minzhi_Zhou | [`v7.0.3`](./upgraded/v7.0.3.md) |
+| `v7.0.4` | P1：远程 libc 识别——双符号 low12 指纹（LibcSearcher / libc.rip）自动匹配 libc，解锁「无自带 libc 的远程 ret2libc」 | 🚧 | 4h | @Minzhi_Zhou | [`v7.0.4`](./upgraded/v7.0.4.md) |
 
-> `v7.0.2` 是 `HANDOVER.md §8` 指定的下一项 P0，**不需要改 `facts.py`**，风险可控。
+> `v7.0.4` 实施中：远程 repeater 已真取 flag，本地回归已过，待收尾提交。
 
 ### 2.2 已完成（v6 系列）
 

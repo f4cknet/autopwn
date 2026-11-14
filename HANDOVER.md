@@ -1,7 +1,7 @@
 # HANDOVER — 交接说明（给接手的开发者）
 
 > 一句话：这是一个**离线 pwn 自动利用引擎**，输入题目二进制，输出「真的拿到了 shell / flag」的证据。
-> 主线代码只有 `autopwn/engine/` 八个文件（约 3200 行），其余都是题库、容器和文档。
+> 主线代码只有 `autopwn/engine/` 九个文件（约 3400 行），其余都是题库、容器和文档。
 
 交接时间：2026-11-13 22:20 · 交接前状态：`PROGRESS.md §2` 的基线全部通过。
 
@@ -40,6 +40,7 @@ solve.bat bench_sys
 | `autopwn/engine/orchestrator.py` | 尝试顺序、预算、按 `tag` 分派特殊流程、留痕 | 中 |
 | `autopwn/engine/interact.py` | `Send`/`Wait` 步骤、累积缓冲与游标、唯一一份收发时序 | 中 |
 | `autopwn/engine/oracle.py` | **唯一判定实现**：`judge_shell` / `judge_flag` / `Verdict` / `FLAG_RE` | 低（改判据才动） |
+| `autopwn/engine/libcsearch.py` | 远程 libc 识别：low12 指纹 → LibcSearcher / libc.rip → 关键符号偏移 | 低 |
 | `autopwn/engine/run.py` | spawn（本地/远程）、按步骤收发、调用 oracle 判定 | 中 |
 | `autopwn/engine/model.py` | `Challenge`：复制到 `.run/`、patchelf、加载 ELF | 低 |
 | `autopwn/engine/cli.py` | 参数、目录收集（ELF/zip/平铺目录）、md5 去重 | 低 |
@@ -169,6 +170,7 @@ if plan.tag.startswith("pie:"):
 | ✅ | ~~`Plan.sends` → `Plan.steps`（`Send`/`Wait`），交互层~~（v7.0.1 已完成） | `interact.Interaction` |
 | ✅ | ~~判定层统一成 `Oracle`（Shell/Flag/File），带 `cause`~~（v7.0.2 已完成） | `oracle.judge_shell` / `judge_flag` |
 | ✅ | ~~repeater 解锁~~（v7.0.3 已完成：fmt 误报修复 + `_start` 推 main + `canary_echo`） | `facts._derive_main` / `facts._find_echo_vuln` / `strategies.s_canary_echo` |
+| ✅ | ~~远程 libc 识别~~（v7.0.4 已完成：双符号 low12 指纹 + 候选轮换，远程 repeater 真取 flag） | `libcsearch.candidates` / `orchestrator._resolve_remote_libc` |
 | P1 | facts 提取 prompt 字符串，策略自动 `Wait(prompt)` | `facts._find_interact` + `strategies._prelude_variants` |
 | P1 | 能力声明式注册（`requires`/`forbids`/`evidence`） | `STRATEGIES` 列表 + 各策略开头的 early-return |
 | P1 | 支持「给 libc」或「按泄漏找 libc」（解锁 `chellenges/repeater`） | `model.Challenge.libc_path` |

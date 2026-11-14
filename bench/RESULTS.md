@@ -294,3 +294,19 @@ fmt 判定矩阵（修复后）：
 | `bench_extra/canary`（i386 真 fmt） | 76 | 76 ✓ |
 
 回归：`bench` 13/15、`bench_extra` 5+1、`bench_sys` 4/4，全部与基线一致。
+
+---
+
+## 14. v7.0.4 远程 libc 识别：repeater 远程全自动拿 flag（2026-11-14）
+
+| 项 | 值 |
+|---|---|
+| 靶机 | `a5345cafaf17ea1c3f699e19.tcp-ctf2.dasctf.com:9999`（TLS） |
+| 结果 | **`=> SHELL canary_echo remote-libc[libc6_2.23-0ubuntu11.3_amd64]`，6 次尝试，`--cmd "cat /flag"` 真取 `CTF2{b884870c-…}`** |
+| 根因 | 本地容器 glibc 2.35（puts low12=0xe10）≠ 远程 2.23（low12=0x6a0）→ `_find_libc_base` 永不匹配 |
+| 新模块 | `libcsearch.py`：`candidates(low12_map)` 双符号指纹 → LibcSearcher 离线库（镜像内置 1.1.5）；单符号允许 amd64 候选 ≤6 放行；libc.rip API 兜底；`rebase()` 页对齐校验 |
+| 接入 ① | `s_ret2libc`：远程无 `ch.libc_path` 时 stage1 双泄（puts + printf GOT），desc 带 `+printf` 标记；同时跳过 scanf preset（repeater 实测 1024 会把 cont 喂成非 0 → 程序退出） |
+| 接入 ② | `_try_ret2libc`：本地 `_find_libc_base` 失败 → `_stage2_remote_cands` 逐候选发 stage2（带循环闸的 plan 才喂退出 `9\n`，ch13 的 fgets 循环多喂一行会把 stage2 顶掉一位——实测回归后改为按 desc 门控） |
+| 接入 ③ | `_try_canary_echo`：同路径；单符号多候选时**一连接试一候选**（打错地址进程就死），`cand_idx` 轮换起点，外层 attempt 换新连接接续 |
+| 验证 | 远程 2/2 全中；本地 `ch13` / `bench_extra/ret2libc` 路径不变（1 attempts）；`repeater` 本地 3/3 不变；三套回归 13/15、5+1、4/4；向量 15/15 |
+| flag | `CTF2{b884870c-f5f2-4379-9c1d-fb8d7f6b54e8}`（`results/remote/FLAGS.md` 口径） |

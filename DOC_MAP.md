@@ -25,6 +25,7 @@
 | [`upgraded/v7.0.1.md`](./upgraded/v7.0.1.md) | L1 交互层（`Send`/`Wait`）设计与实施记录 |
 | [`upgraded/v7.0.2.md`](./upgraded/v7.0.2.md) | L3 判定统一（`oracle.py`）设计与实施记录 |
 | [`upgraded/v7.0.3.md`](./upgraded/v7.0.3.md) | repeater 解锁（fmt 误报修复 / 推 main / canary_echo）设计与实施记录 |
+| [`upgraded/v7.0.4.md`](./upgraded/v7.0.4.md) | 远程 libc 识别（low12 指纹 / 候选轮换）设计与实施记录 |
 | [`upgraded/v6.0.0.md`](./upgraded/v6.0.0.md) | v6 引擎的首版设计与实施记录 |
 | [`bench/RESULTS.md`](./bench/RESULTS.md) | 逐题策略 / 偏移 / 关键参数 / 踩坑（复盘与回归依据） |
 | [`bugs/fix.md`](./bugs/fix.md) | Bug 修复索引（单条记录 `bugs/fix_<name>.md`） |
@@ -66,7 +67,7 @@
 
 ```
 autopwn/
-├── autopwn/engine/     引擎源码（facts / strategies / interact / oracle / orchestrator / run / model / cli）
+├── autopwn/engine/     引擎源码（facts / strategies / interact / oracle / libcsearch / orchestrator / run / model / cli）
 ├── docker/             镜像、靶机（serve.sh）、评测入口（solve.sh / bench_all.sh）
 ├── bench/              15 道比赛原题（回归主基准）
 ├── bench_extra/        8 道经典题型（泛化验证）
@@ -77,7 +78,7 @@ autopwn/
 │   ├── test/           评测与回归脚本
 │   └── audit/          审计脚本（含 `check_hygiene.py` 仓库卫生门禁）
 ├── bugs/               修复记录（fix.md 索引 + 单条 fix_<name>.md）
-├── upgraded/           任务详情（v6.0.0、v7.0.0~v7.0.3）
+├── upgraded/           任务详情（v6.0.0、v7.0.0~v7.0.4）
 ├── results/            每次尝试的证据（本地 / chellenges / extra / remote / docker）
 ├── archive/            v4、v5 历史归档
 ├── writeups/           解题报告（docx）

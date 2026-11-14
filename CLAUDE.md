@@ -117,4 +117,4 @@ git add -A && git commit -m "[vX.Y.Z] ..." && git push origin main
 
 ## 当前进度
 
-见 `PROGRESS.md §2`。已知未覆盖：菜单式堆、SROP、20 字节极限 fmt、ORW、无 libc 的 ret2libc（`chellenges/repeater`）。
+见 `PROGRESS.md §2`。已知未覆盖：菜单式堆、SROP、20 字节极限 fmt、ORW。

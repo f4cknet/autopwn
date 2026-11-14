@@ -260,3 +260,37 @@ SROP、20 字节极限输入的 fmt、纯 PIE 局部覆盖（栈对齐）仍需�
 | 结果 | **15/15 PASS** |
 | 语义 | 判定正则逐字符复制自原实现，`bench` 13/15 / `bench_extra` 5+1 / `bench_sys` 4/4 与基线完全一致 |
 | cause | `results/*.json` 的 `attempts[].cause`：shell 路径 `marker`/`uid`，flag 路径 `flag_re`/`no_flag_file` |
+
+---
+
+## 13. v7.0.3 repeater 解锁：canary-echo 泄漏 + 对齐重入 ret2libc（2026-11-14）
+
+| 项 | 值 |
+|---|---|
+| 题目 | `chellenges/repeater`（2021 stripped amd64 / canary / NX / Partial RELRO / 无自带 libc） |
+| 结果 | **`=> SHELL canary_echo uid=0(root)`**，连续 3 次全中（每次 41 attempts，先烧完 ret2libc 的 40 个再命中） |
+| 前置修复 ① | `_find_fmt` 误报：repeater 的 `fmt=48` 实为 puts 回显的 lea 被记到常量串 printf 头上；`ret2win` 的 `printf("Hello, %s", buf)`（buf 在 rsi）同样误报。修法：`_flows_to_rdi` 用 alive 跟踪（lea 值被重写即死）+ last-write-wins + 中间有 call 重置（rdi 会被中间调用用掉） |
+| 前置修复 ② | stripped 题从 `_start` 推 main：`lea rdi,[imm]`/`mov edi,imm` + `call __libc_start_main@plt` → imm 即 main（repeater=0x4007d9）。`s_ret2libc` / `s_canary_fmt` 直接吃上 |
+| 新事实 | `Facts.echo_leak`：read 溢出 + 紧随 puts(同 buf) 回显的结构（正负例矩阵：repeater ✓ / note/canary/ch02/ch13 无误报） |
+| 新策略 | `s_canary_echo` → `orchestrator._try_canary_echo` 三阶段同进程：①发 `A*(buf_size-8)+B` 盖 canary LSB 0x00 → puts 回显带出 canary[1:8]，重组 `b"\x00"+leak7`；②真 canary + 假 rbp + `pop_rdi(puts@got); puts@plt; 重入 main` → 算 libc base；③`ret 对齐 + pop_rdi(binsh) + system` → 真拿 shell |
+| canary 检查 | 窗口条件 `off > canary_pos + word*2 - 1`；canary 距 buf 起点 = `buf_size - wordsize` |
+
+三个坑（都是通用规则，已写进策略注释）：
+
+| 坑 | 教训 |
+|---|---|
+| **时序**：probe 轮之后必须先 `send(b"0\n")` 让 scanf/getchar 消费完 | 否则 stage1 被 `scanf("%d")` 吃进 stdio 缓冲（匹配失败留在缓冲区），read 拿到残缺输入 → smash。gdb 断点 + `/proc/pid/mem` 对拍才定位 |
+| **重入点**：必须重入带 prologue 的函数体（`_start` 推导的 main），不能跳循环体 | 跳循环体时 rbp 保持垃圾值，退出时 `mov rcx,[rbp-8]` canary 检查读垃圾必 smash |
+| **对齐**：stage2 必须插裸 `ret`（`f.gadgets["ret"]`） | 缺它 `do_system` 内 `__sigemptyset` SIGSEGV（movaps 类对齐要求） |
+
+fmt 判定矩阵（修复后）：
+
+| 二进制 | 期望 | 实测 |
+|---|---|---|
+| `bench/ch02_x86_4d79`（i386 真 fmt） | 112 | 112 ✓ |
+| `chellenges/repeater`（puts 回显 + 常量 printf） | None | None ✓ |
+| `bench_extra/ret2win`（buf 在 rsi 第二参） | None | None ✓ |
+| `chellenges/note`（真 fmt） | 144 | 144 ✓ |
+| `bench_extra/canary`（i386 真 fmt） | 76 | 76 ✓ |
+
+回归：`bench` 13/15、`bench_extra` 5+1、`bench_sys` 4/4，全部与基线一致。

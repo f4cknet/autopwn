@@ -168,7 +168,7 @@ if plan.tag.startswith("pie:"):
 |---|---|---|
 | ✅ | ~~`Plan.sends` → `Plan.steps`（`Send`/`Wait`），交互层~~（v7.0.1 已完成） | `interact.Interaction` |
 | ✅ | ~~判定层统一成 `Oracle`（Shell/Flag/File），带 `cause`~~（v7.0.2 已完成） | `oracle.judge_shell` / `judge_flag` |
-| P1 | **repeater 解锁**：`_find_fmt` 误报修复、`_start` 推导 main、canary-echo 泄漏策略 | `facts._find_fmt` / `facts._func_entries` / `strategies`（手工链见 PROGRESS §4） |
+| ✅ | ~~repeater 解锁~~（v7.0.3 已完成：fmt 误报修复 + `_start` 推 main + `canary_echo`） | `facts._derive_main` / `facts._find_echo_vuln` / `strategies.s_canary_echo` |
 | P1 | facts 提取 prompt 字符串，策略自动 `Wait(prompt)` | `facts._find_interact` + `strategies._prelude_variants` |
 | P1 | 能力声明式注册（`requires`/`forbids`/`evidence`） | `STRATEGIES` 列表 + 各策略开头的 early-return |
 | P1 | 支持「给 libc」或「按泄漏找 libc」（解锁 `chellenges/repeater`） | `model.Challenge.libc_path` |

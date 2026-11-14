@@ -32,7 +32,7 @@ ALLOWED_ROOT = {
     # 代码
     "autopwn", "docker", "scripts", "tests",
     # 题库
-    "bench", "bench_extra", "bench_sys", "chellenges", "Challenge",
+    "bench", "bench_extra", "bench_sys", "chellenges", "Challenge", "holdout",
     # 资料
     "bugs", "upgraded", "archive", "writeups", "results", "_target",
     # Windows 入口

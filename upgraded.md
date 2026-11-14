@@ -60,7 +60,7 @@
 | `v7.4.0a` | 守卫层只读：`guard.py`（A0 下标修正 / A1 call 边 / 两级守卫）+ `Facts.guards/backfills/fmt_sites` + `--facts-only` | ✅ | 3h | @Minzhi_Zhou | [`v7.4.0a`](./upgraded/v7.4.0a.md) |
 | `v7.4.0b` | 守卫策略：`s_guard_write` / `s_guard_fmt` / `s_guard_backfill` + orchestrator `guard:*` 分派（不重试） | ✅ | 2h | @Minzhi_Zhou | [`v7.4.0b`](./upgraded/v7.4.0b.md) |
 | `v7.4.0c` | 证据态：`judge_gate` / `judge_win_executed`（A3：gate 通过继续 judge_shell）+ decoy 单次尝试 + CLI 计数 | ✅ | 1h | @Minzhi_Zhou | [`v7.4.0c`](./upgraded/v7.4.0c.md) |
-| `v7.5.0` | **P0**：holdout 评测 + 反过拟合门禁——三指标（打通率 / 诊断准确率 / 盲试占比）+ 禁硬编码检查 | ⏳ | 3h | @Minzhi_Zhou | [`v7.5.0`](./upgraded/v7.5.0.md) |
+| `v7.5.0` | **P0**：holdout 评测 + 反过拟合门禁——`holdout/`（BUUCTF 等未做题，冻结、执行方禁读）+ 三指标（打通率 / 诊断准确率 / 盲试占比）+ 禁硬编码检查 | 🔄 | 3h | @Minzhi_Zhou | [`v7.5.0`](./upgraded/v7.5.0.md) |
 | `v7.4.1` | P1：payload 变换感知——题四/九 的输入经过字符变换（`'A'`→`'O'`），原样 payload 到不了返回地址 | ⏳ | 3h | @Minzhi_Zhou | 见 [`v7.3.1`](./upgraded/v7.3.1.md) §7.2 |
 
 > `v7.3.0` 起因：2026-11-14 用 10 道新赛题做样本外测试得 **0 shell / 0 flag**；

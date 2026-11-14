@@ -53,7 +53,6 @@ git status --short          # 2) 必须干净；有未提交改动先判断是�
 > `autopwn/engine/orchestrator.py` 有一段 v7.2.0 的远程重试改动，属另一会话，等活实例验证后才提交。
 
 ## 五条最容易违反的规则
-
 1. 成功判据是「目标进程里真执行了命令有回显」，**不是**「策略跑完没报错」。
 2. 判定必须扫**累积输出**（只看最后一段会把早到的 flag 判负）。
 3. 事实函数**不要开头就 `return`**（曾埋掉「无 system 但有 open+puts」的整类题）。
@@ -62,6 +61,9 @@ git status --short          # 2) 必须干净；有未提交改动先判断是�
 
 ## 不要做的事
 
+- **不要读 `holdout/` 里的任何东西**（二进制、反汇编、`results` 输出）。那是样本外测量集，
+  执行方拿到具体题目就等于污染样本；只能向验证方要「聚合指标 + 失败归因类别」。
+- **不要为 `holdout/` 里的题改代码**。改了该题作废（见 `holdout/README.md` 铁规）。
 - 不要用 `bash docker/solve.sh`（本机 bash 指向未装的 WSL）
 - 不要为了单题调参而改通用逻辑
 - 不要为了「跑通」而放宽判定（那会制造假成功）
@@ -76,7 +78,7 @@ Owner 明确要求以下五条。违反其中任何一条的提交都要回退�
 仓库根目录**只允许**出现下列条目，多一个都算违规：
 
 ```
-autopwn/  docker/  bench/  bench_extra/  bench_sys/  chellenges/  Challenge/
+autopwn/  docker/  bench/  bench_extra/  bench_sys/  chellenges/  Challenge/  holdout/
 scripts/  bugs/  upgraded/  results/  archive/  writeups/  tests/  _target/
 solve.bat  target.bat  build_pwn.bat  shell.bat
 README.md  CLAUDE.md  AGENTS.md  HANDOVER.md  ARCHITECTURE.md  PROGRESS.md  CHEATSHEET.md  DOC_MAP.md  upgraded.md

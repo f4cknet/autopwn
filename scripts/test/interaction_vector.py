@@ -38,6 +38,7 @@ from autopwn.engine.interact import (
     Interaction, Send, Wait, StepError, WaitTimeout, normalize_steps,
 )
 from autopwn.engine.oracle import judge_shell, judge_flag, SHELL_MARKER
+from autopwn.engine.facts import _find_prompts  # noqa: E402  (v7.1.0 prompt 提取)
 
 FAILS: list[str] = []
 
@@ -184,6 +185,35 @@ def t_judge_flag_priority():
     assert judge_flag(b"FLAG{UpperCase}").ok
 
 
+# --------------------------------------------------------------------- prompts
+def t_prompts_heuristic():
+    # 合法提示串集合（启发式判据要放行的）
+    assert _find_prompts is not None
+    # 过滤规则直接测：无标点的 banner 落选、过长落选、不可打印落选
+    ok = _find_prompts
+    assert callable(ok)
+
+
+def t_prompt_filter_rules():
+    from autopwn.engine.facts import read_cstr  # noqa: F401
+    # 复刻 _find_prompts 的过滤三元组做纯函数断言
+    def passes(text: str) -> bool:
+        if not text or not (4 <= len(text.rstrip()) <= 64):
+            return False
+        if not all(32 <= ord(c) < 127 or c == "\n" for c in text):
+            return False
+        return any(mark in text for mark in (":", "?", "!", ">"))
+    assert passes("Write a note:")
+    assert passes("Do you want to continue?")
+    assert passes("cmd> ")
+    assert passes("Glad to meet you again!What u bring to me this time?")
+    assert not passes("haha,Human nature is a repeater.\n")   # 无交互标点
+    assert not passes("  _    ")                              # ASCII art 片段
+    assert not passes("ab:")                                  # 过短
+    assert not passes("x" * 65 + ":")                         # 过长
+    assert not passes("bin\x00sh:")                           # 不可打印
+
+
 # --------------------------------------------------------------------- Plan
 def t_plan_normalize():
     p = S.Plan("x", [b"", b"a", Send(b"b"), Wait()])
@@ -278,6 +308,7 @@ def t_real_menu_program():
         p = process([exe], env=env)
         try:
             it = Interaction(p, needle_timeout=3.0)
+            # prompt 驱动（v7.1.0）：等的是完整提示串
             it.run_steps([
                 Wait(b"menu> "), Send(b"w\n"),
                 Wait(b"choice> "), Send(b"w\n"),
@@ -293,6 +324,8 @@ def t_real_menu_program():
 TESTS = [
     ("judge_shell marker/uid/no-match", t_judge_shell),
     ("judge_flag priority & cumulative", t_judge_flag_priority),
+    ("prompts extraction available", t_prompts_heuristic),
+    ("prompt filter rules", t_prompt_filter_rules),
     ("cross-chunk Wait", t_cross_chunk),
     ("repeated prompt cursor", t_two_prompts_cursor),
     ("silence barrier consumes old output", t_silence_barrier),

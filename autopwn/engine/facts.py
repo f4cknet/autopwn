@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from capstone import Cs, CS_ARCH_X86, CS_MODE_32, CS_MODE_64
-from capstone.x86 import X86_OP_IMM
+from capstone.x86 import X86_OP_IMM, X86_OP_MEM
 
 from .model import Challenge
 
@@ -94,6 +94,7 @@ class Facts:
     data_addr: Optional[int] = None      # 可写数据段起始地址
     entry_sub: int = 0                   # _start 开头的 sub esp,imm（重入时帧下移的量）
     echo_leak: Optional[tuple] = None    # (vuln_idx, buf_size)：read 溢出 + puts(buf) 回显结构（canary-echo 泄漏用）
+    prompts: dict = field(default_factory=dict)   # 函数入口 -> [常量提示串]（Wait(prompt) 用）
 
     @property
     def shell_win(self) -> Optional[Win]:
@@ -136,6 +137,141 @@ def _find_echo_vuln(f: "Facts", ch: Challenge, d: Dis) -> Optional[tuple]:
                             break
                 break
     return None
+
+
+def _find_prompts(ch: Challenge, f: "Facts", d: Dis) -> dict:
+    """提取交互提示串：puts/printf/write 的常量串实参 → 归组到其后最近的输入函数入口。
+
+    启发式过滤（铁律 5：宁缺勿滥，误报会让 Wait 烧死）：
+      * 只认第一实参是只读段常量地址（lea reg,[imm] / mov reg,imm）；
+      * 4~64 字节、可打印（允许 \\n）、含 `:` / `?` / `!` / `>` 之一；
+      * ASCII art banner（无标点）自然落选。
+    归组：该 call 之后 25 条内最近的 read/gets/scanf/fgets —— 它们同属一个函数帧。
+    """
+    out: dict[int, list] = {}
+    io_out = _puts_plts(ch)
+    printf_plt = ch.plt("printf")
+    write_plt = ch.plt("write")
+    sinks = set()
+    for name in ("read", "gets", "fgets"):
+        p = ch.plt(name)
+        if p:
+            sinks.add(p)
+    scanf = ch.plt("__isoc99_scanf") or ch.plt("scanf")
+    if scanf:
+        sinks.add(scanf)
+    if not sinks:
+        return out
+
+    def _const_str_arg(ins) -> Optional[int]:
+        """call 前的实参装载是否为只读段常量地址；是则返回地址。"""
+        return None  # 在调用点处统一回看，见主循环
+
+    rodata = []
+    for sec in (".rodata", ".data.rel.ro"):
+        s = ch.elf.get_section_by_name(sec)
+        if s:
+            rodata.append((s.header.sh_addr, s.header.sh_addr + s.header.sh_size))
+
+    def _in_rodata(addr: int) -> bool:
+        for lo, hi in rodata:
+            if lo <= addr < hi:
+                return True
+        return False
+
+    n_ins = len(d.insns)
+    for n, ins in enumerate(d.insns):
+        if ins.mnemonic != "call" or not ins.operands:
+            continue
+        op = ins.operands[0]
+        if op.type != X86_OP_IMM:
+            continue
+        if op.imm not in io_out and op.imm not in (printf_plt, write_plt):
+            continue
+        if op.imm == printf_plt:
+            # printf 第一参是 fmt：只有「fmt 是常量且像提示语」才算（printf("...:")）
+            pass  # 与 puts 同路径处理
+        # 回看 8 条找第一实参装载：amd64 rdi / edi，i386 push
+        # note 型：lea rax,[rip+…] → mov rdi,rax → call puts（rip 相对，要算绝对地址）
+        arg_addr = None
+        rip = None
+        dest_reg = ""
+        for k in range(n - 1, max(-1, n - 9), -1):
+            p = d.insns[k]
+            if p.mnemonic == "call":
+                break
+            if p.mnemonic == "lea":
+                ops = p.operands
+                dest_reg = p.op_str.split(",")[0].strip()
+                if ops and ops[1].type == X86_OP_MEM:
+                    mem = ops[1].mem
+                    if mem.base == 0 and mem.index == 0:        # 绝对 disp
+                        arg_addr = mem.disp & (2 ** 64 - 1 if ch.elf.bits == 64
+                                               else 2 ** 32 - 1)
+                    elif d.insns[k + 1].mnemonic == "mov" if k + 1 < n else False:
+                        pass
+                    else:
+                        arg_addr = None
+                    if mem.base != 0 and "rip" in p.op_str:
+                        # rip 相对：下一条指令地址 + disp
+                        arg_addr = int(p.address) + p.size + mem.disp
+                elif ops and ops[1].type == X86_OP_IMM:
+                    arg_addr = int(ops[1].imm)
+                if arg_addr is not None and dest_reg in ("rdi", "edi"):
+                    break
+                if arg_addr is not None:
+                    rip = arg_addr          # 暂存，等 mov rdi,dest 确认
+                    continue
+            if p.mnemonic == "mov" and p.op_str.startswith(("rdi, ", "edi, ")) \
+                    and rip is not None:
+                if p.op_str.split(", ", 1)[1] == dest_reg:
+                    arg_addr = rip
+                    break
+            if p.mnemonic == "mov" and len(p.operands) >= 2 and \
+                    p.operands[1].type == X86_OP_IMM and \
+                    p.op_str.startswith(("rdi, ", "edi, ")):
+                # amd64: mov edi, 0x400a70（常量串直接进 rdi）—— repeater 型
+                # 注意 capstone 的 operands[0] 是 REG、operands[1] 才是 IMM
+                v = int(p.operands[1].imm)
+                if _in_rodata(v):
+                    arg_addr = v
+                    break
+            if p.mnemonic == "push" and p.operands and \
+                    p.operands[0].type == X86_OP_IMM:
+                v = int(p.operands[0].imm)
+                if _in_rodata(v):
+                    arg_addr = v
+                    break
+            if p.mnemonic in ("mov",) and p.op_str.split(",")[0].strip() == dest_reg \
+                    and dest_reg and dest_reg not in ("rdi", "edi"):
+                break                        # dest 被覆盖：lea 的值死了
+        if arg_addr is None or not _in_rodata(arg_addr):
+            continue
+        text = read_cstr(ch, arg_addr, 80)
+        if not text or not (4 <= len(text.rstrip()) <= 64):
+            continue
+        if not all(32 <= ord(c) < 127 or c == "\n" for c in text):
+            continue
+        if not any(mark in text for mark in (":", "?", "!", ">")):
+            continue
+        # 归组：call 之后 25 条内最近的输入函数
+        entry = None
+        for j in range(n + 1, min(n + 26, n_ins)):
+            nxt = d.insns[j]
+            if nxt.mnemonic == "call" and nxt.operands and \
+                    nxt.operands[0].type == X86_OP_IMM:
+                if nxt.operands[0].imm in sinks:
+                    entry = _entry_of(nxt.address, f.callers and list(f.callers.keys())
+                                      or [])
+                    break
+                if nxt.operands[0].imm in io_out:
+                    break               # 又一个输出：提示串属于下一个输入，不追
+        if entry is None:
+            continue
+        b = text.encode("latin-1", "replace")
+        if b not in out.setdefault(entry, []):
+            out[entry].append(b)
+    return out
 
 
 def _puts_plts(ch: Challenge) -> set:
@@ -283,6 +419,7 @@ def analyse(ch: Challenge) -> Facts:
     # ---- printf(user_buf)
     f.fmt_buf = _find_fmt(ch, d)
     f.echo_leak = _find_echo_vuln(f, ch, d)
+    f.prompts = _find_prompts(ch, f, d)
     return f
 
 

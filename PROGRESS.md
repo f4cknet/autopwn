@@ -3,7 +3,7 @@
 > 口径：所有「已解出」都必须有**可复现证据**（`results/*.json` 里有真实回显）。
 > 「策略跑完没报错」不算完成。`SHELL` 与 `FLAG-ONLY` 分开统计。
 
-最后更新：2026-11-14（v7.0.4）
+最后更新：2026-11-14（v7.1.0）
 
 ## 1. 版本演进
 
@@ -32,6 +32,7 @@
 | `v7.0.2` | L3 判定统一：`oracle.py`（`judge_shell`/`judge_flag`/`Verdict`）+ 唯一 `FLAG_RE` + attempts 带 `cause` | 4 份判定收成 1 份；向量 15/15；基线不变 |
 | `v7.0.3` | repeater 解锁：`_find_fmt` 误报修复、`_start` 推 main、新策略 `canary_echo`（canary-echo 泄漏 + 对齐重入 ret2libc） | **chellenges 首次 1/3**（repeater 真拿 shell 3/3）；基线不变 |
 | `v7.0.4` | 远程 libc 识别：`libcsearch.py` 双符号 low12 指纹 + 候选轮换；ret2libc/canary_echo 接入 | repeater 远程真取 flag（2.23 自动识别）；基线不变 |
+| `v7.1.0` | prompt 驱动交互：`Facts.prompts` 提取 + 菜单题自动 `Wait(prompt)` | note 1 attempts 取 flag（desc 带提示串归因）；向量 17/17；基线不变 |
 
 ## 2. 当前基线（2026-11-14 v7.0.3 实测，`--max-attempts 80`）
 
@@ -70,7 +71,7 @@
 | 交互层（`Send` / `Wait`） | ✅ | `interact.Interaction` | `scripts/test/interaction_vector.py`；菜单题 `note` |
 | canary + 回显泄漏（无 fmt） | ✅ | `canary_echo` | `chellenges/repeater` |
 | stripped（无 main 符号） | ✅ | `_start` 推 main | `chellenges/repeater` |
-| prompt 驱动（facts 提取 prompt） | ❌ | — | 计划 v7.1 接入 |
+| prompt 驱动（facts 提取 prompt） | ✅ | `Facts.prompts` + `Wait(prompt)` | `chellenges/note`（v7.1.0） |
 | 无 libc 纯 syscall 三段式 | ✅ | `syscall_execve` | `7a4abf36…` |
 | **菜单式堆（tcache/FSOP）** | ❌ | — | ch07、ch14 |
 | **SROP** | ❌ | — | `bench_extra/chall` |
@@ -92,7 +93,7 @@
 
 | 优先级 | 任务 | 理由 |
 |---|---|---|
-| P1 | facts 提取 prompt 字符串，策略自动 `Wait(prompt)` | L1 已就绪，缺的只是 prompt 事实（v7.1） |
+| P1 | prompt→read 绑定校验（同函数多 prompt 时选对） | v7.1.0 遗留；先取最外层入口提示的启发式已可用 |
 | P1 | L2 能力声明式注册（`requires`/`forbids`/`evidence`） | 去掉「策略顺序 + 各自 early-return」的隐式耦合（`_find_wins` 曾因此埋掉一整类题） |
 | P1 | 补 libc-database / 或支持「按泄漏找 libc」 | 解锁 `repeater` 这类题 |
 | P2 | L4 失败归因（tail 分类驱动换分支） | 减少人工看 tail |

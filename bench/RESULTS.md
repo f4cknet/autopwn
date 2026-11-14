@@ -310,3 +310,18 @@ fmt 判定矩阵（修复后）：
 | 接入 ③ | `_try_canary_echo`：同路径；单符号多候选时**一连接试一候选**（打错地址进程就死），`cand_idx` 轮换起点，外层 attempt 换新连接接续 |
 | 验证 | 远程 2/2 全中；本地 `ch13` / `bench_extra/ret2libc` 路径不变（1 attempts）；`repeater` 本地 3/3 不变；三套回归 13/15、5+1、4/4；向量 15/15 |
 | flag | `CTF2{b884870c-f5f2-4379-9c1d-fb8d7f6b54e8}`（`results/remote/FLAGS.md` 口径） |
+
+---
+
+## 15. v7.1.0 prompt 驱动交互：`Wait(prompt)` 从能力变成引擎自动产出（2026-11-14）
+
+| 项 | 值 |
+|---|---|
+| 新事实 | `Facts.prompts: {函数入口: [常量提示串]}`（`facts._find_prompts`） |
+| 提取模式 | ①`lea rax,[rip+…]→mov rdi,rax`（note）②`mov edi,0x400a70` 直接进 rdi（repeater）③i386 `push imm`；归组到其后 25 条内最近的 read/gets/fgets/scanf 所在函数 |
+| 过滤 | 4~64 字节 / 可打印 / 含 `: ? ! >`；banner 与错误信息自然落选（正负例矩阵：note/repeater/ch13/ret2win ✓，canary/pwn 空 ✓） |
+| 策略 | `_prelude_variants` → `(menu, prompt)` 对；菜单题 `Send(m)` 后 `Wait(prompt)` 替代盲等静默；desc 带 `prompt=…` |
+| 坑 | capstone `detail=True` 时 `mov edi,imm` 的 `operands[0]` 是 REG、`operands[1]` 才是 IMM；PLT 桩地址成对（+0/+4）要用 `_puts_plts` 全集 |
+| 向量 | `interaction_vector.py` 17/17（prompt 过滤规则 8 例） |
+| 实打 | `note` 容器内 1 attempts 取 `CTF2{v710-note}`，desc：`menu=b'w\n' prompt=b'Write a note:'` |
+| 回归 | bench 13/15 / bench_extra 5+1 / bench_sys 4/4；repeater 本地 3/3、远程 libc 识别路径不受影响 |

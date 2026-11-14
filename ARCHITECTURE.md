@@ -67,13 +67,13 @@
 | 字段 | 含义 |
 |---|---|
 | `vulns: [Vuln]` | 漏洞点：`sink`(read/gets/scanf/fgets)、`call_addr`、`buf_disp`(相对 rbp)、`offset`(到返回地址)、`size_limit`、`func_entry` |
-| `wins: [Win]` | 可直接跳的「赢」函数：`addr`、`kind`(shell/flag)、`evidence`、`alt`(跳过 prologue 的入口，修栈对齐) |
+| `wins: [Win]` | 可直接跳的「赢」函数：`addr`、`kind`(**shell / flag / decoy**)、`evidence`、`alt`(跳过 prologue 的入口，修栈对齐)。`decoy` = 打中也拿不到 flag（`system("echo flag")` 这类），不生成计划 |
 | `gadgets` / `gadget_alts` | 常用 gadget；`alts` 是同类全部地址（用于绕 `\n` 等坏字节） |
 | `csu` | `__libc_csu_init` 的 (pop 链, call 链)，寄存器映射随编译器变 |
 | `mmap_rwx` | `mmap(PROT_EXEC)` 得到的固定 RWX 地址 |
 | `fmt_buf` | `printf(用户缓冲区)` 的探测结果 |
 | `gates: [(disp, val)]` | `cmp dword [rbp-X], imm` 的「暗号」，溢出时必须写回 |
-| `interact: {func: [b"w\n"]}` | 菜单式题：进该函数前必须发的选择字符 |
+| `interact: {func: [b"w\n"]}` | 菜单式题：进该函数前必须发的选择字符。**v7.3.1** 起也包含数字菜单（`scanf("%d")` + dispatch 进含 sink 的函数）候选 `b"1\n" / b"2\n" / b""` |
 | `sys_wrappers` / `sys_read` / `sys_load` | 无 libc 时的 `mov eax,NR … int 0x80` 包装（read=3） |
 | `data_addr` / `entry_sub` | 可写数据段起始；`_start` 的 `sub esp,imm`（重帧下移量） |
 | `callers` | 函数入口 → 调用点之后的下一条地址（PIE 部分覆盖要用） |

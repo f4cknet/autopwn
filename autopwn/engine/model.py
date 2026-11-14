@@ -198,14 +198,25 @@ def _build_plt_map(elf: ELF) -> tuple[dict[int, str], dict[str, int]]:
 
     不依赖 pwntools 的 ELF.plt（不同二进制上会差 4 字节），
     而是看桩里的 `jmp [got]` 指向哪个 GOT 项，再用 GOT 反查符号名。
+
+    v7.3.1 新增：32 位 PIC 的桩是 `jmp dword ptr [ebx + N]`（ebx = GOT 基址），
+    没有绝对地址可查。这里用「多数票」反解基址：对每个桩的 N，
+    按 `GOT地址 - N` 给候选基址投票，得票 ≥2 的基址才算数（单票多为巧合）。
     """
     from capstone import Cs, CS_ARCH_X86, CS_MODE_32, CS_MODE_64
     import re
+    from collections import Counter
 
     rev_got = {int(v): k for k, v in elf.got.items() if v}
     md = Cs(CS_ARCH_X86, CS_MODE_64 if elf.bits == 64 else CS_MODE_32)
     addr2name: dict[int, str] = {}
     name2addr: dict[str, int] = {}
+    pic_pending: list[tuple[int, int]] = []   # (桩地址, [ebx+N] 的 N)
+
+    def _bind(addr: int, name: str) -> None:
+        addr2name[addr] = name
+        name2addr.setdefault(name, addr)
+
     for secname in (".plt", ".plt.sec", ".plt.got", ".plt.bnd"):
         sec = elf.get_section_by_name(secname)
         if sec is None or sec.header.sh_size == 0:
@@ -216,6 +227,11 @@ def _build_plt_map(elf: ELF) -> tuple[dict[int, str], dict[str, int]]:
             continue
         for ins in md.disasm(data, sec.header.sh_addr):
             if "jmp" not in ins.mnemonic:
+                continue
+            # 32 位 PIC：jmp dword ptr [ebx + 0xc] —— 先记账，循环结束后统一解基址
+            m = re.search(r"\[ebx \+ (0x[0-9a-f]+)\]", ins.op_str)
+            if m:
+                pic_pending.append((ins.address, int(m.group(1), 16)))
                 continue
             target = None
             m = re.search(r"\[rip \+ (0x[0-9a-f]+)\]", ins.op_str)
@@ -230,13 +246,25 @@ def _build_plt_map(elf: ELF) -> tuple[dict[int, str], dict[str, int]]:
             name = rev_got.get(target)
             if not name:
                 continue
-            addr2name[ins.address] = name
-            name2addr.setdefault(name, ins.address)
+            _bind(ins.address, name)
             # .plt.sec 的桩以 endbr64 开头，真实入口在 jmp 前 4 字节
             try:
                 if elf.read(ins.address - 4, 4) == b"\xf3\x0f\x1e\xfa":
-                    addr2name[ins.address - 4] = name
-                    name2addr[name] = ins.address - 4
+                    _bind(ins.address - 4, name)
             except Exception:
                 pass
+
+    if pic_pending:
+        votes: Counter = Counter()
+        for _addr, n in pic_pending:
+            for g in rev_got:
+                if g > n:
+                    votes[g - n] += 1
+        if votes:
+            base, hits = votes.most_common(1)[0]
+            if hits >= 2:
+                for addr, n in pic_pending:
+                    name = rev_got.get(base + n)
+                    if name:
+                        _bind(addr, name)
     return addr2name, name2addr

@@ -14,6 +14,9 @@ SINKS = {"gets", "read", "scanf", "__isoc99_scanf", "fgets",
          "strcpy", "strcat", "sprintf", "memcpy", "fread"}
 SHELL_STRINGS = ("/bin/sh", "/bin//sh", "sh\x00")
 NON_SHELL_CMD = ("echo", "cat ", "ls ", "id", "whoami", "pwd", "date", "ps ")
+# v7.3.1：只有真正读文件的命令才算「打印 flag」；echo/ls 这类只输出常量 → 诱饵
+FILE_READ_CMD = ("cat ", "cat\t", "head ", "tail ", "grep ", "strings ",
+                 "xxd ", "more ", "less ", "awk ", "sed ", "tac ")
 
 
 # --------------------------------------------------------------------------- 反汇编
@@ -64,7 +67,7 @@ class Vuln:
 @dataclass
 class Win:
     addr: int
-    kind: str            # shell | flag
+    kind: str            # shell | flag | decoy（decoy = 打中了也拿不到 flag，如 system("echo flag")）
     evidence: str
     alt: int = 0         # 跳过 push rbp / mov rbp,rsp 后的入口（ret 进来栈对齐差 8 时用它）
 
@@ -335,12 +338,34 @@ def _mov_imm(ins) -> Optional[tuple]:
 
 
 def _frame_size(win: list) -> Optional[int]:
+    """当前函数的栈帧调整量（`sub esp,N` 或等价的 `add esp,-N`）。
+
+    v7.3.1 两处修正：
+      * 只往回看到**最近一次 ret** 为止——旧实现从 .text 起点扫，
+        会抓到上一个函数的 `sub`（题七把 0x80 的帧算成 40）；
+      * `add esp, -0x80` / `add esp, 0xffffff80` 与 `sub esp, 0x80` 等价，
+        旧实现只认 sub，直接放弃。
+    """
     for ins in reversed(win):
-        if ins.mnemonic == "sub" and ins.op_str.startswith(("rsp, ", "esp, ")):
-            try:
-                return _imm(ins.op_str.split(", ")[1])
-            except Exception:
-                return None
+        if ins.mnemonic == "ret":
+            return None
+        if ins.mnemonic not in ("sub", "add"):
+            continue
+        op = ins.op_str
+        if not op.startswith(("rsp, ", "esp, ")):
+            continue
+        raw = op.split(", ", 1)[1].strip()
+        neg = raw.startswith("-")
+        try:
+            v = _imm(raw.lstrip("-+"))
+        except Exception:
+            continue
+        if ins.mnemonic == "sub":
+            return v
+        if neg:
+            return v
+        if v >= 0x80000000:           # 未加负号的补码写法：0xffffff80 == -0x80
+            return 0x100000000 - v
     return None
 
 
@@ -399,6 +424,13 @@ def analyse(ch: Challenge) -> Facts:
 
     # ---- 菜单式前置交互（先发 'w\n' 才进 write_note 这类）
     f.interact = _find_interact(d)
+    # 数字菜单（1.Encrypt 2.Decrypt 3.Exit + scanf("%d")）——v7.3.1
+    for _entry, _cands in _find_numeric_menu(
+            ch, d, entries, {v.func_entry for v in f.vulns}).items():
+        bucket = f.interact.setdefault(_entry, [])
+        for _c in _cands:
+            if _c not in bucket:
+                bucket.append(_c)
 
     # print_flag 自己 open()+read(fd,buf,n) 不是漏洞点，从 vulns 里剔掉。
     # v7.3.0：旧规则「函数入口是 win 就整批剔除」把「同一函数既收输入又有 win」的题
@@ -435,6 +467,100 @@ def analyse(ch: Challenge) -> Facts:
     f.prompts = _find_prompts(ch, f, d)
     _audit_facts(ch, d, f, dropped)
     return f
+
+
+def _scanf_format(ch: Challenge, d: "Dis", call_idx: int) -> Optional[bytes]:
+    """scanf 调用点的格式串（用于区分 `%s` 与数字菜单 `%d`）。"""
+    for k in range(call_idx - 1, max(-1, call_idx - 9), -1):
+        ins = d.insns[k]
+        addr = None
+        if ins.mnemonic == "lea":
+            m = re.match(r"^(?:rsi|esi), \[rip \+ (0x[0-9a-f]+|\d+)\]$", ins.op_str)
+            if m:
+                addr = ins.address + ins.size + _imm(m.group(1))
+        elif ins.mnemonic in ("mov", "push"):
+            info = _mov_imm(ins)
+            if info:
+                addr = info[1]
+            elif ins.mnemonic == "push":
+                try:
+                    addr = _imm(ins.op_str)
+                except Exception:
+                    addr = None
+        if not addr:
+            continue
+        s = read_cstr(ch, addr, 32)
+        if s:
+            return s.encode("latin-1", "ignore")
+    return None
+
+
+def _find_numeric_menu(ch: Challenge, d: "Dis", entries: list,
+                       vuln_funcs: set) -> dict:
+    """数字菜单（v7.3.1）：`1.Encrypt 2.Decrypt 3.Exit` + `scanf("%d")` 选单。
+
+    现有 `_find_interact` 只认 `cmp al,imm` 的字符菜单，遇到「先输入编号进子功能」
+    的题就完全失效（题四 / 题九：payload 全打在菜单提示上）。
+
+    判据收紧到「该函数确实 dispatch 进了含 sink 的函数」，避免把普通的
+    `scanf("%d")` 长度输入误当成菜单。返回 {dispatch 函数入口: [b"1\\n", b"2\\n", b""]}，
+    末尾保留空前缀，保证「不需要菜单」的尝试仍在计划集里。
+    """
+    scanf_p = ch.plt("__isoc99_scanf") or ch.plt("scanf")
+    vuln_funcs = {e for e in (vuln_funcs or set()) if e}
+    if not scanf_p or not vuln_funcs:
+        return {}
+    dispatchers: dict[int, list[int]] = {}
+    for n, ins in enumerate(d.insns):
+        if ins.mnemonic != "call" or not ins.operands:
+            continue
+        op = ins.operands[0]
+        if op.type != X86_OP_IMM or int(op.imm) not in vuln_funcs:
+            continue
+        dispatchers.setdefault(_entry_of(ins.address, entries), []).append(n)
+    out: dict[int, list] = {}
+    for entry in dispatchers:
+        start = d.by_addr.get(entry)
+        if start is None:
+            continue
+        for n in range(start, min(start + 400, len(d.insns))):
+            ins = d.insns[n]
+            if ins.mnemonic != "call" or not ins.operands:
+                continue
+            op = ins.operands[0]
+            if op.type != X86_OP_IMM or int(op.imm) != scanf_p:
+                continue
+            fmt = _scanf_format(ch, d, n)
+            if fmt and b"%d" in fmt:
+                out[entry] = [b"1\n", b"2\n", b""]
+                break
+    return out
+
+
+def _buf_is_global(ch: Challenge, d: "Dis", call_addr: int) -> Optional[int]:
+    """调用点附近的写入目标是否为可写段的全局缓冲区（v7.3.1）。
+
+    用于把「算不出栈偏移」拆成两种完全不同的原因：
+      * 写入目标本来就是全局变量（题三 `scanf("%s", 0x6010c0)`）→ 无栈溢出可谈；
+      * 真的没看懂帧布局 → 才叫 Unknown。
+    """
+    n = d.by_addr.get(call_addr)
+    if n is None:
+        return None
+    for k in range(n - 1, max(-1, n - 12), -1):
+        ins = d.insns[k]
+        if ins.mnemonic == "mov":
+            info = _mov_imm(ins)
+            if info and _looks_writable(ch, info[1]):
+                return info[1]
+        elif ins.mnemonic == "push":
+            try:
+                val = _imm(ins.op_str)
+            except Exception:
+                continue
+            if _looks_writable(ch, val):
+                return val
+    return None
 
 
 def _funcs_with_file_open(ch: Challenge, d: "Dis", entries: list) -> set:
@@ -491,13 +617,24 @@ def _audit_facts(ch: Challenge, d: "Dis", f: Facts, dropped: list) -> None:
 
     for v in f.vulns:
         if v.offset is None:
-            f.unknowns[f"offset@{hex(v.call_addr)}"] = \
-                f"{v.sink} 的缓冲区→返回址距离未识别（帧布局）"
+            g = _buf_is_global(ch, d, v.call_addr)
+            if g:
+                f.unknowns[f"offset@{hex(v.call_addr)}"] = (
+                    f"{v.sink} 写入目标是全局缓冲区 {hex(g)}"
+                    "（不存在栈溢出，需覆写全局/走逻辑分支）")
+            else:
+                f.unknowns[f"offset@{hex(v.call_addr)}"] = \
+                    f"{v.sink} 的缓冲区→返回址距离未识别（帧布局）"
         if v.offset and v.size_limit and v.size_limit <= v.offset:
             f.unreachable.append({
                 "sink": v.sink, "call": v.call_addr,
                 "offset": v.offset, "limit": v.size_limit,
             })
+
+    decoys = [w for w in f.wins if w.kind == "decoy"]
+    if decoys and not any(w.kind in ("shell", "flag") for w in f.wins):
+        f.unknowns["win"] = "仅存在诱饵 win（打中也不产出 flag）：" + \
+            ", ".join(w.evidence for w in decoys[:2])
 
     if f.fmt_buf is None and _fmt_suspect(d, ch):
         f.unknowns["fmt"] = "printf 前有栈缓冲区 lea，但未确认该缓冲来自用户输入"
@@ -932,10 +1069,14 @@ def _find_wins(ch: Challenge, d: Dis) -> list[Win]:
                 continue
             text, addr = arg
             low = text.lower()
-            if any(low.startswith(x) or x in low for x in NON_SHELL_CMD):
-                kind = "flag"
-            elif "/bin/sh" in text or text.strip().endswith("sh"):
+            if "/bin/sh" in text or text.strip().endswith("sh"):
                 kind = "shell"
+            elif any(low.startswith(x) or x in low for x in FILE_READ_CMD):
+                kind = "flag"      # system("cat /flag")：真读文件
+            elif any(low.startswith(x) or x in low for x in NON_SHELL_CMD):
+                # v7.3.1：system("echo flag") 只打印常量，不读文件 —— 是诱饵不是 win。
+                # 判成 flag 会让「puts("flag")」类题假通过（AGENTS L3 伪造验收）。
+                kind = "decoy"
             else:
                 continue
             wins.append(Win(lo, kind, f"{targets[op.imm]}(\"{text}\")", _alt_entry(body, lo)))
@@ -1237,17 +1378,29 @@ def _find_fmt(ch: Challenge, d: Dis) -> Optional[int]:
             prev = d.insns[k]
             if prev.mnemonic == "lea":
                 info = _lea_disp(prev)
-                if info and info[0] in ("rbp", "ebp"):
+                if info:
+                    base, disp = info[0], info[1]
                     dest = info[2] if len(info) > 2 else ""
+                    if base in ("rbp", "ebp"):
+                        val = -disp
+                    else:
+                        # v7.3.1：esp 相对帧（`and esp,0xfffffff0` 之后 buf 在 [esp+X]）
+                        # 换算成「相对 rbp 的距离」= 帧大小 + 字长 - disp
+                        fs = _frame_size(d.insns[max(0, k - 40):k + 1])
+                        if fs is None:
+                            continue
+                        val = fs + ch.wordsize - disp
+                    if val <= 0:
+                        continue
                     if dest in ("rdi", "edi"):
-                        hit = -info[1]          # lea rdi,[rbp-X] 直接就是第一参
+                        hit = val               # lea rdi,[rbp-X] 直接就是第一参
                         break
                     if _flows_to_rdi(d, k, n, dest):
-                        hit = -info[1]          # lea rax 后 mov rdi,rax
+                        hit = val               # lea rax 后 mov rdi,rax
                         break
                     # i386：lea dest 后紧跟 push dest —— dest 就是 printf 的栈参
                     if _pushed_for_call(d, k, n, dest):
-                        hit = -info[1]
+                        hit = val
                         break
                 continue
             if prev.mnemonic == "push":
@@ -1289,11 +1442,20 @@ def _flows_to_rdi(d: Dis, lea_idx: int, call_idx: int, dest: str) -> bool:
 
 
 def _pushed_for_call(d: Dis, lea_idx: int, call_idx: int, dest: str) -> bool:
-    """lea dest 之后、call printf 之前，dest 是否被 push（i386 栈参）。"""
+    """lea dest 之后、call printf 之前，dest 是否被当成栈参传给 printf（i386）。
+
+    两种写法都算：
+      * `push eax`                        —— gcc 默认；
+      * `mov dword ptr [esp], eax`        —— v7.3.1 补：`and esp,0xfffffff0` 之后
+        编译器改用预留槽位写参（题七 `lea eax,[esp+0x2c]; mov [esp],eax; call printf`）。
+    """
     if not dest:
         return False
+    slot = re.compile(r"^dword ptr \[esp(?: ?\+ ?(?:0x[0-9a-f]+|\d+))?\], %s$" % re.escape(dest))
     for j in range(lea_idx + 1, call_idx):
         ins = d.insns[j]
         if ins.mnemonic == "push" and ins.op_str == dest:
+            return True
+        if ins.mnemonic == "mov" and slot.match(ins.op_str):
             return True
     return False

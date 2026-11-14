@@ -35,6 +35,8 @@
 | `fix_tee_bytes_repr` | v4.1.10 | [fix_tee_bytes_repr.md](./fix_tee_bytes_repr.md) | ✅ | `core/tee.py::Tee.write()` 用 `str(bytes)` 把 pwntools shell 输出变 repr（v4.1.8 引入 bug）|
 | `fix_win_filter_overreach` | v7.3.0 | [fix_win_filter_overreach.md](./fix_win_filter_overreach.md) | ✅ | `analyse` 按函数入口整批剔除 win 内 vuln，误杀「同函数既收输入又有 win」的题（ch04/ch09/题三）；改判「该函数自己 open 文件」 |
 | `fix_silent_zero_plan` | v7.3.0 | [fix_silent_zero_plan.md](./fix_silent_zero_plan.md) | ✅ | 所有策略零计划时 `res.error` 为空，CLI 只印 `FAILED`，看不出卡在哪层；新增 `Facts.unknowns/unreachable` + `UNRESOLVED` 归因 |
+| `fix_pic_plt_and_esp_frame` | v7.3.1 | [fix_pic_plt_and_esp_frame.md](./fix_pic_plt_and_esp_frame.md) | ✅ | 32 位 PIC 桩 `jmp [ebx+N]` 未解析（整个二进制 0 sink）、`_frame_size` 跨函数且不认 `add esp,-N`、`_find_fmt` 不接受 esp 缓冲 |
+| `fix_decoy_win_kind` | v7.3.1 | [fix_decoy_win_kind.md](./fix_decoy_win_kind.md) | ✅ | `NON_SHELL_CMD` 含 `echo`，把 `system("echo flag")` 判成 flag-win（ch09 的 `system("echo Input:")` 同样中招） |
 
 > **未做 / TODO** → 走 `upgraded.md §2` 任务看板，**不进**本文件。
 

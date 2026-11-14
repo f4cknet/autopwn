@@ -35,15 +35,21 @@
 | `v7.1.0` | prompt 驱动交互：`Facts.prompts` 提取 + 菜单题自动 `Wait(prompt)` | note 1 attempts 取 flag（desc 带提示串归因）；向量 17/17；基线不变 |
 | `v7.2.0` | canary_fmt 五 bug 修复 + hints 排序 + ret2libc_write 远程识别（csu 双块链修复 + write 型双段解析） | **cannary/ae3f 本地远程全解**；cc7e 判定能力边界；基线不变 |
 | `v7.3.0` | 失败可见化：`Facts.unknowns/unreachable` 三态 + `_offsets` 盲枚举兜底默认关闭（`--allow-brute` 显式开启）+ 零计划报 `UNRESOLVED` + win 剔除改判 `open` 语义 | 10 题样本外：盲试 **231 → 0**，attempts **461 → 195**，5 题从静默 FAILED 变可归因；基线不变（13/15、5+1、4/4） |
+| `v7.3.1` | 事实层形态补全：32 位 PIC 桩多数票解 ebx 基址 / `_frame_size` 认 `add esp,-N` 且不跨函数 / fmt 支持 esp 缓冲与 `mov [esp],reg` 传参 / `echo` 类诱饵 win / 数字菜单 `scanf("%d")` / 全局缓冲区措辞 | 题一 plt_map **0→8**、题七 `fmt_buf` **None→88** 且 `off` **None→84**、题三报出 `0x6010c0`；基线不变 |
 
-## 2. 当前基线（2026-11-14 v7.0.3 实测，`--max-attempts 80`）
+## 2. 当前基线（2026-11-14 v7.3.1 实测，`--max-attempts 80`，盲试默认关闭）
 
 | 题库 | 规模 | shell | flag-only | 未解 |
 |---|---|---|---|---|
 | `bench/` | 15 | **13** | 0 | `ch07_acae`、`ch14_easyheap`（菜单式堆） |
 | `bench_extra/` | 8 | **5** | 1 | `chall`（SROP）、`fmtstr1`（20 字节 fmt） |
 | `bench_sys/` | 4 | **4** | 0 | — |
-| `chellenges/` | 3 | **1** | 2 | `note`/`pwn` 为 flag-only；`repeater` ✅ v7.0.3 `canary_echo` 真拿 shell |
+| `chellenges/`（原始赛题，**样本外**） | 33 | **0** | 0 | 见下 |
+
+> **`chellenges/` 自 v7.0.3 起是样本外题目，不是验收集。**
+> 2026-11-14 抽 10 题实测 **0 shell / 0 flag**，逐题归因见
+> [`upgraded/v7.3.0.md`](./upgraded/v7.3.0.md) §1.1 与 [`v7.3.1`](./upgraded/v7.3.1.md) §7.2。
+> 现存已知可解项：`repeater`（v7.0.3 `canary_echo`）、`note`/`pwn`（flag-only）。
 
 逐题明细：`bench/RESULTS.md`（含每题的策略、偏移、关键参数）；远程实打记录：`results/remote/FLAGS.md`。
 

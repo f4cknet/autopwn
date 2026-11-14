@@ -46,6 +46,8 @@ ALLOWED_ROOT = {
     ".python-version", ".git",
     # Claude Code 本地配置（settings.local.json 已在 .gitignore，不入库）
     ".claude",
+    # Agent 工作区记忆（本项目数据，非临时缓存；已在 .gitignore，不入库）
+    ".workbuddy",
 }
 
 # 根目录里出现即算违规的临时文件特征

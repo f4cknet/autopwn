@@ -120,3 +120,6 @@ _target/
 # ----- v6.0 早期导出的侦察中间件（可用 objdump/strings 随时重生成）-----
 bench/*/disasm.txt
 bench/*/strings.txt
+
+# ----- Agent 工作区记忆（本地保留，不入库）-----
+.workbuddy/

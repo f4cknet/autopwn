@@ -440,10 +440,14 @@ def analyse(ch: Challenge) -> Facts:
     file_open_funcs = _funcs_with_file_open(ch, d, entries)
     kept, dropped = [], []
     for v in f.vulns:
-        if v.func_entry in win_addrs and v.func_entry in file_open_funcs:
-            dropped.append(v)
-        else:
-            kept.append(v)
+        in_win = v.func_entry in win_addrs
+        # 「win 自己读文件」的两种形态：函数内有 open；或 read 的 fd 明显不是 stdin
+        file_read = in_win and v.func_entry in file_open_funcs
+        if in_win and v.sink == "read":
+            fd = _read_fd(ch, d, v.call_addr)
+            if fd is not None and fd > 2:
+                file_read = True
+        (dropped if file_read else kept).append(v)
     f.vulns = kept
 
     # ---- gadget
@@ -467,6 +471,37 @@ def analyse(ch: Challenge) -> Facts:
     f.prompts = _find_prompts(ch, f, d)
     _audit_facts(ch, d, f, dropped)
     return f
+
+
+def _read_fd(ch: Challenge, d: "Dis", call_addr: int) -> Optional[int]:
+    """`read(fd, …)` 的第一个参数；None = 判定不了。
+
+    v7.3.1：win 剔除规则改成「自己 open 才剔除」之后，
+    「win 里只有 read 没有 open」的形态会重新变成漏洞候选。
+    若该 read 的 fd 明显不是 0（stdin），说明读的是文件/管道，仍应剔除。
+    """
+    n = d.by_addr.get(call_addr)
+    if n is None:
+        return None
+    if ch.elf.bits == 64:
+        for k in range(n - 1, max(-1, n - 10), -1):
+            ins = d.insns[k]
+            if ins.mnemonic == "xor" and ins.op_str in ("edi, edi", "rdi, rdi"):
+                return 0
+            if ins.mnemonic == "mov":
+                m = re.match(r"^(?:edi|rdi), (0x[0-9a-f]+|\d+)$", ins.op_str)
+                if m:
+                    return _imm(m.group(1))
+    else:
+        for k in range(n - 1, max(-1, n - 10), -1):
+            ins = d.insns[k]
+            if ins.mnemonic != "push":
+                continue
+            try:
+                return _imm(ins.op_str)      # cdecl 倒序 push：最近的 push 就是 fd
+            except Exception:
+                return None
+    return None
 
 
 def _scanf_format(ch: Challenge, d: "Dis", call_idx: int) -> Optional[bytes]:

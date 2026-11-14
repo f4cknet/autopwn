@@ -923,11 +923,26 @@ def _find_wins(ch: Challenge, d: Dis) -> list[Win]:
             uniq[w.addr] = w
     # 排序：shell 优先；同为 flag 时「先设全局再 call」比裸 win 函数更好用
     # （裸函数可能被全局校验挡住，进去只会打印 "lock closed" 之类）
+    # hints 命中（符号名像 win）的入口插队（v7.2.0：只做排序证据，不做判定）
+    hint_addrs = set()
+    for name, addr in getattr(ch, "elf").symbols.items():
+        low = name.lower()
+        if any(k in low for k in ("getflag", "backdoor", "shell", "win", "flag")) \
+                and addr and _in_text(ch, int(addr)):
+            hint_addrs.add(int(addr))
     def _rank(w: Win):
         return (0 if w.kind == "shell" else 1,
                 0 if "set global" in w.evidence else 1,
+                0 if w.addr in hint_addrs else 1,
                 w.addr)
     return sorted(uniq.values(), key=_rank)
+
+
+def _in_text(ch: Challenge, addr: int) -> bool:
+    text = ch.elf.get_section_by_name(".text")
+    if not text:
+        return False
+    return text.header.sh_addr <= addr < text.header.sh_addr + text.header.sh_size
 
 
 def _first_arg_string(ch: Challenge, win: list):

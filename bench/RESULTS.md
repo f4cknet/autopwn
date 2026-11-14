@@ -325,3 +325,18 @@ fmt 判定矩阵（修复后）：
 | 向量 | `interaction_vector.py` 17/17（prompt 过滤规则 8 例） |
 | 实打 | `note` 容器内 1 attempts 取 `CTF2{v710-note}`，desc：`menu=b'w\n' prompt=b'Write a note:'` |
 | 回归 | bench 13/15 / bench_extra 5+1 / bench_sys 4/4；repeater 本地 3/3、远程 libc 识别路径不受影响 |
+
+---
+
+## 16. v7.2.0 hints + canary_fmt 四 bug 修复：cannary 自动打穿（2026-11-14）
+
+| 项 | 值 |
+|---|---|
+| 题目 | `chellenges/f13e67870…`（NewStar「cannary」：amd64 / canary / Full RELRO / stripped / backdoor=execve('/bin/sh')） |
+| 结果 | **`=> SHELL canary_fmt canary=… -> win 0x401262`，11 attempts（候选轮），反复 2 次全中** |
+| 修复 ① | `_try_canary_fmt` probe 长度按 `size_limit` 截断——原 184B probe > 32B limit 被 read 截断，fmt 串残缺 |
+| 修复 ② | probe 改位置参数 `%N$p`，arg0 = 6 + canary_off/wordsize（cannary 实测 arg11 = 6+40/8） |
+| 修复 ③ | `_canary_candidates` 删两项误杀：`v%0x1000==0` 页对齐（canary 1/16 概率恰页对齐，0x…a000 被杀）、`v < 2^56` 上界（15/16 的 canary 被杀——canary 是满 64 位随机值） |
+| 修复 ④ | `_try_canary_fmt` 有 backdoor（execve/system win）且本地时直接 ret 到 win，不走 ret2libc（cannary 无 pop_rdi 也能打） |
+| hints | `_find_wins` 排序加 hints 插队（符号名含 getflag/backdoor/shell/win/flag 且落 .text）——只做排序证据不做判定（铁律 1） |
+| cc7e9c60 | 判定能力边界：scanf(%s) 坏字节封死唯一 pop rdi；fmt 泄漏卡 resolver xsave 区越界（bss 栈 rsp≥0x601110 物理不可达）；brute 不适用（写 8 字节完整地址，高位 20-bit 熵）。GDB 逐级实证入 PROGRESS §4 |

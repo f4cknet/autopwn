@@ -53,8 +53,9 @@
 | `v7.0.3` | P1：repeater 解锁——`_find_fmt` 误报修复（printf 参数是常量串）、`_start` 推导 main、canary-echo 泄漏 + 对齐重入 ret2libc 策略 | ✅ | 5h | @Minzhi_Zhou | [`v7.0.3`](./upgraded/v7.0.3.md) |
 | `v7.0.4` | P1：远程 libc 识别——双符号 low12 指纹（LibcSearcher / libc.rip）自动匹配 libc，解锁「无自带 libc 的远程 ret2libc」 | ✅ | 3.5h | @Minzhi_Zhou | [`v7.0.4`](./upgraded/v7.0.4.md) |
 | `v7.1.0` | P1：prompt 驱动交互——facts 提取提示串，菜单题自动 `Wait(prompt)`（失败归因到具体交互阶段） | ✅ | 2.5h | @Minzhi_Zhou | [`v7.1.0`](./upgraded/v7.1.0.md) |
+| `v7.2.0` | P1：时间与线索换解题率——canary_fmt 四 bug 修复 + hints 排序（cc7e 判定能力边界、brute 实证不适用） | ✅ | 3.5h | @Minzhi_Zhou | [`v7.2.0`](./upgraded/v7.2.0.md) |
 
-> `v7.1.0` 已完成：`Wait(prompt)` 从能力变成引擎自动产出（note 1 attempts 取 flag，基线不变）。
+> `v7.2.0` 已完成：cannary 自动打穿（canary_fmt 四 bug + backdoor 直跳）；cc7e 判定能力边界并登记。
 
 ### 2.2 已完成（v6 系列）
 

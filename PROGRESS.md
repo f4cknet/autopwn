@@ -3,7 +3,7 @@
 > 口径：所有「已解出」都必须有**可复现证据**（`results/*.json` 里有真实回显）。
 > 「策略跑完没报错」不算完成。`SHELL` 与 `FLAG-ONLY` 分开统计。
 
-最后更新：2026-11-14（v7.1.0）
+最后更新：2026-11-14（v7.2.0）
 
 ## 1. 版本演进
 
@@ -33,6 +33,7 @@
 | `v7.0.3` | repeater 解锁：`_find_fmt` 误报修复、`_start` 推 main、新策略 `canary_echo`（canary-echo 泄漏 + 对齐重入 ret2libc） | **chellenges 首次 1/3**（repeater 真拿 shell 3/3）；基线不变 |
 | `v7.0.4` | 远程 libc 识别：`libcsearch.py` 双符号 low12 指纹 + 候选轮换；ret2libc/canary_echo 接入 | repeater 远程真取 flag（2.23 自动识别）；基线不变 |
 | `v7.1.0` | prompt 驱动交互：`Facts.prompts` 提取 + 菜单题自动 `Wait(prompt)` | note 1 attempts 取 flag（desc 带提示串归因）；向量 17/17；基线不变 |
+| `v7.2.0` | canary_fmt 四 bug 修复（probe 截断/位置参数/候选双误杀/backdoor 直跳）+ hints 排序 | **cannary 自动打穿**（11 attempts 稳定）；cc7e 判定能力边界；基线不变 |
 
 ## 2. 当前基线（2026-11-14 v7.0.3 实测，`--max-attempts 80`）
 
@@ -74,6 +75,7 @@
 | prompt 驱动（facts 提取 prompt） | ✅ | `Facts.prompts` + `Wait(prompt)` | `chellenges/note`（v7.1.0） |
 | 无 libc 纯 syscall 三段式 | ✅ | `syscall_execve` | `7a4abf36…` |
 | **菜单式堆（tcache/FSOP）** | ❌ | — | ch07、ch14 |
+| **坏字节封死 pop rdi + 泄漏需 resolver** | ❌ | — | `cc7e9c60`：scanf(%s) 坏字节封死唯一 pop rdi；假 rbp 迁栈可写 GOT，但泄漏走 printf@plt→resolver 的 xsave 区需 rsp≥0x601110，bss 段尾 0x6010b0 物理不可达（GDB 逐级实证）；brute 不适用（写 8 字节完整地址，20-bit 熵） |
 | **SROP** | ❌ | — | `bench_extra/chall` |
 | **20 字节极限 fmt** | ❌ | — | `bench_extra/fmtstr1` |
 | **ORW（无现成 win）** | ❌ | — | 需人工 |

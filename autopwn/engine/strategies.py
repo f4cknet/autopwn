@@ -766,12 +766,12 @@ def _canary_candidates(out: bytes, bits: int) -> list[int]:
             continue           # canary 最低字节固定为 0x00
         if bits == 32 and not (0x100 <= v <= 0xFFFFFFFF):
             continue
-        if bits == 64 and not (0x100 <= v < (1 << 56)):
-            continue
-        # 排除明显的栈/库/堆地址与页对齐值
+        # 64 位 canary 是满 64 位随机值（仅 LSB=00），不能用 2^56 上界排除——
+        # 0x10.. 开头以外的 canary（15/16 概率）会被 2^56 误杀（cannary 实测）。
+        # 栈地址 (<0x7f0000000000 之外的 0x7f 开头) 由 LSB!=0 自然排除。
+        # 排除明显的栈/库/堆地址。注意【不能】用 v % 0x1000 == 0 排页对齐：
+        # canary 低 12 位随机，1/16 概率恰好页对齐（cannary 实测 0x...a000 被误杀）
         if bits == 32 and (v >> 24) in (0xFF, 0xF7, 0xF6, 0x80, 0x08, 0x60):
-            continue
-        if v % 0x1000 == 0:
             continue
         indexed.append((idx, v))
     indexed.sort(key=lambda x: -x[0])

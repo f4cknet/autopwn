@@ -13,7 +13,7 @@ from .facts import Facts, analyse
 from .interact import Interaction, StepError
 from .model import Challenge
 from .oracle import judge_flag
-from .run import Result, execute, execute_flag, _verify_timeout
+from .run import Result, execute, execute_flag, spawn, verify_shell, _verify_timeout
 from . import strategies as S
 
 
@@ -133,6 +133,9 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
         "csu": bool(f.csu),
         "mmap_rwx": hex(f.mmap_rwx) if f.mmap_rwx else None,
         "fmt_buf": f.fmt_buf,
+        # v7.4.0：守卫/回填分析结果（只读事实，成功判定仍由 oracle 负责）
+        "guards": [str(g) for g in f.guards],
+        "backfills": [str(b) for b in f.backfills],
         "libc": os.path.basename(ch.libc_path) if ch.libc_path else None,
         "notes": ch.notes,
         # v7.3.0：事实三态留痕，失败时可直接看出卡在哪一层
@@ -185,6 +188,23 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
             elif plan.tag.startswith("stage1:"):
                 ok, detail, out, cmds = _unpack4(_try_ret2libc(ch, f, plan, post_cmds))
                 att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, out)
+            elif plan.tag.startswith("guard:backfill"):
+                # 回填是确定性交互：失败不重试（重试只会重复同样的输入）
+                ok, detail, out, cmds = _unpack4(_try_guard_backfill(ch, f, plan))
+                att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, out,
+                              detail, cause=("uid" if ok else
+                                             ("gate_passed" if detail.startswith("GATE:")
+                                              else "no_match")))
+            elif plan.tag.startswith("guard:"):
+                # 守卫计划：门控通过后 run.verify_shell 仍会判 shell（A3），
+                # 只有真执行了命令才算成功；失败不重试（输入确定，重试无意义）
+                if plan.tag.endswith(":flag"):
+                    r = execute_flag(ch, plan.steps)
+                else:
+                    r = execute(ch, plan.steps, post_cmds=post_cmds)
+                ok, detail, out = r.ok, r.note, r.output
+                att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1,
+                              r.output, r.error, cause=r.cause)
             else:
                 r = execute(ch, plan.steps, post_cmds=post_cmds)
                 if not r.ok and r.error:
@@ -219,11 +239,102 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
     res.elapsed = time.time() - t0
     if not res.attempts and not res.error:
         res.error = _unresolved_reason(f)
+    if not res.ok:
+        # v7.4.0：门控通过但没执行命令 -> 如实记证据，绝不置 ok=True
+        gate = next((a for a in res.attempts if a.cause == "gate_passed"), None)
+        if gate is not None:
+            ev = "GATE: 门控通过但未执行命令；不记为 SHELL/FLAG"
+            res.error = (res.error + "；" + ev) if res.error else ev
+            res.detail = gate.output[-200:].decode("latin-1", "replace").strip()
     return res
 
 
 # --------------------------------------------------------------------------- ret2libc
 # --------------------------------------------------------------------------- PIE 部分覆盖
+def _try_guard_backfill(ch: Challenge, f: Facts, plan: S.Plan):
+    """回填型守卫（题六）：读程序打印的随机串，回填前 n 字节。
+
+    成功判据不放松（A3）：
+      * 门控串出现后**先继续判 shell**（发 id / PWNED_42）——有 uid/marker → SHELL；
+      * 没有 shell 才返回 `ok=False` + `"GATE: ..."` 证据，由 solve() 写进 res.error。
+    未观察到可回填串 → 失败原因写明（能力边界，不盲猜 token）。
+    返回 (ok, detail, out, cmds)。
+    """
+    meta = plan.tag.partition("guard:backfill:")[2]
+    n_s, _, mk_hex = meta.partition(":")
+    try:
+        n = int(n_s)
+        marker = bytes.fromhex(mk_hex)
+    except (TypeError, ValueError):
+        return False, "回填参数解析失败（tag 形态异常）", b"", []
+    if n <= 0:
+        return False, "回填长度非法", b"", []
+
+    try:
+        p = spawn(ch)
+    except Exception as exc:
+        return False, f"spawn failed: {exc}", b"", []
+    out = b""
+    try:
+        pat = re.compile(rb"[0-9A-Za-z]{%d,}" % n)
+
+        def _best(blob: bytes):
+            cands = [(m.start(), m.group()) for m in pat.finditer(blob)]
+            return max(cands, key=lambda t: (len(t[1]), -t[0]))[1] if cands else None
+
+        # 1) 读程序打印的随机串（printf("%s") 可能分片，观察到后再补一小段）
+        deadline = time.time() + 1.5
+        token = None
+        while time.time() < deadline:
+            try:
+                chunk = p.recvrepeat(0.25)
+            except Exception:
+                break
+            out += chunk or b""
+            token = _best(out)
+            if token:
+                try:
+                    out += p.recvrepeat(0.12) or b""
+                except Exception:
+                    pass
+                token = _best(out) or token
+                break
+        if not token:
+            return False, "未观察到可回填的打印串（unprinted 边界）", out, []
+
+        # 2) 回填前 n 字节，等门控串
+        p.send(token[:n] + b"\n")
+        deadline = time.time() + 1.2
+        while time.time() < deadline:
+            try:
+                chunk = p.recvrepeat(0.25)
+            except Exception:
+                break
+            if not chunk:
+                if marker and marker in out:
+                    break
+                continue
+            out += chunk
+            if marker and marker in out:
+                break
+
+        if marker and marker in out:
+            # 3) A3：门控通过后继续判 shell；只有真回显才记 SHELL
+            r = verify_shell(p, timeout=_verify_timeout(ch))
+            combined = out + r.output
+            if r.ok:
+                return True, r.note or "gate -> shell", combined, r.cmds
+            m = marker.decode("latin-1", "replace").strip()
+            return False, f"GATE: {m}（门控通过但未执行命令；不记 SHELL/FLAG）", combined, []
+        tail = out[-160:].decode("latin-1", "replace").strip()
+        return False, f"回填未通过：未观察到 {marker!r}（tail={tail!r}）", out, []
+    finally:
+        try:
+            p.close()
+        except Exception:
+            pass
+
+
 def _try_pie_partial(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = None):
     """覆盖返回地址低 2 字节跳到 win。
 

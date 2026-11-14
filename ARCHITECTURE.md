@@ -30,7 +30,7 @@
                     └──────┬───────┘
                            ▼
                     ┌──────────────┐
-                    │ strategies.py│  16 个策略：facts → Plan 候选（纯函数，不产生副作用）
+                    │ strategies.py│  20 个策略：facts → Plan 候选（纯函数，不产生副作用）
                     └──────┬───────┘
                            ▼
                     ┌──────────────┐
@@ -105,6 +105,8 @@ Plan(strategy: str, steps: list, desc: str = "", tag: str = "")
 | `stage1:<leak>:<off>:<sink>` | 两阶段 ret2libc（**必须同进程**） | `_try_ret2libc()` |
 | `canary:<off>:<sink>` | 三阶段 canary+fmt | `_try_canary_fmt()` |
 | `pie:<tgt>:<nib>:<kind>` | PIE 部分覆盖 | `_try_pie_partial()` |
+| `guard:shell` / `guard:flag` | **v7.4.0** 输入直接满足 win 前判定条件（write/fmt 两种载荷） | `execute()` / `execute_flag()`，失败不重试 |
+| `guard:backfill:<n>:<marker_hex>` | **v7.4.0** 回填运行时打印的串；只产出 gate 证据（除非随后真拿到 shell） | `_try_guard_backfill()` |
 
 ### `run.Result` / `orchestrator.SolveResult`
 `Result(ok, output, note, error, cause, cmds)`；`cause` 来自 oracle（`marker` / `uid` / `flag_re` /
@@ -120,18 +122,22 @@ Plan(strategy: str, steps: list, desc: str = "", tag: str = "")
 | 2 | `syscall_direct` | 无 libc，窗口 `limit >= off+0x18` | 一次 `read` 喂满 execve 三参 |
 | 3 | `syscall_execve` | 无 libc，窗口 `limit == off+0x14` | 种 0 到窗口外一格 + 重入 `_start` 下移帧 |
 | 4 | `ret2win_pie` | PIE + shell win，同 0x100 页 | 1 字节部分覆盖 |
-| 5 | `ret2win` | 非 PIE + shell win | 含 `ret` 对齐变体、菜单前缀 |
-| 6 | `ret2plt` | 有 `pop rdi` + `system@plt` + `/bin/sh` | — |
-| 7 | `ret2gets` | 有 `gets`/`read` + `system@plt` | 先写 `/bin/sh` 到 bss 再 system |
-| 8 | `ret2csu` | 无 `pop rdi`，有 `__libc_csu_init` | 按实际寄存器映射现拼 |
-| 9 | `canary_fmt` | canary + `printf(buf)` | 泄漏 canary → 泄漏 GOT → 回 main → system |
-| 10 | `ret2libc_write` | 只有 `write` 没有 `puts` | `write(1,got,8)` 泄漏，远程优先（无 stdio 缓冲） |
-| 11 | `ret2libc` | 有 `puts`/`write` + 给了 libc | 同进程两阶段 |
-| 12 | `shellcode` | 有 RWX `mmap` | 两段：shellcode → 跳 RWX |
-| 13 | `ret2syscall` | i386 + `int 0x80` 全套 gadget | 组合搜索 gadget 绕坏字节 |
-| 14 | `ret2syscall_write` | i386 静态无 `/bin/sh` | 先写 bss，再回 main，再 execve |
-| 15 | `fmtstr` | `printf(buf)` + 可写 GOT | `fmtstr_payload` 改 GOT |
-| 16 | `ret2win_flag` | 只出 flag 的题（兜底） | 不算 shell，记 `FLAG-ONLY` |
+| 5 | `guard_write` | **v7.4.0** 输入能直接满足 `Facts.guards` | 载荷由约束构造（长度/字节/全局门），不写死偏移 |
+| 6 | `guard_fmt` | **v7.4.0** 全局门 + `printf(buf)` | `%p` 探序号 → `fmtstr_payload` 写全局；不碰 canary |
+| 7 | `ret2win` | 非 PIE + shell win | 含 `ret` 对齐变体、菜单前缀 |
+| 8 | `ret2plt` | 有 `pop rdi` + `system@plt` + `/bin/sh` | — |
+| 9 | `ret2gets` | 有 `gets`/`read` + `system@plt` | 先写 `/bin/sh` 到 bss 再 system |
+| 10 | `ret2csu` | 无 `pop rdi`，有 `__libc_csu_init` | 按实际寄存器映射现拼 |
+| 11 | `guard_backfill` | **v7.4.0** `strncmp(input, 运行时串, n)` | 读程序打印的 token，回填前 n 字节；只算 gate 证据 |
+| 12 | `canary_fmt` | canary + `printf(buf)` | 泄漏 canary → 泄漏 GOT → 回 main → system |
+| 13 | `ret2libc_write` | 只有 `write` 没有 `puts` | `write(1,got,8)` 泄漏，远程优先（无 stdio 缓冲） |
+| 14 | `ret2libc` | 有 `puts`/`write` + 给了 libc | 同进程两阶段 |
+| 15 | `shellcode` | 有 RWX `mmap` | 两段：shellcode → 跳 RWX |
+| 16 | `ret2syscall` | i386 + `int 0x80` 全套 gadget | 组合搜索 gadget 绕坏字节 |
+| 17 | `ret2syscall_write` | i386 静态无 `/bin/sh` | 先写 bss，再回 main，再 execve |
+| 18 | `canary_echo` | canary + `read` 溢出 + `puts(同 buf)` | 回显泄漏 canary → 对齐重入 ret2libc |
+| 19 | `fmtstr` | `printf(buf)` + 可写 GOT | `fmtstr_payload` 改 GOT |
+| 20 | `ret2win_flag` | 只出 flag 的题（兜底） | 不算 shell，记 `FLAG-ONLY` |
 
 ## 5. 判定链（`run.py`）
 

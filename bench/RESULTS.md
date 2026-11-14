@@ -340,3 +340,5 @@ fmt 判定矩阵（修复后）：
 | 修复 ④ | `_try_canary_fmt` 有 backdoor（execve/system win）且本地时直接 ret 到 win，不走 ret2libc（cannary 无 pop_rdi 也能打） |
 | hints | `_find_wins` 排序加 hints 插队（符号名含 getflag/backdoor/shell/win/flag 且落 .text）——只做排序证据不做判定（铁律 1） |
 | cc7e9c60 | 判定能力边界：scanf(%s) 坏字节封死唯一 pop rdi；fmt 泄漏卡 resolver xsave 区越界（bss 栈 rsp≥0x601110 物理不可达）；brute 不适用（写 8 字节完整地址，高位 20-bit 熵）。GDB 逐级实证入 PROGRESS §4 |
+| 修复 ⑤ | **cannary 远程打穿**：win 直跳分支原限定 `not host`（本地），远程落到 ret2libc 分支需要 pop_rdi（cannary 没有）→ 必败。修正为本地/远程通吃（backdoor 自带 execve，无参数需求，不依赖 libc）→ 远程 `=> SHELL canary_fmt -> win`，`cat /flag` 真取 `CTF2{891eecf6-…}` |
+| 修复 ⑥ | `verify_shell` 加空读容忍：远程 TLS/socat 的 shell 输出可能延迟超过 1 个 wait 窗口，首个空读直接 break 会把活 shell 判负；timeout>3s（远程）时空读容忍 1 次 |

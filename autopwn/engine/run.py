@@ -90,6 +90,8 @@ def verify_shell(p, wait: float = 0.45, timeout: float = 2.2,
     except Exception as exc:
         return Result(False, out, error=str(exc))
     deadline = time.time() + timeout
+    idle = 0                 # 连续空读次数：远程 TLS/socat 输出可能延迟 >1 个 wait 窗口，
+    idle_limit = 1 if timeout > 3 else 0   # 首个空读直接 break 会在远程把 shell 判负
     while time.time() < deadline:
         try:
             chunk = p.recvrepeat(wait)
@@ -98,7 +100,11 @@ def verify_shell(p, wait: float = 0.45, timeout: float = 2.2,
         except Exception:
             break
         if not chunk:
-            break
+            idle += 1
+            if idle > idle_limit:
+                break
+            continue
+        idle = 0
         out += chunk
         v = judge_shell(out)
         if v.ok:

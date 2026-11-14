@@ -86,6 +86,7 @@ class Facts:
     rwx: list = field(default_factory=list)
     mmap_rwx: Optional[int] = None
     fmt_buf: Optional[int] = None        # printf(user_buf) 的缓冲位移
+    fmt_sites: list = field(default_factory=list)  # [(基址, 位移, rbp相对位移|None, call)] 全部 fmt 站点
     static_binsh: bool = False
     callers: dict = field(default_factory=dict)   # 函数入口 -> [调用点之后的下一条地址]
     gadget_alts: dict = field(default_factory=dict)  # gadget 名 -> 全部可用地址（用于挑无坏字节的）
@@ -101,6 +102,9 @@ class Facts:
     # ---- v7.3.0 事实三态：Known 有值 / Absent 确认不存在（不登记）/ Unknown 登记原因
     unknowns: dict = field(default_factory=dict)    # 事实名 -> 无法判定的原因
     unreachable: list = field(default_factory=list)  # [{sink, call, offset, limit}] 明确不可达的溢出点
+    # ---- v7.4.0 守卫层：输入 → win 的判定条件（逻辑校验题）
+    guards: list = field(default_factory=list)      # [guard.Guard]
+    backfills: list = field(default_factory=list)   # [guard.Backfill]
 
     @property
     def shell_win(self) -> Optional[Win]:
@@ -466,10 +470,28 @@ def analyse(ch: Challenge) -> Facts:
     f.gates = _find_gates(d)
 
     # ---- printf(user_buf)
-    f.fmt_buf = _find_fmt(ch, d)
+    f.fmt_sites = _find_fmt_sites(ch, d)
+    f.fmt_buf = next((v for (_b, _d, v, _c) in f.fmt_sites if v is not None), None)
     f.echo_leak = _find_echo_vuln(f, ch, d)
     f.prompts = _find_prompts(ch, f, d)
     _audit_facts(ch, d, f, dropped)
+
+    # ---- v7.4.0 守卫层（放在 audit 之后：可扩展 unknowns；异常不影响已有事实）
+    from .guard import find_backfills, find_guards
+    try:
+        f.guards = find_guards(ch, d, f)
+    except Exception as exc:
+        f.unknowns["guard"] = f"守卫分析异常：{type(exc).__name__}: {exc}"
+    try:
+        f.backfills = find_backfills(ch, d, f)
+    except Exception as exc:
+        f.unknowns["backfill"] = f"回填分析异常：{type(exc).__name__}: {exc}"
+    for g in f.guards:
+        if g.status not in ("solved", "fmt", "none"):
+            f.unknowns[f"guard@{g.call:#x}"] = f"{g.status}: {g.reason}"
+    for b in f.backfills:
+        if b.status != "backfill":
+            f.unknowns[f"backfill@{b.call:#x}"] = f"{b.status}: {b.reason}"
     return f
 
 
@@ -1388,20 +1410,18 @@ def _find_mmap_rwx(ch: Challenge, d: Dis) -> Optional[int]:
     return None
 
 
-def _find_fmt(ch: Challenge, d: Dis) -> Optional[int]:
-    """检测 printf(用户缓冲区) —— 返回缓冲区相对 rbp 的位移。
+def _find_fmt_sites(ch: Challenge, d: Dis) -> list:
+    """检测所有 printf(用户缓冲区) 调用点 —— [(基址, 位移, rbp 相对位移|None, call)]。
 
-    只认「栈参真的来自用户缓冲」的调用点；否则视为常量串（如
-    printf("Do you want to continue?")），不算 fmt 漏洞。
-    repeater 曾因把前面喂 puts 的 lea 记到 printf 头上而误报 fmt=48。
-    判据：
-      amd64 —— printf 前 8 条内有 lea [rbp-X] 且其目标寄存器流向 rdi；
-      i386  —— printf 前最近的 push 是寄存器（lea 的结果被 push 当栈参），
-               且该 lea 引用 rbp/ebp；直接 push 立即数（常量串）则排除。
+    判据与 v7.3.1 的 `_find_fmt` 相同（只认栈参真的来自用户缓冲的 printf；
+    直接 push 常量串地址的调用不算）。差别是本函数收集**全部**站点：
+    v7.4.0 守卫层按「缓冲基址+位移」匹配 printf 站点（题七 buf=esp+0x2c
+    → printf 在 0x80485ad），旧逻辑只返回第一个站点的 rbp 相对位移。
     """
     p = ch.plt("printf")
+    sites: list = []
     if not p:
-        return None
+        return sites
     for n, ins in enumerate(d.insns):
         if ins.mnemonic != "call" or not ins.operands:
             continue
@@ -1416,26 +1436,22 @@ def _find_fmt(ch: Challenge, d: Dis) -> Optional[int]:
                 if info:
                     base, disp = info[0], info[1]
                     dest = info[2] if len(info) > 2 else ""
+                    val = None
                     if base in ("rbp", "ebp"):
                         val = -disp
                     else:
                         # v7.3.1：esp 相对帧（`and esp,0xfffffff0` 之后 buf 在 [esp+X]）
-                        # 换算成「相对 rbp 的距离」= 帧大小 + 字长 - disp
+                        # 换算成「相对 rbp 的距离」= 帧大小 + 字长 - disp；
+                        # 帧大小推定不出来时仍记录站点（守卫匹配只需要基址+位移）
                         fs = _frame_size(d.insns[max(0, k - 40):k + 1])
-                        if fs is None:
-                            continue
-                        val = fs + ch.wordsize - disp
-                    if val <= 0:
+                        if fs is not None:
+                            val = fs + ch.wordsize - disp
+                    if val is not None and val <= 0:
                         continue
-                    if dest in ("rdi", "edi"):
-                        hit = val               # lea rdi,[rbp-X] 直接就是第一参
-                        break
-                    if _flows_to_rdi(d, k, n, dest):
-                        hit = val               # lea rax 后 mov rdi,rax
-                        break
-                    # i386：lea dest 后紧跟 push dest —— dest 就是 printf 的栈参
-                    if _pushed_for_call(d, k, n, dest):
-                        hit = val
+                    if dest in ("rdi", "edi") or \
+                            _flows_to_rdi(d, k, n, dest) or \
+                            _pushed_for_call(d, k, n, dest):
+                        hit = (base, disp, val, int(ins.address))
                         break
                 continue
             if prev.mnemonic == "push":
@@ -1443,9 +1459,8 @@ def _find_fmt(ch: Challenge, d: Dis) -> Optional[int]:
                 if prev.operands and prev.operands[0].type == X86_OP_IMM:
                     break
         if hit is not None:
-            return hit
-        # 无任何 lea 流向证据 → 常量串调用，跳过
-    return None
+            sites.append(hit)
+    return sites
 
 
 def _flows_to_rdi(d: Dis, lea_idx: int, call_idx: int, dest: str) -> bool:

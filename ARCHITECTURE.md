@@ -26,6 +26,7 @@
                            ▼
                     ┌──────────────┐
                     │  facts.py    │  analyse()：静态事实（漏洞点/win/校验/交互/gadget/syscall 包装…）
+                    │  guard.py    │  L0.5 守卫层：输入 → win 路径条件（find_guards/find_backfills，v7.4.0）
                     └──────┬───────┘
                            ▼
                     ┌──────────────┐
@@ -71,7 +72,10 @@
 | `gadgets` / `gadget_alts` | 常用 gadget；`alts` 是同类全部地址（用于绕 `\n` 等坏字节） |
 | `csu` | `__libc_csu_init` 的 (pop 链, call 链)，寄存器映射随编译器变 |
 | `mmap_rwx` | `mmap(PROT_EXEC)` 得到的固定 RWX 地址 |
-| `fmt_buf` | `printf(用户缓冲区)` 的探测结果 |
+| `fmt_buf` | `printf(用户缓冲区)` 的探测结果（第一个站点的 rbp 相对位移） |
+| `fmt_sites: [(base, disp, rbp_disp, call)]` | **v7.4.0** 全部 `printf(用户缓冲区)` 站点；守卫层按「缓冲基址+位移」匹配（C4，不重复解析） |
+| `guards: [Guard]` | **v7.4.0** 输入 → win 的路径条件：`buf_kind/buf_addr/buf_disp`、`length`、`conds`（byte/dword/global/len）、`ones`、`status`（solved/fmt/unsupported/unsat/unknown）、`reason`、`marker`。只登记不执行 |
+| `backfills: [Backfill]` | **v7.4.0** `strncmp(input, 运行时串, n)` 的可回填点：`n`、成功 `marker`、`status`（backfill/unsupported/unprinted/unknown） |
 | `gates: [(disp, val)]` | `cmp dword [rbp-X], imm` 的「暗号」，溢出时必须写回 |
 | `interact: {func: [b"w\n"]}` | 菜单式题：进该函数前必须发的选择字符。**v7.3.1** 起也包含数字菜单（`scanf("%d")` + dispatch 进含 sink 的函数）候选 `b"1\n" / b"2\n" / b""` |
 | `sys_wrappers` / `sys_read` / `sys_load` | 无 libc 时的 `mov eax,NR … int 0x80` 包装（read=3） |

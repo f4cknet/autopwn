@@ -213,6 +213,10 @@ def main(argv=None) -> int:
             print(f"    csu    : {f.csu}")
             print(f"    mmapRX : {hex(f.mmap_rwx) if f.mmap_rwx else None}")
             print(f"    fmtbuf : {f.fmt_buf}")
+            print(f"    guards : {[str(g) for g in f.guards]}")
+            print(f"    backfil: {[str(b) for b in f.backfills]}")
+            if f.unknowns:
+                print(f"    unknown: {f.unknowns}")
             continue
         res = solve(ch, max_attempts=args.max_attempts,
                     budget=args.budget, verbose=not args.quiet,

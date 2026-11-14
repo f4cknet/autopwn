@@ -16,18 +16,23 @@
 
 ## 目录约定
 
-每道题一个子目录，名字自取（不用 hash，便于人工辨认）：
+**直接把平台附件解压进来就行，不用手动改名。**
+引擎的 `_normalize_dir` 会把 `pwn` / `chall` / 最大那个 ELF 规范成 `bin`，
+把 `libc.so.6` / `ld-*.so` 收进 `libc/`，并自动 `patchelf`。
 
 ```
-holdout/<name>/
-  bin              # 必需，题目二进制（ELF）
-  libc/
-    libc.so.6      # 强烈建议：缺 libc 时 ret2libc 类必然失败，
-                   # 那种失败算「样本不完整」，不计入引擎能力
-  README.md        # 可选：来源 / 远程 host:port / 已知提示
+holdout/<name>/          # 名字自取，便于人工辨认
+  pwn 或 chall           # 原样即可
+  libc.so.6              # 有就放，强烈建议（见下）
+  ld-2.23.so             # 有就放
 ```
 
-也接受平铺单文件（`holdout/<name>` 直接是 ELF），但**带 libc 的题必须用子目录形态**。
+**为什么强烈建议带 libc**：缺 libc 时 `ret2libc` 类必然失败（泄漏的偏移对不上），
+这种失败是**样本不完整**，不是引擎缺陷。不带 libc 的题会计入「缺 libc 单列」，
+不计入打通率的分母说明里。
+
+只接受平铺单文件的题，也可以直接丢一个 ELF 进来（`holdout/<name>`），但那样就测不了 libc 类。
+
 
 ## 跑法（验证方）
 

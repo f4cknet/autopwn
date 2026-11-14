@@ -33,6 +33,8 @@
 | `fix_asm_and_add_padding` | v4.0.2c3 | [fix_asm_and_add_padding.md](./fix_asm_and_add_padding.md) | ✅ | `recon/asm.py::asm_stack_overflow` 误把函数 epilogue 的 `lea -0x8(%ebp),%esp` 当 buffer offset |
 | `fix_x64_recv_timeout` | v4.0.2c4 | [fix_x64_recv_timeout.md](./fix_x64_recv_timeout.md) | ✅ | x64 ret2libc strategies (`io.recv()` + `io.recvuntil(b"\x7f")` / `io.recv(8)`) 无 timeout hang（mirror v4.0.2c1 x32 fix） |
 | `fix_tee_bytes_repr` | v4.1.10 | [fix_tee_bytes_repr.md](./fix_tee_bytes_repr.md) | ✅ | `core/tee.py::Tee.write()` 用 `str(bytes)` 把 pwntools shell 输出变 repr（v4.1.8 引入 bug）|
+| `fix_win_filter_overreach` | v7.3.0 | [fix_win_filter_overreach.md](./fix_win_filter_overreach.md) | ✅ | `analyse` 按函数入口整批剔除 win 内 vuln，误杀「同函数既收输入又有 win」的题（ch04/ch09/题三）；改判「该函数自己 open 文件」 |
+| `fix_silent_zero_plan` | v7.3.0 | [fix_silent_zero_plan.md](./fix_silent_zero_plan.md) | ✅ | 所有策略零计划时 `res.error` 为空，CLI 只印 `FAILED`，看不出卡在哪层；新增 `Facts.unknowns/unreachable` + `UNRESOLVED` 归因 |
 
 > **未做 / TODO** → 走 `upgraded.md §2` 任务看板，**不进**本文件。
 

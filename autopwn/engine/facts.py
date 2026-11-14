@@ -95,6 +95,9 @@ class Facts:
     entry_sub: int = 0                   # _start 开头的 sub esp,imm（重入时帧下移的量）
     echo_leak: Optional[tuple] = None    # (vuln_idx, buf_size)：read 溢出 + puts(buf) 回显结构（canary-echo 泄漏用）
     prompts: dict = field(default_factory=dict)   # 函数入口 -> [常量提示串]（Wait(prompt) 用）
+    # ---- v7.3.0 事实三态：Known 有值 / Absent 确认不存在（不登记）/ Unknown 登记原因
+    unknowns: dict = field(default_factory=dict)    # 事实名 -> 无法判定的原因
+    unreachable: list = field(default_factory=list)  # [{sink, call, offset, limit}] 明确不可达的溢出点
 
     @property
     def shell_win(self) -> Optional[Win]:
@@ -397,9 +400,19 @@ def analyse(ch: Challenge) -> Facts:
     # ---- 菜单式前置交互（先发 'w\n' 才进 write_note 这类）
     f.interact = _find_interact(d)
 
-    # print_flag 自己 read(fd, buf, n) 不是漏洞点，从 vulns 里剔掉
+    # print_flag 自己 open()+read(fd,buf,n) 不是漏洞点，从 vulns 里剔掉。
+    # v7.3.0：旧规则「函数入口是 win 就整批剔除」把「同一函数既收输入又有 win」的题
+    # 也误杀了（题三 / ch04 / ch09）——这类题本来该靠正常偏移打，去掉盲猜兜底后会直接归零。
+    # 新规则：只有该函数**自己 open/fopen 了文件**时，函数内的 read 才算「读 flag 自身」。
     win_addrs = {w.addr for w in f.wins}
-    f.vulns = [v for v in f.vulns if v.func_entry not in win_addrs]
+    file_open_funcs = _funcs_with_file_open(ch, d, entries)
+    kept, dropped = [], []
+    for v in f.vulns:
+        if v.func_entry in win_addrs and v.func_entry in file_open_funcs:
+            dropped.append(v)
+        else:
+            kept.append(v)
+    f.vulns = kept
 
     # ---- gadget
     f.gadgets = _find_gadgets(ch)
@@ -420,7 +433,75 @@ def analyse(ch: Challenge) -> Facts:
     f.fmt_buf = _find_fmt(ch, d)
     f.echo_leak = _find_echo_vuln(f, ch, d)
     f.prompts = _find_prompts(ch, f, d)
+    _audit_facts(ch, d, f, dropped)
     return f
+
+
+def _funcs_with_file_open(ch: Challenge, d: "Dis", entries: list) -> set:
+    """含 open/fopen/openat 调用的函数入口集合（用于判定「win 自己读文件」）。"""
+    tgts = {a for a, n in ch.plt_map.items()
+            if n in ("open", "fopen", "openat", "fopen64", "open64")}
+    if not tgts:
+        return set()
+    out = set()
+    for ins in d.insns:
+        if ins.mnemonic != "call" or not ins.operands:
+            continue
+        op = ins.operands[0]
+        if op.type != X86_OP_IMM or int(op.imm) not in tgts:
+            continue
+        out.add(_entry_of(ins.address, entries))
+    return out
+
+
+def _fmt_suspect(d: "Dis", ch: Challenge) -> bool:
+    """printf 前 8 条内有栈缓冲区 lea —— 可能漏判的 fmt 点（只用于登记 Unknown）。"""
+    p = ch.plt("printf")
+    if not p:
+        return False
+    for n, ins in enumerate(d.insns):
+        if ins.mnemonic != "call" or not ins.operands:
+            continue
+        op = ins.operands[0]
+        if op.type != X86_OP_IMM or int(op.imm) != p:
+            continue
+        for k in range(n - 1, max(-1, n - 9), -1):
+            prev = d.insns[k]
+            if prev.mnemonic == "lea" and any(
+                    b in prev.op_str for b in ("[rbp", "[ebp", "[rsp", "[esp")):
+                return True
+    return False
+
+
+def _audit_facts(ch: Challenge, d: "Dis", f: Facts, dropped: list) -> None:
+    """事实自检（v7.3.0）：把「我没算出来」与「确认不存在」分开。
+
+    三态：Known 有值即结束 / Absent 确认不存在则静默 / Unknown 登记到 f.unknowns。
+    登记的 Unknown 会由 orchestrator 在零计划时拼成 UNRESOLVED 原因，
+    下游策略**不得**据此盲猜（_offsets 的无证据兜底已默认关闭）。
+    """
+    if not ch.plt_map:
+        f.unknowns["sink"] = "PLT 映射为空：桩形态未识别（如 32 位 PIC 的 jmp [ebx+N]）"
+    elif not f.vulns:
+        if dropped:
+            f.unknowns["sink"] = "sink 命中但被 win 规则整批剔除：" + \
+                ", ".join(f"{v.sink}@{hex(v.call_addr)}" for v in dropped[:3])
+        else:
+            f.unknowns["sink"] = "PLT 已解析但无 sink 调用点命中"
+
+    for v in f.vulns:
+        if v.offset is None:
+            f.unknowns[f"offset@{hex(v.call_addr)}"] = \
+                f"{v.sink} 的缓冲区→返回址距离未识别（帧布局）"
+        if v.offset and v.size_limit and v.size_limit <= v.offset:
+            f.unreachable.append({
+                "sink": v.sink, "call": v.call_addr,
+                "offset": v.offset, "limit": v.size_limit,
+            })
+
+    if f.fmt_buf is None and _fmt_suspect(d, ch):
+        f.unknowns["fmt"] = "printf 前有栈缓冲区 lea，但未确认该缓冲来自用户输入"
+
 
 
 # --------------------------------------------------------------------------- 无 libc：int 0x80 包装

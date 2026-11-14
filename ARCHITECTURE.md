@@ -77,6 +77,12 @@
 | `sys_wrappers` / `sys_read` / `sys_load` | 无 libc 时的 `mov eax,NR … int 0x80` 包装（read=3） |
 | `data_addr` / `entry_sub` | 可写数据段起始；`_start` 的 `sub esp,imm`（重帧下移量） |
 | `callers` | 函数入口 → 调用点之后的下一条地址（PIE 部分覆盖要用） |
+| `unknowns: {name: reason}` | **v7.3.0** 事实三态登记：`Known` 有值 / `Absent` 不登记 / `Unknown` 记原因（`sink` / `offset@0x…` / `fmt`）。零计划时拼成 `UNRESOLVED` 输出 |
+| `unreachable: [{sink,call,offset,limit}]` | **v7.3.0** 明确不可达的溢出点（`size_limit <= offset`）。不再静默丢弃，也不再据此盲枚举 |
+
+> **v7.3.0 起的不变量**：`Facts` 的 `Optional` 字段为 `None` 时**不代表「随便试试」**。
+> 「确认不存在」与「没算出来」必须由 `unknowns` 区分；`_offsets` 的无证据兜底默认关闭，
+> 需要时用 `--allow-brute` 显式开启（并计入盲试占比指标）。
 
 ### `strategies.Plan`
 ```python

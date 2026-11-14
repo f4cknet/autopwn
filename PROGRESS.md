@@ -34,6 +34,7 @@
 | `v7.0.4` | 远程 libc 识别：`libcsearch.py` 双符号 low12 指纹 + 候选轮换；ret2libc/canary_echo 接入 | repeater 远程真取 flag（2.23 自动识别）；基线不变 |
 | `v7.1.0` | prompt 驱动交互：`Facts.prompts` 提取 + 菜单题自动 `Wait(prompt)` | note 1 attempts 取 flag（desc 带提示串归因）；向量 17/17；基线不变 |
 | `v7.2.0` | canary_fmt 五 bug 修复 + hints 排序 + ret2libc_write 远程识别（csu 双块链修复 + write 型双段解析） | **cannary/ae3f 本地远程全解**；cc7e 判定能力边界；基线不变 |
+| `v7.3.0` | 失败可见化：`Facts.unknowns/unreachable` 三态 + `_offsets` 盲枚举兜底默认关闭（`--allow-brute` 显式开启）+ 零计划报 `UNRESOLVED` + win 剔除改判 `open` 语义 | 10 题样本外：盲试 **231 → 0**，attempts **461 → 195**，5 题从静默 FAILED 变可归因；基线不变（13/15、5+1、4/4） |
 
 ## 2. 当前基线（2026-11-14 v7.0.3 实测，`--max-attempts 80`）
 

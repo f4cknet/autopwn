@@ -99,6 +99,19 @@ def _unpack4(ret):
     return ret[0], ret[1], ret[2], []
 
 
+def _unresolved_reason(f) -> str:
+    """零计划时的归因（v7.3.0）：不允许空 attempts 静默报 FAILED。"""
+    parts = []
+    for u in (f.unreachable or [])[:3]:
+        parts.append(f"{u['sink']}@{hex(u['call'])} 写入长度 {u['limit']} "
+                     f"< 返回址距离 {u['offset']}")
+    for k, v in list((f.unknowns or {}).items())[:3]:
+        parts.append(f"{k}: {v}")
+    if not parts:
+        return "UNRESOLVED: 所有策略均未产出计划（事实齐备但无匹配策略）"
+    return "UNRESOLVED: " + "；".join(parts)
+
+
 def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
           budget: float = 240.0, post_cmds: list = None) -> SolveResult:
     t0 = time.time()
@@ -122,6 +135,9 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
         "fmt_buf": f.fmt_buf,
         "libc": os.path.basename(ch.libc_path) if ch.libc_path else None,
         "notes": ch.notes,
+        # v7.3.0：事实三态留痕，失败时可直接看出卡在哪一层
+        "unknowns": dict(f.unknowns),
+        "unreachable": list(f.unreachable),
     }
     if verbose:
         print(f"    prot={ch.prot} vulns={len(f.vulns)} wins={len(f.wins)} "
@@ -201,6 +217,8 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
                     print(f"    [OK] {att.strategy} {att.desc} ({att.elapsed:.2f}s)")
                 return res
     res.elapsed = time.time() - t0
+    if not res.attempts and not res.error:
+        res.error = _unresolved_reason(f)
     return res
 
 

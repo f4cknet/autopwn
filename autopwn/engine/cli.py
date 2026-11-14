@@ -158,6 +158,8 @@ def main(argv=None) -> int:
     ap.add_argument("--cmd", action="append", default=None, metavar="CMD",
                     help="拿到 shell 后执行的命令，可重复：--cmd \"cat /flag\" --cmd ls")
     ap.add_argument("--no-dedup", action="store_true", help="按 md5 去重（默认开启）")
+    ap.add_argument("--allow-brute", action="store_true",
+                    help="允许无证据的偏移盲枚举（v7.3.0 起默认关闭；开启后计入盲试占比）")
     ap.add_argument("--out", default="results")
     ap.add_argument("-q", "--quiet", action="store_true")
     args = ap.parse_args(argv)
@@ -196,6 +198,7 @@ def main(argv=None) -> int:
                        host=args.host, port=args.port,
                        ssl=args.ssl, sni=args.sni,
                        workdir=workdir or None)
+        ch.allow_brute = bool(getattr(args, "allow_brute", False))
         print(f"[*] {ch.name}: {ch.bin_src}")
         if args.facts_only:
             from .facts import analyse

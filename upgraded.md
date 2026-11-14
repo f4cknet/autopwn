@@ -54,7 +54,7 @@
 | `v7.0.4` | P1：远程 libc 识别——双符号 low12 指纹（LibcSearcher / libc.rip）自动匹配 libc，解锁「无自带 libc 的远程 ret2libc」 | ✅ | 3.5h | @Minzhi_Zhou | [`v7.0.4`](./upgraded/v7.0.4.md) |
 | `v7.1.0` | P1：prompt 驱动交互——facts 提取提示串，菜单题自动 `Wait(prompt)`（失败归因到具体交互阶段） | ✅ | 2.5h | @Minzhi_Zhou | [`v7.1.0`](./upgraded/v7.1.0.md) |
 | `v7.2.0` | P1：时间与线索换解题率——canary_fmt 五 bug 修复 + hints 排序 + ret2libc_write 远程识别（csu 双块链错位修复 + write 型双段解析）；cannary/ae3f 本地远程全解 | ✅ | 5h | @Minzhi_Zhou | [`v7.2.0`](./upgraded/v7.2.0.md) |
-| `v7.3.0` | **P0**：失败可见化——`Facts` 三态（Known/Absent/Unknown）+ 删 `_offsets` 盲枚举兜底 + 零计划报 `UNRESOLVED` | 🔄 | 2h | @Minzhi_Zhou | [`v7.3.0`](./upgraded/v7.3.0.md) |
+| `v7.3.0` | **P0**：失败可见化——`Facts` 三态（Known/Absent/Unknown）+ 删 `_offsets` 盲枚举兜底 + 零计划报 `UNRESOLVED`；回归阻塞追加 win 剔除规则改判 | 👀 | 2h | @Minzhi_Zhou | [`v7.3.0`](./upgraded/v7.3.0.md) |
 | `v7.3.1` | P1：事实层形态补全——32 位 PIC 桩 `jmp [ebx+N]` / `_frame_size` 的 `add esp,-N` / fmt 的 esp 缓冲 / `NON_SHELL_CMD` 误判 / win 剔除规则 | ⏳ | 3h | @Minzhi_Zhou | [`v7.3.1`](./upgraded/v7.3.1.md) |
 | `v7.4.0` | P1：守卫分析与约束求解——`const_seq` / 长度约束 / 不可控输入的「回填」，解锁逻辑校验类题 | ⏳ | 6h | @Minzhi_Zhou | [`v7.4.0`](./upgraded/v7.4.0.md) |
 | `v7.5.0` | **P0**：holdout 评测 + 反过拟合门禁——三指标（打通率 / 诊断准确率 / 盲试占比）+ 禁硬编码检查 | ⏳ | 3h | @Minzhi_Zhou | [`v7.5.0`](./upgraded/v7.5.0.md) |

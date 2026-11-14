@@ -79,6 +79,8 @@ class Challenge:
         self.libc_elf: Optional[ELF] = None
         self.prot: Protections = None  # type: ignore
         self.notes: list[str] = []
+        # v7.3.0：无证据时的盲枚举偏移，默认关闭；由 CLI --allow-brute 打开并计入盲试占比
+        self.allow_brute: bool = False
 
     # ------------------------------------------------------------------ 发现
     def _auto_libc(self) -> Optional[str]:

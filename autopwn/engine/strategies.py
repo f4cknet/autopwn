@@ -65,8 +65,11 @@ def _offsets(ch: Challenge, f: Facts) -> list[tuple[int, str]]:
                 continue
             seen.add(off)
             out.append((off, v.sink))
-    # 兜底：只有完全推导不出偏移时才暴力枚举（已知偏移但被长度过滤掉的不要瞎试）
-    if not out and not any(v.offset for v in f.vulns):
+    # v7.3.0：无静态证据时不再无条件兜底盲枚举。
+    # 盲枚举会让「打不通」伪装成「试过了」，且失败不带任何归因；
+    # 确实需要时用 --allow-brute 显式开启，并计入「盲试占比」指标。
+    if not out and getattr(ch, "allow_brute", False) \
+            and not any(v.offset for v in f.vulns):
         for off in range(step, 0x120, step):
             if off not in seen:
                 seen.add(off)

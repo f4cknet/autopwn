@@ -5,6 +5,16 @@ set -euo pipefail
 BASE="${1:-/srv/autopwn}"
 REPO="${2:-$(cd "$(dirname "$0")/../.." && pwd)}"
 
+# 以指定用户执行：RHEL 系最小安装常常没有 sudo，优先用 runuser（util-linux 自带）
+as_user() {
+  local u="$1"; shift
+  if command -v runuser >/dev/null 2>&1; then
+    runuser -u "$u" -- "$@"
+  else
+    sudo -u "$u" "$@"
+  fi
+}
+
 echo "==> 1/6 用户"
 for u in impl verify; do
   id "$u" >/dev/null 2>&1 || useradd -m -s /bin/bash "$u"
@@ -29,9 +39,9 @@ echo "==> 4/6 两个 clone"
 for u in impl verify; do
   d="$BASE/$u"
   if [ ! -d "$d/.git" ]; then
-    sudo -u "$u" git clone "$BASE/origin.git" "$d"
-    sudo -u "$u" git -C "$d" config user.name  "$u-agent"
-    sudo -u "$u" git -C "$d" config user.email "$u@autopwn.local"
+    as_user "$u" git clone "$BASE/origin.git" "$d"
+    as_user "$u" git -C "$d" config user.name  "$u-agent"
+    as_user "$u" git -C "$d" config user.email "$u@autopwn.local"
   fi
 done
 
@@ -44,9 +54,9 @@ sha256sum "$BASE/eval/run_eval.py" > "$BASE/eval/SHA256SUMS"
 
 echo "==> 6/6 权限校验"
 set +e
-sudo -u impl  test -r "$BASE/sealed" && echo "[FAIL] impl 能读 sealed" || echo "[OK] impl 读不到 sealed"
-sudo -u impl  test -w "$BASE/eval/run_eval.py" && echo "[FAIL] impl 能写评测器" || echo "[OK] impl 改不了评测器"
-sudo -u verify test -w "$BASE/impl"  && echo "[WARN] verify 能写 impl" || echo "[OK] verify 不改 impl"
+as_user impl test -r "$BASE/sealed" && echo "[FAIL] impl 能读 sealed" || echo "[OK] impl 读不到 sealed"
+as_user impl test -w "$BASE/eval/run_eval.py" && echo "[FAIL] impl 能写评测器" || echo "[OK] impl 改不了评测器"
+as_user verify test -w "$BASE/impl"  && echo "[WARN] verify 能写 impl" || echo "[OK] verify 不改 impl"
 set -e
 
 cat <<EOF

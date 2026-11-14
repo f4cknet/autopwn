@@ -22,7 +22,35 @@
 
 ## 1. 基础环境（15 分钟，其中镜像构建最久）
 
-### 1.1 按发行版选一组
+### 1.0 已实测环境（可直接跳到 §1.2）
+
+| 项 | 实测值 | 是否满足 |
+|---|---|---|
+| OS | OpenCloudOS **9.6**（RHEL 9 系，用 `dnf`） | ✅ |
+| Python | **3.11.6** | ✅ ≥3.7 |
+| Docker | **29.7.0**（已装） | ✅ |
+| Node | **20.20.2** | ✅ ≥18 |
+| SELinux | **Disabled** | ✅ 不需要 `chcon` |
+
+> 这套环境**零额外安装**：只要 `docker info` 能通、`claude --version` 能出版本，就直接跳 §3。
+
+### 1.1 按发行版补齐缺的项
+
+**RHEL 系（OpenCloudOS / TencentOS / CentOS / openEuler）：**
+
+```bash
+python3 -V                                    # 需 ≥3.7；<3.7 见下方
+docker info >/dev/null 2>&1 && echo "docker OK" || {
+  dnf install -y docker || {
+    dnf install -y dnf-plugins-core
+    dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+    dnf install -y docker-ce docker-ce-cli containerd.io
+  }
+  systemctl enable --now docker
+}
+node -v || { curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -; dnf install -y nodejs; }
+getenforce                                    # 若 Enforcing：chcon -Rt container_file_t /srv/autopwn
+```
 
 **Debian / Ubuntu：**
 
@@ -31,25 +59,11 @@ apt update && apt install -y docker.io git python3 python3-pip
 systemctl enable --now docker
 ```
 
-**RHEL 系（TencentOS / CentOS / OpenCloudOS / openEuler）：**
+> **Python <3.7 的处理**：`run_eval.py` / `supervisor.py` 用了 `from __future__ import annotations`，
+> 需要 3.7+。装 `python39`/`python3.11` 后，命令里的 `python3` 换成对应解释器即可。
 
-```bash
-dnf install -y docker git python3 python3-pip || yum install -y docker git python3 python3-pip
-systemctl enable --now docker
-
-# Python 必须 ≥3.7（脚本用了 `from __future__ import annotations`）
-python3 -V            # 若是 3.6，装高版本：
-dnf install -y python39 || dnf install -y python3.11
-# 之后所有 `python3` 换成 `python3.9`（或对应路径）
-```
-
-> **TencentOS 的三个额外坑**（Debian 系不会遇到）：
->
-> | 坑 | 检查 | 处理 |
-> |---|---|---|
-> | SELinux Enforcing → docker 挂载被拒 | `getenforce` | `chcon -Rt container_file_t /srv/autopwn`（或临时 `setenforce 0` 验证） |
-> | 自带 Node 版本过低（Claude Code 要 ≥18） | `node -v` | `curl -fsSL https://rpm.nodesource.com/setup_20.x \| bash - && dnf install -y nodejs` |
-> | 没有 `apt`，也没有 `install -m` 的 BSD 语义差异 | — | `install` 是 coreutils，RHEL 上行为一致，`deploy.sh` 可直接用 |
+> **`sudo` 可能没有**：RHEL 最小安装常不装 `sudo`，`deploy.sh` 会优先用 `runuser`
+>（util-linux 自带），没有才退回 `sudo`。
 
 ### 1.2 建镜像（**只做一次**，10–20 分钟）
 

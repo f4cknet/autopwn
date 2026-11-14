@@ -1,7 +1,7 @@
 # HANDOVER — 交接说明（给接手的开发者）
 
 > 一句话：这是一个**离线 pwn 自动利用引擎**，输入题目二进制，输出「真的拿到了 shell / flag」的证据。
-> 主线代码只有 `autopwn/engine/` 六个文件（约 2960 行），其余都是题库、容器和文档。
+> 主线代码只有 `autopwn/engine/` 七个文件（约 3100 行），其余都是题库、容器和文档。
 
 交接时间：2026-11-13 22:20 · 交接前状态：`PROGRESS.md §2` 的基线全部通过。
 
@@ -38,7 +38,8 @@ solve.bat bench_sys
 | `autopwn/engine/facts.py` | **静态事实**：漏洞点、win、gate、菜单交互、gadget、syscall 包装 | 高 |
 | `autopwn/engine/strategies.py` | **候选链生成**：16 个策略，纯函数 | 高 |
 | `autopwn/engine/orchestrator.py` | 尝试顺序、预算、按 `tag` 分派特殊流程、留痕 | 中 |
-| `autopwn/engine/run.py` | spawn（本地/远程）、分阶段收发、成功判定 | 中 |
+| `autopwn/engine/interact.py` | `Send`/`Wait` 步骤、累积缓冲与游标、唯一一份收发时序 | 中 |
+| `autopwn/engine/run.py` | spawn（本地/远程）、按步骤收发、成功判定 | 中 |
 | `autopwn/engine/model.py` | `Challenge`：复制到 `.run/`、patchelf、加载 ELF | 低 |
 | `autopwn/engine/cli.py` | 参数、目录收集（ELF/zip/平铺目录）、md5 去重 | 低 |
 | `docker/Dockerfile` + `build.sh` | `autopwn:pwn22` 镜像 | 很少 |
@@ -63,7 +64,8 @@ solve.bat bench_sys
 | `strategies.py` | `STRATEGIES` 列表 = 尝试顺序；每个 `s_*` 是一个策略 |
 | `orchestrator.py:98` | `solve()` —— 主循环 |
 | `orchestrator.py:200/274/344` | `_try_pie_partial` / `_try_ret2libc` / `_try_canary_fmt` |
-| `run.py:43/75/191/214` | `spawn` / `verify_shell` / `probe_flag` / `execute_flag` |
+| `interact.py` | `Interaction.run_steps()` —— 所有收发时序的唯一实现 |
+| `run.py` | `spawn` / `verify_shell` / `probe_flag` / `execute` / `execute_flag` |
 
 ## 3. 铁律（违反会静默出错，不报异常）
 
@@ -152,7 +154,7 @@ if plan.tag.startswith("pie:"):
 - [ ] `solve.bat bench_extra` ≥ 5 shell + 1 flag-only，失败项只有 `chall`、`fmtstr1`
 - [ ] `solve.bat bench_sys` = 4/4
 - [ ] `py -3 scripts/audit/check_hygiene.py` 退出码 0（根目录白名单 / 临时文件 / results 误入库）
-- [ ] 新增/修改的能力在 `bench/RESULTS.md` 有记录
+- [ ] 新增/修改的能力在 `bench/RESULTS.md` 有记录；交互层改动跑 `scripts/test/interaction_vector.py`（容器内 13/13）
 - [ ] `PROGRESS.md` 的版本表与基线数字同步
 - [ ] `py -3 -m py_compile autopwn/engine/*.py` 通过
 - [ ] 提交信息 `[vX.Y.Z] 一句话`，中文
@@ -162,8 +164,9 @@ if plan.tag.startswith("pie:"):
 
 | 优先级 | 任务 | 起点 |
 |---|---|---|
-| **P0** | `Plan.sends` → `Plan.steps`（`Send`/`Wait`），交互层 | `strategies.Plan` + `run.execute` |
+| ✅ | ~~`Plan.sends` → `Plan.steps`（`Send`/`Wait`），交互层~~（v7.0.1 已完成） | `interact.Interaction` |
 | **P0** | 判定层统一成 `Oracle`（Shell/Flag/File），带 `cause` | `run.verify_shell` / `probe_flag` / 三个 `_try_*` 里的临时判断 |
+| P1 | facts 提取 prompt 字符串，策略自动 `Wait(prompt)` | `facts._find_interact` + `strategies._prelude_variants` |
 | P1 | 能力声明式注册（`requires`/`forbids`/`evidence`） | `STRATEGIES` 列表 + 各策略开头的 early-return |
 | P1 | 支持「给 libc」或「按泄漏找 libc」（解锁 `chellenges/repeater`） | `model.Challenge.libc_path` |
 | P2 | 失败归因（tail 分类驱动换分支） | `orchestrator.solve()` 的 attempt 循环 |

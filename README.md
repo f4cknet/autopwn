@@ -88,7 +88,7 @@ target.bat stop
 
 ```
 autopwn/
-├── autopwn/engine/        引擎主线（facts / strategies / orchestrator / run / model / cli）
+├── autopwn/engine/        引擎主线（facts / strategies / interact / orchestrator / run / model / cli）
 ├── docker/                Dockerfile、serve.sh（靶机）、make_sys_variants.py、评测入口
 ├── bench/                 15 道比赛原题（<题名>/bin [+ libc/]）
 ├── bench_extra/           8 道经典题型（泛化验证用）

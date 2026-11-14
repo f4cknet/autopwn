@@ -1,6 +1,6 @@
-# ARCHITECTURE — autopwn.engine（v6.4 现状）
+# ARCHITECTURE — autopwn.engine（v7.0.1 现状）
 
-> 本文只描述**现在能跑的代码**（`autopwn/engine/`，2960 行）。
+> 本文只描述**现在能跑的代码**（`autopwn/engine/`，约 3100 行）。
 > v4/v5 遗留链路（`autopwn/cli.py` 等）见 `README.md` 的「遗留入口」与 `v5_architecture.md`。
 > 下一版设计提案见 [`upgraded/v7.0.0.md`](./upgraded/v7.0.0.md)。
 
@@ -37,11 +37,15 @@
                     └──────┬───────┘
                            ▼
                     ┌──────────────┐
-                    │  run.py      │  spawn(本地/远程)、分阶段收发、判定(shell/flag)、后置命令
+                    │ interact.py  │  Send/Wait 步骤、累积缓冲与游标、唯一一份收发时序
+                    └──────┬───────┘
+                           ▼
+                    ┌──────────────┐
+                    │  run.py      │  spawn(本地/远程)、按步骤收发、判定(shell/flag)、后置命令
                     └──────────────┘
 ```
 
-关键约束：**facts 与 strategies 不 import wails / 不碰网络**；一切副作用集中在 `run.py`。
+关键约束：**facts 与 strategies 不 import wails / 不碰网络**；一切副作用集中在 `run.py` 与 `interact.py`。
 （与另一仓库 `ctfbox` 的「services 层是唯一能 import wails 的层」是同一个思路。）
 
 ## 3. 核心数据结构
@@ -72,8 +76,12 @@
 
 ### `strategies.Plan`
 ```python
-Plan(strategy: str, sends: list[bytes], desc: str, tag: str = "")
+Plan(strategy: str, steps: list, desc: str = "", tag: str = "")
 ```
+`steps` 的元素是 `interact.Send(data)` / `interact.Wait(needle=b"", timeout=None)`；
+旧的裸 `bytes` 写法继续可用（`__post_init__` 自动归一化并丢弃空 blob）。
+只读兼容属性：`plan.sends` / `plan.last_send`。
+
 `tag` 决定 orchestrator 走哪条特殊流程：
 
 | tag | 含义 | 处理函数 |
@@ -116,9 +124,12 @@ spawn(ch)
   ├── 本地：process(...)  # 不显式传 stdin/stdout：让 pwnlib 共用同一个 PTY
   └── 远程：remote(host, port, ssl=, sni=)   # 每次尝试间隔 0.25s，防限速
 
-send 分阶段：
-  ├── 有 sync 需要时用 _sync()（读到静默）而不是固定 sleep
-  └── 远程额外把验证超时 2.2s → 6s
+send 分阶段（`interact.Interaction.run_steps`，唯一实现）：
+  ├── Send → Send：execute / ret2libc 用「读到静默」同步；flag 路径用固定 0.15 + 0.05
+  ├── Send → Wait：不自动读，Wait 独占边界
+  ├── Wait(needle)：在累积缓冲中从游标查找，支持跨 chunk / 重复 prompt
+  ├── Wait(b"")：读到静默，并把游标推到缓冲末尾（旧输出视为已消费）
+  └── 远程额外把验证 / Wait 超时 2.2s → 6s
 
 判定：
   ├── verify_shell(): 发 echo PWNED_$((6*7)) / whoami / id，看到 PWNED_42 或 uid= → ok
@@ -153,10 +164,12 @@ GitHub 直连受限，`pwndbg` / `pwninit` / `libc-database` 三项构建时跳�
 | SROP（`rax=15`） | ✗ | `bench_extra/chall` 只有 syscall gadget |
 | 20 字节极限 fmt | ✗ | `bench_extra/fmtstr1` 输入太短，写不动 |
 | ORW 型（无现成 win） | ✗ | 需要自拼 open/read/write，等同普通 ROP，属人工范畴 |
-| 多轮交互（先泄漏再写） | ✗ | 没有交互层，`Plan.sends` 表达不了「等 prompt」 |
+| 多轮交互（prompt 驱动） | △ | `Wait(prompt)` 已能表达；但 `facts.py` 还不提取 prompt，策略目前只自动插静默 Wait |
+| 运行时地址占位的多阶段 | △ | `_try_canary_fmt` / `_try_pie_partial` 仍用专用流程（payload 含运行时 canary / PIE base） |
 
 ## 8. 与 v7 提案的差距
 
 v7（[`upgraded/v7.0.0.md`](./upgraded/v7.0.0.md)）提的是四层：目标模型 / 交互规划 / 能力注册 / 判定与归因。
 当前代码在「事实」这一层已经接近 L0（`gates`/`interact`/`alt` 就是 trigger 与 gate 的雏形），
-但 **L1 交互、L3 判定统一** 还差得远 —— 今天的三个失败案例都出在这两处。
+**L1 交互层已在 v7.0.1 落地**（[`upgraded/v7.0.1.md`](./upgraded/v7.0.1.md)）。
+下一步是 **L3 判定统一**（v7.0.2）、facts 提取 prompt（v7.1）与 L2 能力注册。

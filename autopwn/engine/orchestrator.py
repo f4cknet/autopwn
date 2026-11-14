@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from .facts import Facts, analyse
+from .interact import Interaction, StepError
 from .model import Challenge
 from .run import Result, execute, execute_flag, _verify_timeout
 from . import strategies as S
@@ -155,17 +156,17 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
                 ok, detail, out, cmds = _unpack4(_try_canary_fmt(ch, f, plan, post_cmds))
                 att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, out)
             elif plan.tag == "flag":
-                r = execute_flag(ch, plan.sends)
+                r = execute_flag(ch, plan.steps)
                 ok, detail, out = r.ok, r.note, r.output
                 att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, r.output, r.error)
             elif plan.tag.startswith("stage1:"):
                 ok, detail, out, cmds = _unpack4(_try_ret2libc(ch, f, plan, post_cmds))
                 att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, out)
             else:
-                r = execute(ch, plan.sends, post_cmds=post_cmds)
+                r = execute(ch, plan.steps, post_cmds=post_cmds)
                 if not r.ok and r.error:
                     # 进程提前退出属于时序抖动，重试一次
-                    r = execute(ch, plan.sends, post_cmds=post_cmds)
+                    r = execute(ch, plan.steps, post_cmds=post_cmds)
                 ok, detail, out, cmds = r.ok, "", r.output, r.cmds
                 att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, r.output, r.error)
             res.cmds = cmds or []
@@ -291,13 +292,16 @@ def _try_ret2libc(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = None)
     except Exception as exc:
         return False, f"spawn failed: {exc}", b""
 
-    out = b""
+    it = Interaction(p, needle_timeout=_verify_timeout(ch))
     try:
         _t.sleep(0.1)
-        out += p.recvrepeat(0.08)
-        p.send(plan.sends[-1])
-        _t.sleep(0.25)
-        out += p.recvrepeat(0.25)
+        it.read(0.08)
+        try:
+            # 重放完整步骤（含 scanf 前置输入与菜单前缀），不再只发最后一段
+            it.run_steps(plan.steps, final_sleep=0.25, final_read=0.25)
+        except StepError as exc:
+            return False, str(exc), exc.partial
+        out = it.buf
 
         base = _find_libc_base(out, libc, leak_name)
         if base is None:

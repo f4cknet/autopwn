@@ -3,7 +3,7 @@
 > 口径：所有「已解出」都必须有**可复现证据**（`results/*.json` 里有真实回显）。
 > 「策略跑完没报错」不算完成。`SHELL` 与 `FLAG-ONLY` 分开统计。
 
-最后更新：2026-11-13 22:50
+最后更新：2026-11-14
 
 ## 1. 版本演进
 
@@ -28,8 +28,9 @@
 | `v6.5.2` | 删除 `bench/*/{disasm,strings}.txt`（7.6 MB）；新增卫生门禁 `scripts/audit/check_hygiene.py`；仓库纪律写入 §铁律 5 | 主目录清洁可执行化 |
 | `v6.5.3` | 文档与卫生清理：`.claude` 白名单、`py -3` 命令、路径/章节引用修正 | 收尾清单可在本机原样执行 |
 | `v6.5.4` | 新建 `ctf-pwn-local` Skill：本地镜像/容器/工具链/环境坑速查 | Agent 可自动加载本机 pwn 环境说明 |
+| `v7.0.1` | L1 交互层：`Plan.steps`（`Send`/`Wait`）、统一收发时序、修复 `_try_ret2libc` 丢弃前缀 | 菜单/多轮题可表达；独立向量 13/13；基线不变 |
 
-## 2. 当前基线（2026-11-13 22:18 实测，`--max-attempts 80`）
+## 2. 当前基线（2026-11-14 v7.0.1 实测，`--max-attempts 80`）
 
 | 题库 | 规模 | shell | flag-only | 未解 |
 |---|---|---|---|---|
@@ -63,6 +64,8 @@
 | 只出 flag（`system("cat flag")`） | ✅ | `ret2win_flag` | ch04 备用路径 |
 | 只出 flag（自读 `open`+`puts`） | ✅ | `ret2win_flag` | `bench_extra/ret2win` |
 | 菜单式（需前置 `'w'`） | ✅ | `interact` + `ret2win_flag` | `chellenges/note` |
+| 交互层（`Send` / `Wait`） | ✅ | `interact.Interaction` | `scripts/test/interaction_vector.py`；菜单题 `note` |
+| prompt 驱动（facts 提取 prompt） | ❌ | — | 计划 v7.1 接入 |
 | 无 libc 纯 syscall 三段式 | ✅ | `syscall_execve` | `7a4abf36…` |
 | **菜单式堆（tcache/FSOP）** | ❌ | — | ch07、ch14 |
 | **SROP** | ❌ | — | `bench_extra/chall` |
@@ -84,8 +87,8 @@
 
 | 优先级 | 任务 | 理由 |
 |---|---|---|
-| P0 | **L1 交互层**：`Plan.sends` → `Plan.steps`（`Send`/`Wait`） | 一次性解决菜单题、多轮题（先泄漏再写）、以及所有时序抖动 |
-| P0 | **L3 判定统一**：`ShellOracle`/`FlagOracle` + `cause` | 现在判定有 3 份实现，今天 2 个 bug 都出自这里 |
+| P0 | **L3 判定统一**：`ShellOracle`/`FlagOracle` + `cause` | 现在判定有 3 份实现，今天 2 个 bug 都出自这里；v7.0.2 |
+| P1 | facts 提取 prompt 字符串，策略自动 `Wait(prompt)` | L1 已就绪，缺的只是 prompt 事实（v7.1） |
 | P1 | L2 能力声明式注册（`requires`/`forbids`/`evidence`） | 去掉「策略顺序 + 各自 early-return」的隐式耦合（`_find_wins` 曾因此埋掉一整类题） |
 | P1 | 补 libc-database / 或支持「按泄漏找 libc」 | 解锁 `repeater` 这类题 |
 | P2 | L4 失败归因（tail 分类驱动换分支） | 减少人工看 tail |

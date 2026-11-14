@@ -49,15 +49,15 @@
 | ID | 摘要 | 状态 | 预估 | Owner | 详情 |
 |---|---|---|---|---|---|
 | `v7.0.0` | 架构提案：四层管线（目标模型 / 交互规划 / 能力注册 / 判定归因） | 📝 | 3h | @Minzhi_Zhou | [`v7.0.0`](./upgraded/v7.0.0.md) |
-| `v7.0.1` | **P0**：`Plan.sends` → `Plan.steps`（交互层，解菜单题与多轮题） | ⏳ | 4h | @Minzhi_Zhou | 待建详情 |
 | `v7.0.2` | **P0**：三处判定合并为统一 `Oracle`（`verify_shell` / `probe_flag` / `_try_pie_partial`） | ⏳ | 3h | @Minzhi_Zhou | 待建详情 |
 
-> 这两项是 `HANDOVER.md §8` 指定的接手起点，均**不需要改 `facts.py`**，风险可控。
+> `v7.0.2` 是 `HANDOVER.md §8` 指定的下一项 P0，**不需要改 `facts.py`**，风险可控。
 
 ### 2.2 已完成（v6 系列）
 
 | ID | 摘要 | 状态 | 实际 | 详情 |
 |---|---|---|---|---|
+| `v7.0.1` | L1 交互层：`Plan.steps`（`Send`/`Wait`）、统一收发时序、修复 ret2libc 前缀丢失 | ✅ | 2h | [`v7.0.1`](./upgraded/v7.0.1.md) |
 | `v6.5.4` | 新建 `ctf-pwn-local` Skill：本地镜像 / 容器 / 工具链 / 环境坑速查 | ✅ | 0.5h | [`v6.5.4`](./upgraded/v6.5.4.md) |
 | `v6.5.3` | 文档与卫生清理：`.claude` 白名单、`py -3` 命令、路径 / 章节引用修正 | ✅ | 0.5h | [`v6.5.3`](./upgraded/v6.5.3.md) |
 | `v6.5.2` | 删除 `bench/*/{disasm,strings}.txt`（7.6 MB）；新增卫生门禁 `scripts/audit/check_hygiene.py`；仓库纪律写入铁律 5 | ✅ | 1h | [`PROGRESS.md`](./PROGRESS.md) §1 |

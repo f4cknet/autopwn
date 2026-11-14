@@ -13,6 +13,7 @@ from typing import Optional
 
 from pwn import context, process
 
+from .interact import Interaction, StepError
 from .model import Challenge
 
 MARKER = b"PWNED_42"
@@ -113,27 +114,10 @@ def verify_shell(p, wait: float = 0.45, timeout: float = 2.2,
     return Result(False, out)
 
 
-def _sync(p, timeout: float = 1.0) -> bytes:
-    """等到目标「真正消化完上一段输入」：出现新输出并静默 0.06s，或超时。"""
-    buf = b""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            chunk = p.recvrepeat(0.06)
-        except Exception:
-            break
-        if chunk:
-            buf += chunk
-            continue
-        if buf:
-            break
-    return buf
-
-
-def execute(ch: Challenge, sends: list[bytes], pre_wait: float = 0.0,
+def execute(ch: Challenge, steps: list, pre_wait: float = 0.0,
             post_wait: float = 0.0, verify: bool = True,
             keep_open: float = 0.0, post_cmds: list = None) -> Result:
-    """按顺序发送 sends，然后验证 shell。"""
+    """按步骤序列（Send / Wait，或旧的裸 bytes）发送，然后验证 shell。"""
     if getattr(ch, "host", None):
         # 远程每次尝试都是一条新连接，稍微错开，避免被平台限速/封 IP
         time.sleep(0.25)
@@ -141,40 +125,23 @@ def execute(ch: Challenge, sends: list[bytes], pre_wait: float = 0.0,
         p = spawn(ch)
     except Exception as exc:
         return Result(False, b"", error=f"spawn failed: {exc}")
-    out = b""
+    it = Interaction(p, needle_timeout=_verify_timeout(ch))
     try:
         if pre_wait:
             time.sleep(pre_wait)
+        it.read(0.12)
         try:
-            out += p.recvrepeat(0.12)
-        except Exception:
-            pass
-        total = len(sends)
-        for idx, blob in enumerate(sends):
-            if not blob:
-                continue
-            try:
-                p.send(blob)
-            except (EOFError, BrokenPipeError, OSError):
-                # 进程已退出：这次尝试失败，但不要中断整轮
-                return Result(False, out, error="process died before payload")
-            # 分阶段读写的题目（scanf 之后 read）必须等上一段被真正消费：
-            # 用「读到静默」作为同步点，比固定 sleep 抗负载波动。
-            if idx < total - 1:
-                out += _sync(p)
-            else:
-                time.sleep(0.2)
-                try:
-                    out += p.recvrepeat(0.04)
-                except Exception:
-                    pass
+            it.run_steps(steps)
+        except StepError as exc:
+            # 进程提前退出 / Wait 超时：这次尝试失败，但不要中断整轮
+            return Result(False, exc.partial, error=str(exc))
         if post_wait:
             time.sleep(post_wait)
         if not verify:
-            out += p.recvrepeat(0.4)
-            return Result(False, out, note="no-verify")
+            it.read(0.4)
+            return Result(False, it.buf, note="no-verify")
         res = verify_shell(p, timeout=_verify_timeout(ch), post_cmds=post_cmds)
-        res.output = out + res.output
+        res.output = it.buf + res.output
         return res
     finally:
         if keep_open:
@@ -211,27 +178,23 @@ def probe_flag(p, wait: float = 0.5) -> Result:
     return Result(False, out)
 
 
-def execute_flag(ch: Challenge, sends: list[bytes]) -> Result:
+def execute_flag(ch: Challenge, steps: list) -> Result:
     """发 payload 后用 flag 正则判定（题目只打 flag 不落 shell 时用）。"""
     try:
         p = spawn(ch)
     except Exception as exc:
         return Result(False, b"", error=f"spawn failed: {exc}")
-    out = b""
+    it = Interaction(p, needle_timeout=_verify_timeout(ch))
     try:
         time.sleep(0.1)
-        out += p.recvrepeat(0.08)
-        for blob in sends:
-            if not blob:
-                continue
-            try:
-                p.send(blob)
-            except Exception:
-                return Result(False, out, error="process died")
-            time.sleep(0.15)
-            out += p.recvrepeat(0.05)
+        it.read(0.08)
+        try:
+            it.run_steps(steps, send_gap=(0.15, 0.05),
+                         final_sleep=0.15, final_read=0.05)
+        except StepError as exc:
+            return Result(False, exc.partial, error=str(exc))
         r = probe_flag(p)
-        blob = out + r.output
+        blob = it.buf + r.output
         # ★ flag 可能在前面的 recvrepeat 里就到了（probe_flag 只看新数据），这里要兜住
         m = FLAG_RE.search(blob)
         if m:

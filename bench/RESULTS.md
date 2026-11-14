@@ -230,3 +230,21 @@ SROP、20 字节极限输入的 fmt、纯 PIE 局部覆盖（栈对齐）仍需�
 | 本地（容器内造 `/flag`） | `FLAG-ONLY ret2flag flag:CTF2{note-test-flag}`，**1 次尝试** |
 | 容器靶机（`target.bat` + `--host 127.0.0.1`） | `flag:CTF2{note-target-flag}`，**1 次尝试** |
 | `bench` 回归 | 13/15，无退化 |
+
+---
+
+## 11. v7.0.1 交互层回归向量（2026-11-14）
+
+| 项 | 值 |
+|---|---|
+| 脚本 | `scripts/test/interaction_vector.py` |
+| 运行环境 | 容器 `autopwn:pwn22`（脚本导入 `autopwn.engine` 会拉 pwntools） |
+| 命令 | `python3 scripts/test/interaction_vector.py` |
+| 覆盖 | 跨 chunk / 重复 prompt 游标 / 静默屏障 / 超时 partial / EOF 快速失败 / `Send→Wait` 不自动读 / `Send→Send` 仍同步 / Send 失败转 `StepError` / `Plan` 归一化 / `run.execute` 两条错误路径 / 真实 C 菜单程序 |
+| 结果 | **13/13 PASS**；真实 C 程序由 `Wait(b"menu> ")` 驱动三段交互，回显 `PWNED_42` |
+
+不放进 `bench/` 的原因：旧引擎用「读到静默」也能过同类菜单题，放进题库会制造「新解出」的错觉；
+本向量验证的是**表达力与时序语义**，不是新增题型。
+
+另记一次观察（未复现）：全量 `bench_extra` 首次运行时 `ret2libc` 的 stage1 泄漏只回读到部分字节，
+5 个 plan 全失败；随后连续 4 次单题与 1 次全量均通过。与本次交互层改动无已证实的因果关系，留待后续归因。

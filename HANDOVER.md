@@ -1,7 +1,7 @@
 # HANDOVER — 交接说明（给接手的开发者）
 
 > 一句话：这是一个**离线 pwn 自动利用引擎**，输入题目二进制，输出「真的拿到了 shell / flag」的证据。
-> 主线代码只有 `autopwn/engine/` 七个文件（约 3100 行），其余都是题库、容器和文档。
+> 主线代码只有 `autopwn/engine/` 八个文件（约 3200 行），其余都是题库、容器和文档。
 
 交接时间：2026-11-13 22:20 · 交接前状态：`PROGRESS.md §2` 的基线全部通过。
 
@@ -39,7 +39,8 @@ solve.bat bench_sys
 | `autopwn/engine/strategies.py` | **候选链生成**：16 个策略，纯函数 | 高 |
 | `autopwn/engine/orchestrator.py` | 尝试顺序、预算、按 `tag` 分派特殊流程、留痕 | 中 |
 | `autopwn/engine/interact.py` | `Send`/`Wait` 步骤、累积缓冲与游标、唯一一份收发时序 | 中 |
-| `autopwn/engine/run.py` | spawn（本地/远程）、按步骤收发、成功判定 | 中 |
+| `autopwn/engine/oracle.py` | **唯一判定实现**：`judge_shell` / `judge_flag` / `Verdict` / `FLAG_RE` | 低（改判据才动） |
+| `autopwn/engine/run.py` | spawn（本地/远程）、按步骤收发、调用 oracle 判定 | 中 |
 | `autopwn/engine/model.py` | `Challenge`：复制到 `.run/`、patchelf、加载 ELF | 低 |
 | `autopwn/engine/cli.py` | 参数、目录收集（ELF/zip/平铺目录）、md5 去重 | 低 |
 | `docker/Dockerfile` + `build.sh` | `autopwn:pwn22` 镜像 | 很少 |
@@ -65,6 +66,7 @@ solve.bat bench_sys
 | `orchestrator.py:98` | `solve()` —— 主循环 |
 | `orchestrator.py:200/274/344` | `_try_pie_partial` / `_try_ret2libc` / `_try_canary_fmt` |
 | `interact.py` | `Interaction.run_steps()` —— 所有收发时序的唯一实现 |
+| `oracle.py` | `judge_shell()` / `judge_flag()` —— 所有成功判定的唯一实现 |
 | `run.py` | `spawn` / `verify_shell` / `probe_flag` / `execute` / `execute_flag` |
 
 ## 3. 铁律（违反会静默出错，不报异常）
@@ -165,7 +167,8 @@ if plan.tag.startswith("pie:"):
 | 优先级 | 任务 | 起点 |
 |---|---|---|
 | ✅ | ~~`Plan.sends` → `Plan.steps`（`Send`/`Wait`），交互层~~（v7.0.1 已完成） | `interact.Interaction` |
-| **P0** | 判定层统一成 `Oracle`（Shell/Flag/File），带 `cause` | `run.verify_shell` / `probe_flag` / 三个 `_try_*` 里的临时判断 |
+| ✅ | ~~判定层统一成 `Oracle`（Shell/Flag/File），带 `cause`~~（v7.0.2 已完成） | `oracle.judge_shell` / `judge_flag` |
+| P1 | **repeater 解锁**：`_find_fmt` 误报修复、`_start` 推导 main、canary-echo 泄漏策略 | `facts._find_fmt` / `facts._func_entries` / `strategies`（手工链见 PROGRESS §4） |
 | P1 | facts 提取 prompt 字符串，策略自动 `Wait(prompt)` | `facts._find_interact` + `strategies._prelude_variants` |
 | P1 | 能力声明式注册（`requires`/`forbids`/`evidence`） | `STRATEGIES` 列表 + 各策略开头的 early-return |
 | P1 | 支持「给 libc」或「按泄漏找 libc」（解锁 `chellenges/repeater`） | `model.Challenge.libc_path` |

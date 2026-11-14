@@ -37,6 +37,7 @@ from autopwn.engine import strategies as S
 from autopwn.engine.interact import (
     Interaction, Send, Wait, StepError, WaitTimeout, normalize_steps,
 )
+from autopwn.engine.oracle import judge_shell, judge_flag, SHELL_MARKER
 
 FAILS: list[str] = []
 
@@ -155,6 +156,34 @@ def t_send_error():
         raise AssertionError("expected StepError")
 
 
+# --------------------------------------------------------------------- Oracle
+def t_judge_shell():
+    v = judge_shell(b"banner\n" + b"PWNED_42\nuid=0(root)\n")
+    assert v.ok and v.kind == "shell" and v.cause == "marker", v
+    v2 = judge_shell(b"uid=1000(ctf) gid=1000")
+    assert v2.ok and v2.cause == "uid" and "ctf" in v2.detail, v2
+    v3 = judge_shell(b"no shell here")
+    assert not v3.ok and v3.cause == "no_match"
+
+
+def t_judge_flag_priority():
+    # 真 flag 优先于 win reached
+    v = judge_flag(b"cat: /flag: No such file\nflag{real_one_42}\n")
+    assert v.ok and v.cause == "flag_re" and "flag{real_one_42}" in v.detail, v
+    # 只有报错 → win reached（链路成立）
+    v2 = judge_flag(b"cat: /flag: No such file or directory")
+    assert v2.ok and v2.cause == "no_flag_file" and "win reached" in v2.detail, v2
+    # 累积输出里早到的 flag（最后一段没有）也必须判到
+    v3 = judge_flag(b"flag{early_arrival}" + b"\nmenu> " * 5)
+    assert v3.ok and "flag{early_arrival}" in v3.detail, v3
+    # 普通 {} 文本不是 flag
+    v4 = judge_flag(b"set {a,b,c} done")
+    assert not v4.ok, v4
+    # 大小写变体
+    assert judge_flag(b"CTF2{docker-local-target}").ok
+    assert judge_flag(b"FLAG{UpperCase}").ok
+
+
 # --------------------------------------------------------------------- Plan
 def t_plan_normalize():
     p = S.Plan("x", [b"", b"a", Send(b"b"), Wait()])
@@ -262,6 +291,8 @@ def t_real_menu_program():
 
 
 TESTS = [
+    ("judge_shell marker/uid/no-match", t_judge_shell),
+    ("judge_flag priority & cumulative", t_judge_flag_priority),
     ("cross-chunk Wait", t_cross_chunk),
     ("repeated prompt cursor", t_two_prompts_cursor),
     ("silence barrier consumes old output", t_silence_barrier),

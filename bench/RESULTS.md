@@ -248,3 +248,15 @@ SROP、20 字节极限输入的 fmt、纯 PIE 局部覆盖（栈对齐）仍需�
 
 另记一次观察（未复现）：全量 `bench_extra` 首次运行时 `ret2libc` 的 stage1 泄漏只回读到部分字节，
 5 个 plan 全失败；随后连续 4 次单题与 1 次全量均通过。与本次交互层改动无已证实的因果关系，留待后续归因。
+
+---
+
+## 12. v7.0.2 判定 Oracle 向量（2026-11-14）
+
+| 项 | 值 |
+|---|---|
+| 位置 | `scripts/test/interaction_vector.py` 新增 `judge_shell` / `judge_flag` 两项 |
+| 覆盖 | marker/uid/无匹配三态；真 flag 优先于 win reached；**累积输出里早到的 flag**（§9 踩过的坑）；普通 `{}` 文本排除；大小写变体 |
+| 结果 | **15/15 PASS** |
+| 语义 | 判定正则逐字符复制自原实现，`bench` 13/15 / `bench_extra` 5+1 / `bench_sys` 4/4 与基线完全一致 |
+| cause | `results/*.json` 的 `attempts[].cause`：shell 路径 `marker`/`uid`，flag 路径 `flag_re`/`no_flag_file` |

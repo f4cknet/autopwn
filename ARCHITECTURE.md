@@ -1,6 +1,6 @@
-# ARCHITECTURE — autopwn.engine（v7.0.1 现状）
+# ARCHITECTURE — autopwn.engine（v7.0.2 现状）
 
-> 本文只描述**现在能跑的代码**（`autopwn/engine/`，约 3100 行）。
+> 本文只描述**现在能跑的代码**（`autopwn/engine/`，约 3200 行）。
 > v4/v5 遗留链路（`autopwn/cli.py` 等）见 `README.md` 的「遗留入口」与 `v5_architecture.md`。
 > 下一版设计提案见 [`upgraded/v7.0.0.md`](./upgraded/v7.0.0.md)。
 
@@ -41,7 +41,11 @@
                     └──────┬───────┘
                            ▼
                     ┌──────────────┐
-                    │  run.py      │  spawn(本地/远程)、按步骤收发、判定(shell/flag)、后置命令
+                    │  run.py      │  spawn(本地/远程)、按步骤收发、后置命令
+                    └──────┬───────┘
+                           ▼
+                    ┌──────────────┐
+                    │  oracle.py   │  判定唯一实现：judge_shell / judge_flag / Verdict(cause)
                     └──────────────┘
 ```
 
@@ -93,7 +97,9 @@ Plan(strategy: str, steps: list, desc: str = "", tag: str = "")
 | `pie:<tgt>:<nib>:<kind>` | PIE 部分覆盖 | `_try_pie_partial()` |
 
 ### `run.Result` / `orchestrator.SolveResult`
-`Result(ok, output, note, error, cmds)`；`SolveResult` 额外含 `strategy/detail/elapsed/attempts/facts/flag_only`，
+`Result(ok, output, note, error, cause, cmds)`；`cause` 来自 oracle（`marker` / `uid` / `flag_re` /
+`no_flag_file` / `no_match`），落到 `attempts[].cause` 供归因。
+`SolveResult` 额外含 `strategy/detail/elapsed/attempts/facts/flag_only`，
 整体序列化到 `results/<题名>.json`（含每次尝试的 tail，复盘用）。
 
 ## 4. 策略清单（`STRATEGIES` 的顺序 = 尝试顺序）
@@ -131,10 +137,10 @@ send 分阶段（`interact.Interaction.run_steps`，唯一实现）：
   ├── Wait(b"")：读到静默，并把游标推到缓冲末尾（旧输出视为已消费）
   └── 远程额外把验证 / Wait 超时 2.2s → 6s
 
-判定：
-  ├── verify_shell(): 发 echo PWNED_$((6*7)) / whoami / id，看到 PWNED_42 或 uid= → ok
-  ├── probe_flag():   对整个累积输出做 FLAG_RE 正则
-  └── 特殊 tag：win reached（No such file / unavailable）也算链路成立
+判定（`oracle.py`，唯一实现）：
+  ├── judge_shell(out): PWNED_42 回显（marker）或 uid=…（uid）→ ok；cause 记来源
+  ├── judge_flag(out):  FLAG_RE 真 flag 优先，其次 No such file → win reached（no_flag_file）
+  └── 判定函数是纯函数：喂累积输出，返回 Verdict；I/O 时序留在 run.py
 ```
 
 **铁律（都是踩过的坑）**：

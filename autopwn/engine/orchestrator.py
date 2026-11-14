@@ -12,6 +12,7 @@ from typing import Optional
 from .facts import Facts, analyse
 from .interact import Interaction, StepError
 from .model import Challenge
+from .oracle import judge_flag
 from .run import Result, execute, execute_flag, _verify_timeout
 from . import strategies as S
 
@@ -24,6 +25,7 @@ class Attempt:
     elapsed: float
     output: bytes = b""
     error: str = ""
+    cause: str = ""
 
     def brief(self) -> dict:
         return {
@@ -32,6 +34,7 @@ class Attempt:
             "ok": self.ok,
             "elapsed": round(self.elapsed, 2),
             "tail": self.output[-300:].decode("latin-1", "replace"),
+            "cause": self.cause,
         }
 
 
@@ -158,7 +161,8 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
             elif plan.tag == "flag":
                 r = execute_flag(ch, plan.steps)
                 ok, detail, out = r.ok, r.note, r.output
-                att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, r.output, r.error)
+                att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1,
+                              r.output, r.error, cause=r.cause)
             elif plan.tag.startswith("stage1:"):
                 ok, detail, out, cmds = _unpack4(_try_ret2libc(ch, f, plan, post_cmds))
                 att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, out)
@@ -168,7 +172,8 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
                     # 进程提前退出属于时序抖动，重试一次
                     r = execute(ch, plan.steps, post_cmds=post_cmds)
                 ok, detail, out, cmds = r.ok, "", r.output, r.cmds
-                att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1, r.output, r.error)
+                att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1,
+                              r.output, r.error, cause=r.cause)
             res.cmds = cmds or []
             res.attempts.append(att)
             if not ok and getattr(ch, "host", None):
@@ -254,12 +259,10 @@ def _try_pie_partial(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = No
             out += r.output
             if r.ok:
                 return True, r.note, out, []
-            m = re.search(rb"(?:flag|ctf|FLAG|CTF)[A-Za-z0-9_]{0,20}\{[^}\n]{4,}\}", out)
-            if m:
-                return True, "flag:" + m.group(0).decode("latin-1", "replace"), out, []
-            # 本地没有 flag 文件时 system() 会报 "No such file" —— 这说明 win 已经打到了
-            if b"No such file" in out or b"cat: " in out:
-                return True, "win reached (no local flag file)", out, []
+            # 判定交给 Oracle：真 flag 优先，其次 win reached（本地无 flag 文件）
+            v = judge_flag(out)
+            if v.ok:
+                return True, v.detail, out, []
             return False, f"partial -> {hex(base + tgt) if base else hex(low16)}", out, []
 
         r = verify_shell(p, timeout=_verify_timeout(ch), post_cmds=post_cmds)
@@ -348,7 +351,7 @@ def _try_ret2libc(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = None)
 def _try_canary_fmt(ch: Challenge, f: Facts, plan: S.Plan, post_cmds: list = None):
     """fmt 泄漏 canary -> 溢出泄漏 GOT -> 回 main -> system('/bin/sh')，全程同进程。"""
     import time as _t
-    from .run import spawn, verify_shell, FLAG_RE
+    from .run import spawn, verify_shell
 
     _, _, meta = plan.tag.partition(":")
     off_s, sink = (meta.split(":") + [""])[:2]

@@ -3,7 +3,7 @@
 > 口径：所有「已解出」都必须有**可复现证据**（`results/*.json` 里有真实回显）。
 > 「策略跑完没报错」不算完成。`SHELL` 与 `FLAG-ONLY` 分开统计。
 
-最后更新：2026-11-14
+最后更新：2026-11-14（v7.0.2）
 
 ## 1. 版本演进
 
@@ -29,6 +29,7 @@
 | `v6.5.3` | 文档与卫生清理：`.claude` 白名单、`py -3` 命令、路径/章节引用修正 | 收尾清单可在本机原样执行 |
 | `v6.5.4` | 新建 `ctf-pwn-local` Skill：本地镜像/容器/工具链/环境坑速查 | Agent 可自动加载本机 pwn 环境说明 |
 | `v7.0.1` | L1 交互层：`Plan.steps`（`Send`/`Wait`）、统一收发时序、修复 `_try_ret2libc` 丢弃前缀 | 菜单/多轮题可表达；独立向量 13/13；基线不变 |
+| `v7.0.2` | L3 判定统一：`oracle.py`（`judge_shell`/`judge_flag`/`Verdict`）+ 唯一 `FLAG_RE` + attempts 带 `cause` | 4 份判定收成 1 份；向量 15/15；基线不变 |
 
 ## 2. 当前基线（2026-11-14 v7.0.1 实测，`--max-attempts 80`）
 
@@ -37,7 +38,7 @@
 | `bench/` | 15 | **13** | 0 | `ch07_acae`、`ch14_easyheap`（菜单式堆） |
 | `bench_extra/` | 8 | **5** | 1 | `chall`（SROP）、`fmtstr1`（20 字节 fmt） |
 | `bench_sys/` | 4 | **4** | 0 | — |
-| `chellenges/` | 3 | 0 | 2 | `repeater`（无 libc 可用，见 §4） |
+| `chellenges/` | 3 | 0 | 2 | `repeater`（堵点与手工解法已查明，见 §4 与 v7.0.3 待办） |
 
 逐题明细：`bench/RESULTS.md`（含每题的策略、偏移、关键参数）；远程实打记录：`results/remote/FLAGS.md`。
 
@@ -80,14 +81,14 @@
 | 菜单式堆 `ch07_acae` / `ch14_easyheap` | glibc 2.35 移除了 `__free_hook`/`__malloc_hook`；程序不打印堆内容，safe-linking 下无堆地址泄漏。堆策略完全没实现 |
 | `bench_extra/chall` | 只有 syscall gadget，需要 `rax=15` 的 SROP；未实现 |
 | `bench_extra/fmtstr1` | 输入限制 20 字节，写不动 GOT |
-| `chellenges/repeater` | 有 fmt（offset 48）和 read，但**没有可用的 libc**：`ret2libc` 算不出 `system`；镜像里 `libc-database` 构建时被跳过。要么补 libc，要么做 ORW |
+| `chellenges/repeater` | 2026-11-14 复盘（手工链 3/3 打穿）：①stripped 无 main 符号，`s_ret2libc`/`s_canary_fmt` 直接 return——可从 `_start` 的 `lea rdi,[main]` 推导；②`fmt=48` 是误报（`printf` 参数是常量串，`_find_fmt` 把喂 puts 的 lea 记到了 printf 头上）；③canary 在 buf+40，`puts` 回显遇 canary 低字节 `\x00` 截断——用「41 字节盖掉 LSB 再回读 canary[1:8]」可泄（已实测）。修法立项 v7.0.3 |
 | ORW 型 | 需要自拼 open/read/write，属人工范畴（见 v7 文档 §5「明确不做的事」） |
 
 ## 5. 下一步（按投入产出）
 
 | 优先级 | 任务 | 理由 |
 |---|---|---|
-| P0 | **L3 判定统一**：`ShellOracle`/`FlagOracle` + `cause` | 现在判定有 3 份实现，今天 2 个 bug 都出自这里；v7.0.2 |
+| P1 | **repeater 解锁**（v7.0.3）：`_find_fmt` 误报修复、`_start` 推导 main、canary-echo 泄漏 + 对齐重入 ret2libc | 手工链已验证 3/3；三个堵点全部有修法，且是通用规则 |
 | P1 | facts 提取 prompt 字符串，策略自动 `Wait(prompt)` | L1 已就绪，缺的只是 prompt 事实（v7.1） |
 | P1 | L2 能力声明式注册（`requires`/`forbids`/`evidence`） | 去掉「策略顺序 + 各自 early-return」的隐式耦合（`_find_wins` 曾因此埋掉一整类题） |
 | P1 | 补 libc-database / 或支持「按泄漏找 libc」 | 解锁 `repeater` 这类题 |

@@ -15,8 +15,8 @@ from pwn import context, process
 
 from .interact import Interaction, StepError
 from .model import Challenge
+from .oracle import SHELL_MARKER as MARKER, FLAG_RE, judge_shell, judge_flag
 
-MARKER = b"PWNED_42"
 PROBE = (b"echo PWNED_$((6*7))", b"whoami", b"id")
 
 
@@ -26,6 +26,7 @@ class Result:
     output: bytes = b""
     note: str = ""
     error: str = ""
+    cause: str = ""
     cmds: list = field(default_factory=list)   # [(命令, 回显)]
 
 
@@ -99,10 +100,12 @@ def verify_shell(p, wait: float = 0.45, timeout: float = 2.2,
         if not chunk:
             break
         out += chunk
-        if MARKER in out or b"uid=" in out:
+        v = judge_shell(out)
+        if v.ok:
             break
-    if MARKER in out or re.search(rb"uid=\d+", out):
-        res = Result(True, out)
+    v = judge_shell(out)
+    if v.ok:
+        res = Result(True, out, cause=v.cause)
         # 拿到 shell 之后再跑用户指定的命令（cat /flag、ls 等）
         for cmd in (post_cmds or []):
             try:
@@ -111,7 +114,7 @@ def verify_shell(p, wait: float = 0.45, timeout: float = 2.2,
             except Exception as exc:
                 res.cmds.append((cmd, f"<error: {exc}>".encode()))
         return res
-    return Result(False, out)
+    return Result(False, out, cause=v.cause)
 
 
 def execute(ch: Challenge, steps: list, pre_wait: float = 0.0,
@@ -152,9 +155,6 @@ def execute(ch: Challenge, steps: list, pre_wait: float = 0.0,
             pass
 
 
-FLAG_RE = re.compile(rb"(?:flag|ctf|FLAG|CTF)[A-Za-z0-9_]{0,20}\{[^}\n]{4,}\}")
-
-
 def probe_flag(p, wait: float = 0.5) -> Result:
     """题目只打印 flag（不落地 shell）时的二次判定。
 
@@ -170,12 +170,15 @@ def probe_flag(p, wait: float = 0.5) -> Result:
         if not chunk:
             break
         out += chunk
-        if FLAG_RE.search(out):
+        if judge_flag(out).ok:
             break
-    m = FLAG_RE.search(out)
-    if m:
-        return Result(True, out, note="flag:" + m.group(0).decode("latin-1", "replace"))
-    return Result(False, out)
+    return _flag_result(out)
+
+
+def _flag_result(out: bytes) -> Result:
+    """把累积输出交给 Oracle，落成 Result（flag / win reached / 失败）。"""
+    v = judge_flag(out)
+    return Result(v.ok, out, note=v.detail, cause=v.cause)
 
 
 def execute_flag(ch: Challenge, steps: list) -> Result:
@@ -196,14 +199,7 @@ def execute_flag(ch: Challenge, steps: list) -> Result:
         r = probe_flag(p)
         blob = it.buf + r.output
         # ★ flag 可能在前面的 recvrepeat 里就到了（probe_flag 只看新数据），这里要兜住
-        m = FLAG_RE.search(blob)
-        if m:
-            return Result(True, blob,
-                          note="flag:" + m.group(0).decode("latin-1", "replace"))
-        # 打到了 win 但本地没有 flag 文件 —— 也算「链路成立」，但如实标注
-        if re.search(rb"No such file|Permission denied|unavailable", blob):
-            return Result(True, blob, note="win reached (no flag file)")
-        return Result(False, blob)
+        return _flag_result(blob)
     finally:
         try:
             p.close()

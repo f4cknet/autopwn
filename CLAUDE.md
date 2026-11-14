@@ -27,6 +27,31 @@ target.bat <题目> 4444            :: 造容器内 TCP 靶机
 solve.bat <题目> --host 127.0.0.1 --port 4444   :: 打靶机（等价真远程）
 ```
 
+## 开工前必做（**每次会话第一条命令之前**）
+
+本仓库可能有**两个 Agent 会话同时在工作**（如 Claude Code 做 v7.4.0，另一个会话做 v7.3.x 评审/修复），
+共用同一个工作目录与 `main` 分支。因此：
+
+```bash
+git pull --ff-only          # 1) 先同步，否则你改的是旧代码
+git status --short          # 2) 必须干净；有未提交改动先判断是谁的
+```
+
+第三条：**读你这次任务的 `upgraded/vX.Y.Z.md` 全文**。里面除实施设计外，可能还有
+「评审意见」与「回执」两节——任务文档是必读，不是参考。
+
+### 并发期间的 git 规矩（与下面的 §5 不同，优先遵守）
+
+| 情况 | 做法 |
+|---|---|
+| 工作树里有**不是你的**未提交改动 | **不要** `stash` / `reset` / `add` 它；只在提交时跳过该文件，并在 commit message 里注明「未纳入，属另一会话」 |
+| 提交时 | **只 `git add <你改过的具体文件>`**，并发期间禁止 `git add -A`（会把别人的半成品一起提交） |
+| 准备 push 但 `git log` 显示远端有新提交 | `git pull --rebase` 后再 push；冲突优先保留对方改动，不要 `checkout --ours` 一把梭 |
+| 你要连续改多个文件 | 拆成多次小提交，减少与他人改动的交叉面 |
+
+> 判定依据：`git status --short` 里你**没动过**的路径就是别人的。当前已知遗留：
+> `autopwn/engine/orchestrator.py` 有一段 v7.2.0 的远程重试改动，属另一会话，等活实例验证后才提交。
+
 ## 五条最容易违反的规则
 
 1. 成功判据是「目标进程里真执行了命令有回显」，**不是**「策略跑完没报错」。
@@ -56,6 +81,7 @@ scripts/  bugs/  upgraded/  results/  archive/  writeups/  tests/  _target/
 solve.bat  target.bat  build_pwn.bat  shell.bat
 README.md  CLAUDE.md  AGENTS.md  HANDOVER.md  ARCHITECTURE.md  PROGRESS.md  CHEATSHEET.md  DOC_MAP.md  upgraded.md
 LICENSE  pyproject.toml  requirements.txt  setup.py  .gitignore  .venv  .github  .coveragerc  .python-version
+.claude  .workbuddy
 ```
 
 - **禁止**在根目录新建调试脚本、临时数据、`*.tmp`、`dbg_*.py`、`test_*.py`、日志文件
@@ -88,7 +114,7 @@ LICENSE  pyproject.toml  requirements.txt  setup.py  .gitignore  .venv  .github 
 ### 5. 每轮迭代结束必须 commit + push 到 GitHub
 
 ```bash
-git add -A
+git add <你本轮的改动文件>        # 并发期间禁止 -A，见「开工前必做」
 git -c core.safecrlf=false commit -m "[v{X}.{Y}.{Z}] {动词} {对象}"
 git push origin main
 ```
@@ -96,6 +122,7 @@ git push origin main
 - 远程：`git@github.com:f4cknet/autopwn.git`，分支 `main`
 - **不允许**把提交攒在本地过夜；不允许「等全部做完一起推」
 - push 前必须跑完 §「每轮收尾清单」的四步
+- 只有确认工作树**全是自己的改动**时，才可以用 `git add -A`
 
 ## 每轮收尾清单（4 步，缺一不可）
 

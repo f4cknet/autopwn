@@ -389,3 +389,43 @@ solve.bat chellenges/492fad50...
 回归：`bench` 13/15（`ch07_acae`、`ch14_easyheap`）、`bench_extra` **6 shell + 1 flag-only**
 （`fmtstr1` 与 71b6 同一二进制 md5 `eaef2247796c11db798a579396482399`，由同一 `guard_fmt` 解开，
 高于基线 5+1）、`bench_sys` 4/4；`--allow-brute` 未开启，盲试 0。
+
+## 18. v7.4.2 合成向量：数字菜单 / 全局写→win / 静态事实 / shell 判据（2026-11-14）
+
+> **不新增 bench 题**（套件规模仍 15/8/4）。向量在容器内用 x64 gcc 临时编译，
+> 二进制不落库；镜像缺 32 位 crt 与 i386 libc.a，**未尝试 `-m32`**。
+> C1 的 32 位形态用 `bench/ch10_static32 --facts-only` 兜底。
+> 真样本命中由验证方下轮盲测确认（目标题在 `holdout/`，执行方不读）。
+
+复现（仓库根目录，cmd.exe）：
+
+```bat
+docker run --rm -v "%CD%:/work" -w /work autopwn:pwn22 python3 scripts/test/v742_vectors.py
+:: Git Bash 下需加 MSYS_NO_PATHCONV=1，否则 /work 会被改写成 Windows 路径
+```
+
+实测：**29 passed / 0 failed**。
+
+| 组 | 向量 | 断言 | 实测 |
+|---|---|---|---|
+| D | `/bin/sh`、`/bin//sh`、`/usr/bin/sh`、`sh` | 判 shell | 4/4 |
+| D | `fish`、`push`、`C:\foo\sh`、`/bbbb?/sh`（目录不存在） | 不判 shell | 4/4 |
+| D | `/bin/sh -c id`、`cat /flag`、`echo flag` | 非 shell；flag / decoy 分类不变 | 3/3 |
+| A | 内联 `scanf("%d")` 菜单 / helper 读选择+分派 / `read`+`atoi` 菜单 | `f.interact` 含 `b"1\n"` | 3/3 |
+| A | 长度输入无横幅 / 有编号横幅但比较的是 100、50 | `f.interact` 为空 | 2/2 |
+| B | `struct { char buf[64]; void (*fn)(void); } g` + `fgets(g.buf,128,stdin)` + `g.fn()` + `system("/bin/sh")` | `global_writes`/`global_calls` 非空；payload 末字 = `win.addr`；端到端 `PWNED_42` 且 `strategy=global_write_win` | 7/7 |
+| C1 | x64 `-static`：`fgets` 写栈缓冲 + `system("/bin/sh")` win | `static=True`、无 PLT 误诊、`analyse` 有 vuln、`_static_vulns` 命中 `fgets` 且 offset 非空、静态 shell win 识别 | 6/6 |
+
+关键事实：
+
+- **A 暴露的真实 bug**：`.plt` 与 `.plt.sec` 同时映射同一符号（如 `__isoc99_scanf`
+  在 `0x401060` / `0x401064`），调用点只落其中一个而 `ch.plt(name)` 只返回一个。
+  已改为从 `ch.plt_map` 收全部同名地址；旧 `scanf("%d")` 路径同样受益。
+- **B**：`_buf_is_global` 新增 x64 `lea reg, [rip+disp]` 识别；策略按 `ch.wordsize`
+  打包（32 位题不再误用 `p64`）。
+- **C1**：`ch10_static32` 输出与改前一致（`gets@0x80489f6 disp=15 off=45`，wins `[]`，
+  无「PLT 映射为空」），旧路径优先级未变。
+
+回归（同轮实跑）：`bench` **13/15**（仅 `ch07_acae`、`ch14_easyheap`）、
+`bench_extra` **6 shell + 1 flag-only**（仅 `chall`）、`bench_sys` **4/4**；
+`--allow-brute` 未开启，盲试 0。

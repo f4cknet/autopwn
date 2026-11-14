@@ -215,6 +215,9 @@ def main(argv=None) -> int:
             print(f"    fmtbuf : {f.fmt_buf}")
             print(f"    guards : {[str(g) for g in f.guards]}")
             print(f"    backfil: {[str(b) for b in f.backfills]}")
+            print(f"    interac: {{{', '.join(f'{hex(k)}: {v}' for k, v in f.interact.items())}}}")
+            print(f"    global : writes={[(hex(b), s, hex(c), l) for b, s, c, l in f.global_writes]} "
+                  f"calls={[(hex(s), hex(c)) for s, c in f.global_calls]}")
             if f.unknowns:
                 print(f"    unknown: {f.unknowns}")
             continue

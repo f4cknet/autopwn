@@ -1,4 +1,4 @@
-# ARCHITECTURE — autopwn.engine（v7.0.2 现状）
+# ARCHITECTURE — autopwn.engine（v7.4.2 现状）
 
 > 本文只描述**现在能跑的代码**（`autopwn/engine/`，约 3200 行）。
 > v4/v5 遗留链路（`autopwn/cli.py` 等）见 `README.md` 的「遗留入口」与 `v5_architecture.md`。
@@ -68,7 +68,7 @@
 | 字段 | 含义 |
 |---|---|
 | `vulns: [Vuln]` | 漏洞点：`sink`(read/gets/scanf/fgets)、`call_addr`、`buf_disp`(相对 rbp)、`offset`(到返回地址)、`size_limit`、`func_entry` |
-| `wins: [Win]` | 可直接跳的「赢」函数：`addr`、`kind`(**shell / flag / decoy**)、`evidence`、`alt`(跳过 prologue 的入口，修栈对齐)。`decoy` = 打中也拿不到 flag（`system("echo flag")` 这类），不生成计划 |
+| `wins: [Win]` | 可直接跳的「赢」函数：`addr`、`kind`(**shell / flag / decoy**)、`evidence`、`alt`(跳过 prologue 的入口，修栈对齐)、`arg_addr`(**v7.4.2** 参数字符串地址)。`decoy` = 打中也拿不到 flag（`system("echo flag")` 这类），不生成计划。shell 判据只认路径合法的 `sh`（`sh` / `/bin/sh` / `/bin//sh` / `/usr/bin/sh`，或 basename==`sh` 且 dirname 在镜像里存在） |
 | `gadgets` / `gadget_alts` | 常用 gadget；`alts` 是同类全部地址（用于绕 `\n` 等坏字节） |
 | `csu` | `__libc_csu_init` 的 (pop 链, call 链)，寄存器映射随编译器变 |
 | `mmap_rwx` | `mmap(PROT_EXEC)` 得到的固定 RWX 地址 |
@@ -77,7 +77,9 @@
 | `guards: [Guard]` | **v7.4.0** 输入 → win 的路径条件：`buf_kind/buf_addr/buf_disp`、`length`、`conds`（byte/dword/global/len）、`ones`、`status`（solved/fmt/unsupported/unsat/unknown）、`reason`、`marker`。只登记不执行 |
 | `backfills: [Backfill]` | **v7.4.0** `strncmp(input, 运行时串, n)` 的可回填点：`n`、成功 `marker`、`status`（backfill/unsupported/unprinted/unknown） |
 | `gates: [(disp, val)]` | `cmp dword [rbp-X], imm` 的「暗号」，溢出时必须写回 |
-| `interact: {func: [b"w\n"]}` | 菜单式题：进该函数前必须发的选择字符。**v7.3.1** 起也包含数字菜单（`scanf("%d")` + dispatch 进含 sink 的函数）候选 `b"1\n" / b"2\n" / b""` |
+| `interact: {func: [b"w\n"]}` | 菜单式题：进该函数前必须发的选择字符。**v7.3.1** 起也包含数字菜单（`scanf("%d")` + dispatch 进含 sink 的函数）候选 `b"1\n" / b"2\n" / b""`。**v7.4.2** 新增第二条数字菜单判据：函数内有任意输入调用（`read/gets/fgets/scanf/getchar/getline`）**且**常量段有 ≥2 个编号横幅 **且** 其后 60 条内有 ≥2 个 `[1..9]` 小常数比较或 `jmp [reg*W+disp]` 跳表 → 由横幅编号导出候选 |
+| `global_writes: [(buf, sink, call, limit)]` | **v7.4.2** 写全局缓冲区的 sink（`offset is None` 且 `_buf_is_global` 命中）：无栈溢出可谈，供「全局写 → 跳 win」使用 |
+| `global_calls: [(slot, call)]` | **v7.4.2** 可写全局槽上的间接调用（`call/jmp [abs]`、`[rip+disp]`、`call/jmp reg` 且回看到 `mov reg,[…]`），槽位必须 `_looks_writable` |
 | `sys_wrappers` / `sys_read` / `sys_load` | 无 libc 时的 `mov eax,NR … int 0x80` 包装（read=3） |
 | `data_addr` / `entry_sub` | 可写数据段起始；`_start` 的 `sub esp,imm`（重帧下移量） |
 | `callers` | 函数入口 → 调用点之后的下一条地址（PIE 部分覆盖要用） |
@@ -130,6 +132,7 @@ Plan(strategy: str, steps: list, desc: str = "", tag: str = "")
 | 8 | `ret2plt` | 有 `pop rdi` + `system@plt` + `/bin/sh` | — |
 | 9 | `ret2gets` | 有 `gets`/`read` + `system@plt` | 先写 `/bin/sh` 到 bss 再 system |
 | 10 | `ret2csu` | 无 `pop rdi`，有 `__libc_csu_init` | 按实际寄存器映射现拼 |
+| 10b | `global_write_win` | **v7.4.2** 全局缓冲写 + 近距离可写间接调用槽 + shell win | 在 `Facts.global_writes × global_calls` 里取 `0 < slot-buf <= min(limit,0x400)`；没有证据对不产出 |
 | 11 | `guard_backfill` | **v7.4.0** `strncmp(input, 运行时串, n)` | 读程序打印的 token，回填前 n 字节；只算 gate 证据 |
 | 12 | `canary_fmt` | canary + `printf(buf)` | 泄漏 canary → 泄漏 GOT → 回 main → system |
 | 13 | `ret2libc_write` | 只有 `write` 没有 `puts` | `write(1,got,8)` 泄漏，远程优先（无 stdio 缓冲） |
@@ -195,6 +198,8 @@ GitHub 直连受限，`pwndbg` / `pwninit` / `libc-database` 三项构建时跳�
 | 运行时地址占位的多阶段 | △ | `_try_canary_fmt` / `_try_pie_partial` 仍用专用流程（payload 含运行时 canary / PIE base） |
 | 参数化 win（`system(用户参数)`） | ✗ | `_find_wins` 只认常量串实参；434c 的 `win_func@0x80485bd`（`mov eax,[ebp+8]; call system`）因此 `wins=0`，登记为后续能力 |
 | PIE 全局 fmt 门 | ✗ | 无泄漏拿不到全局运行时地址；guard 记 `unsupported`，不产假计划 |
+| i386 static + 无 `/bin/sh` | ✗（v7.4.2c2 ⏳） | 需静态 ROP gadget + 先把 `"/bin/sh"` 写进 bss 再 `execve`；v7.4.2c1 只做归因与静态事实 |
+| `system("bash")` / `system("/bin/sh -c …")` | △ | v7.4.2 按验证方口径收紧：shell 只认 `sh` / `/bin/sh` / `/bin//sh` / `/usr/bin/sh`（或合法路径分量末位 `sh`） |
 
 ## 8. 与 v7 提案的差距
 

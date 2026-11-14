@@ -61,7 +61,12 @@
 | `v7.4.0b` | 守卫策略：`s_guard_write` / `s_guard_fmt` / `s_guard_backfill` + orchestrator `guard:*` 分派（不重试） | ✅ | 2h | @Minzhi_Zhou | [`v7.4.0b`](./upgraded/v7.4.0b.md) |
 | `v7.4.0c` | 证据态：`judge_gate` / `judge_win_executed`（A3：gate 通过继续 judge_shell）+ decoy 单次尝试 + CLI 计数 | ✅ | 1h | @Minzhi_Zhou | [`v7.4.0c`](./upgraded/v7.4.0c.md) |
 | `v7.5.0` | **P0**：holdout 评测 + 反过拟合门禁——`holdout/`（BUUCTF 等未做题，冻结、执行方禁读）+ 三指标（打通率 / 诊断准确率 / 盲试占比）+ 禁硬编码检查 | 🔄 | 3h | @Minzhi_Zhou | [`v7.5.0`](./upgraded/v7.5.0.md) |
-| `v7.4.1` | P1：payload 变换感知——题四/九 的输入经过字符变换（`'A'`→`'O'`），原样 payload 到不了返回地址 | ⏳ | 3h | @Minzhi_Zhou | 见 [`v7.3.1`](./upgraded/v7.3.1.md) §7.2 |
+| `v7.4.2` | **P1**：样本外盲测四缺口修复——A 数字菜单判据 / B 全局写→跳 win / C1 静态归因+事实 / D shell 路径收紧（9 题盲测 2/9 shell）；合成向量 29/29，三套回归持平 | ✅ | 4h | @Minzhi_Zhou | [`v7.4.2`](./upgraded/v7.4.2.md) |
+| `v7.4.2a` | 缺口 A + 缺陷 D：任意输入调用 + 编号横幅 + 小常数分派/跳表；shell 判据改路径合法性（精确白名单 + dirname 存在）；顺带修 `.plt/.plt.sec` 别名 | ✅ | 1.5h | @Minzhi_Zhou | [`v7.4.2a`](./upgraded/v7.4.2a.md) |
+| `v7.4.2b` | 缺口 B：`Facts.global_writes/global_calls` + `s_global_write_win`（全局缓冲 → 函数指针槽 → win） | ✅ | 1.5h | @Minzhi_Zhou | [`v7.4.2b`](./upgraded/v7.4.2b.md) |
+| `v7.4.2c1` | 缺陷 C1：静态题不再误报「PLT 映射为空」+ `_static_sym` / `_static_vulns` / 静态 win 符号 | ✅ | 1.5h | @Minzhi_Zhou | [`v7.4.2c1`](./upgraded/v7.4.2c1.md) |
+| `v7.4.2c2` | 缺陷 C2：i386 static ROP + `/bin/sh` 自构造（目标样本 static/bits=32/binsh=None） | ⏳ | 3h | @Minzhi_Zhou | [`v7.4.2`](./upgraded/v7.4.2.md) §6 |
+| `v7.4.1` | P1：payload 变换感知——题四/九 的输入经过字符变换（`'A'`→`'O'`），原样 payload 到不了返回地址；另并入 2 题交互观察（tail 只有 `Input: \nInput: \n` / 只到 banner，疑似多轮 prompt 对齐） | ⏳ | 3h | @Minzhi_Zhou | 见 [`v7.3.1`](./upgraded/v7.3.1.md) §7.2、[`v7.4.2`](./upgraded/v7.4.2.md) §6 |
 
 > `v7.3.0` 起因：2026-11-14 用 10 道新赛题做样本外测试得 **0 shell / 0 flag**；
 > 461 次尝试中 231 次为盲枚举偏移，且失败原因无法归因。结论：`Facts` 的 `None` 同时表示

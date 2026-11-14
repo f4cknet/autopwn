@@ -1,12 +1,13 @@
 """静态事实提取：漏洞调用点、偏移推导、win 函数、gadget、RWX、格式化字符串。"""
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Optional
 
 from capstone import Cs, CS_ARCH_X86, CS_MODE_32, CS_MODE_64
-from capstone.x86 import X86_OP_IMM, X86_OP_MEM
+from capstone.x86 import X86_OP_IMM, X86_OP_MEM, X86_OP_REG
 
 from .model import Challenge
 
@@ -70,6 +71,7 @@ class Win:
     kind: str            # shell | flag | decoy（decoy = 打中了也拿不到 flag，如 system("echo flag")）
     evidence: str
     alt: int = 0         # 跳过 push rbp / mov rbp,rsp 后的入口（ret 进来栈对齐差 8 时用它）
+    arg_addr: int = 0    # v7.4.2：常量实参字符串地址（参数化 win / 证据用）
 
     def __str__(self) -> str:
         return f"{self.kind}@{hex(self.addr)}({self.evidence})"
@@ -105,6 +107,9 @@ class Facts:
     # ---- v7.4.0 守卫层：输入 → win 的判定条件（逻辑校验题）
     guards: list = field(default_factory=list)      # [guard.Guard]
     backfills: list = field(default_factory=list)   # [guard.Backfill]
+    # ---- v7.4.2 全局写 → 跳 win（缺口 B）
+    global_writes: list = field(default_factory=list)  # [(buf, sink, call, limit)]
+    global_calls: list = field(default_factory=list)   # [(slot, call)]
 
     @property
     def shell_win(self) -> Optional[Win]:
@@ -412,13 +417,18 @@ def analyse(ch: Challenge) -> Facts:
         if v:
             f.vulns.append(v)
 
+    # ---- 调用关系（PIE 局部覆盖 ret 时要用）；静态事实提取也要 entries
+    entries = _func_entries(ch, d)
+
     if not f.vulns and ch.prot.static:
         v = _static_vuln(ch, d)
         if v:
             f.vulns.append(v)
 
-    # ---- 调用关系（PIE 局部覆盖 ret 时要用）
-    entries = _func_entries(ch, d)
+    # v7.4.2c1：旧 fallback 没找到时，从 main（及一层直接被调函数）找 sink 符号直呼
+    if not f.vulns and ch.prot.static:
+        f.vulns = _static_vulns(ch, d, entries)
+
     f.callers = _collect_callers(d, entries)
     for v in f.vulns:
         v.func_entry = _entry_of(v.call_addr, entries)
@@ -474,6 +484,9 @@ def analyse(ch: Challenge) -> Facts:
     f.fmt_buf = next((v for (_b, _d, v, _c) in f.fmt_sites if v is not None), None)
     f.echo_leak = _find_echo_vuln(f, ch, d)
     f.prompts = _find_prompts(ch, f, d)
+    # ---- v7.4.2 全局写 → 跳 win（缺口 B）：事实先行，策略只消费
+    f.global_writes = _find_global_writes(ch, d, f)
+    f.global_calls = _find_global_calls(ch, d)
     _audit_facts(ch, d, f, dropped)
 
     # ---- v7.4.0 守卫层（放在 audit 之后：可扩展 unknowns；异常不影响已有事实）
@@ -552,45 +565,179 @@ def _scanf_format(ch: Challenge, d: "Dis", call_idx: int) -> Optional[bytes]:
     return None
 
 
+INPUT_CALLS = {"read", "gets", "fgets", "scanf", "__isoc99_scanf",
+               "getchar", "getline"}
+
+
+def _scanf_addrs(ch: Challenge) -> set:
+    """scanf 的桩/符号地址集合（动态 = PLT；静态 = .text 符号）。
+
+    v7.4.2：`.plt` 与 `.plt.sec` 常同时映射同一符号（两个地址），
+    调用点可能落在任意一个；必须收全 plt_map，不能只取 `ch.plt(name)`。
+    """
+    out = {int(a) for a, n in ch.plt_map.items() if n in ("__isoc99_scanf", "scanf")}
+    for name in ("__isoc99_scanf", "scanf"):
+        s = _static_sym(ch, name)
+        if s:
+            out.add(int(s))
+    return out
+
+
+def _input_call_addrs(ch: Challenge) -> set:
+    """输入函数地址集合（read/gets/fgets/scanf/getchar/getline）。"""
+    out = {int(a) for a, n in ch.plt_map.items() if n in INPUT_CALLS}
+    for name in INPUT_CALLS:
+        s = _static_sym(ch, name)
+        if s:
+            out.add(int(s))
+    return out
+
+
+def _body_range(d: "Dis", lo: int, hi: int, max_len: int = 400) -> list:
+    """[lo, hi) 内的指令（最多 max_len 条）；lo 不在反汇编里返回空。"""
+    start = d.by_addr.get(lo)
+    if start is None:
+        return []
+    out = []
+    for ins in d.insns[start:start + max_len]:
+        if ins.address >= hi:
+            break
+        out.append(ins)
+    return out
+
+
+_MENU_ITEM = re.compile(r"^\s*[\[(]?([1-9])[.)\]:]\s*(\S.*)$")
+
+
+def _scan_menu_banners(ch: Challenge) -> dict:
+    """常量段里的编号菜单项 {编号: 标签}（v7.4.2 缺口 A）。
+
+    先按 NUL、再按换行切分，覆盖「1.Encrypt\\n2.Decrypt\\n3.Exit」单串多行菜单；
+    标签必须含字母或非 ASCII 字节，排除 `1.0` / `1.2.3` 版本串。
+    """
+    out: dict[int, str] = {}
+    for secname in (".rodata", ".data.rel.ro", ".data"):
+        sec = ch.elf.get_section_by_name(secname)
+        if sec is None or sec.header.sh_size == 0:
+            continue
+        try:
+            data = sec.data()
+        except Exception:
+            continue
+        for chunk in data.split(b"\x00"):
+            for line in chunk.split(b"\n"):
+                text = line.decode("latin-1", "ignore")
+                m = _MENU_ITEM.match(text)
+                if not m:
+                    continue
+                label = m.group(2).strip()
+                if not label:
+                    continue
+                if not (any(c.isalpha() for c in label)
+                        or any(ord(c) >= 0x80 for c in label)):
+                    continue
+                out.setdefault(int(m.group(1)), label)
+    return out
+
+
+def _menu_exit_label(label: str) -> bool:
+    low = label.lower()
+    return any(k in low for k in ("exit", "quit", "bye"))
+
+
+def _dispatch_evidence(body: list, after: int) -> bool:
+    """输入调用之后 60 条内出现「≥2 个不同的小常数 cmp/sub」或「计算跳转」。
+
+    这是「输入值被拿去分派」的证据：单看输入调用会把长度输入误当菜单，
+    所以横幅与分派证据缺一不可。
+    """
+    consts = set()
+    for ins in body[after + 1:after + 61]:
+        if ins.mnemonic in ("cmp", "sub"):
+            m = re.search(r",\s*(0x[0-9a-f]+|\d+)\s*$", ins.op_str)
+            if not m:
+                continue
+            try:
+                val = _imm(m.group(1))
+            except Exception:
+                continue
+            if 1 <= val <= 9:
+                consts.add(val)
+        if ins.mnemonic == "jmp" and re.search(r"\[[^\]]*\*[1248][^\]]*\]", ins.op_str):
+            return True
+    return len(consts) >= 2
+
+
 def _find_numeric_menu(ch: Challenge, d: "Dis", entries: list,
                        vuln_funcs: set) -> dict:
-    """数字菜单（v7.3.1）：`1.Encrypt 2.Decrypt 3.Exit` + `scanf("%d")` 选单。
+    """数字菜单：返回 {菜单函数入口: [b"1\\n", b"2\\n", b""]}。
 
-    现有 `_find_interact` 只认 `cmp al,imm` 的字符菜单，遇到「先输入编号进子功能」
-    的题就完全失效（题四 / 题九：payload 全打在菜单提示上）。
+    两条路径（结果合并；末尾永远保留空前缀，避免封死「不需要菜单」的尝试）：
 
-    判据收紧到「该函数确实 dispatch 进了含 sink 的函数」，避免把普通的
-    `scanf("%d")` 长度输入误当成菜单。返回 {dispatch 函数入口: [b"1\\n", b"2\\n", b""]}，
-    末尾保留空前缀，保证「不需要菜单」的尝试仍在计划集里。
+    1. **v7.3.1 旧路径**：`scanf("%d")` 所在函数直接 call 进含 sink 的函数。
+    2. **v7.4.2 新路径**（缺口 A）：同一函数同时满足
+       任意输入调用（覆盖 `read + atoi`、helper 读选择）
+       + 常量段有 ≥2 个编号横幅
+       + 输入调用后 60 条内有 ≥2 个 [1..9] 小常数比较或跳表；
+       候选由横幅编号导出（跳过 exit/quit/bye，最多 4 个）。
     """
-    scanf_p = ch.plt("__isoc99_scanf") or ch.plt("scanf")
-    vuln_funcs = {e for e in (vuln_funcs or set()) if e}
-    if not scanf_p or not vuln_funcs:
-        return {}
-    dispatchers: dict[int, list[int]] = {}
-    for n, ins in enumerate(d.insns):
-        if ins.mnemonic != "call" or not ins.operands:
-            continue
-        op = ins.operands[0]
-        if op.type != X86_OP_IMM or int(op.imm) not in vuln_funcs:
-            continue
-        dispatchers.setdefault(_entry_of(ins.address, entries), []).append(n)
     out: dict[int, list] = {}
-    for entry in dispatchers:
-        start = d.by_addr.get(entry)
-        if start is None:
-            continue
-        for n in range(start, min(start + 400, len(d.insns))):
-            ins = d.insns[n]
+
+    # ---- 路径 1：scanf("%d") + 直接 dispatch 进含 sink 的函数
+    scanf_addrs = _scanf_addrs(ch)
+    vuln_funcs = {e for e in (vuln_funcs or set()) if e}
+    if scanf_addrs and vuln_funcs:
+        dispatchers: dict[int, list[int]] = {}
+        for n, ins in enumerate(d.insns):
             if ins.mnemonic != "call" or not ins.operands:
                 continue
             op = ins.operands[0]
-            if op.type != X86_OP_IMM or int(op.imm) != scanf_p:
+            if op.type != X86_OP_IMM or int(op.imm) not in vuln_funcs:
                 continue
-            fmt = _scanf_format(ch, d, n)
-            if fmt and b"%d" in fmt:
-                out[entry] = [b"1\n", b"2\n", b""]
+            dispatchers.setdefault(_entry_of(ins.address, entries), []).append(n)
+        for entry in dispatchers:
+            body = _body_range(d, entry, entry + 0x100000, 400)
+            for n, ins in enumerate(body):
+                if ins.mnemonic != "call" or not ins.operands:
+                    continue
+                op = ins.operands[0]
+                if op.type != X86_OP_IMM or int(op.imm) not in scanf_addrs:
+                    continue
+                fmt = _scanf_format(ch, d, d.by_addr.get(ins.address, 0))
+                if fmt and b"%d" in fmt:
+                    bucket = out.setdefault(entry, [])
+                    for c in (b"1\n", b"2\n", b""):
+                        if c not in bucket:
+                            bucket.append(c)
+                    break
+
+    # ---- 路径 2：任意输入调用 + 编号横幅 + 小常数分派/跳表
+    inputs = _input_call_addrs(ch)
+    banners = _scan_menu_banners(ch)
+    if not inputs or len(banners) < 2:
+        return out
+    picked = [i for i in sorted(banners) if not _menu_exit_label(banners[i])]
+    if not picked:
+        return out
+    cands = [f"{i}\n".encode() for i in picked[:4]] + [b""]
+    for pos, entry in enumerate(entries):
+        hi = entries[pos + 1] if pos + 1 < len(entries) else entry + 0x100000
+        body = _body_range(d, entry, hi)
+        if not body:
+            continue
+        hit = None
+        for n, ins in enumerate(body):
+            if ins.mnemonic == "call" and ins.operands \
+                    and ins.operands[0].type == X86_OP_IMM \
+                    and int(ins.operands[0].imm) in inputs:
+                hit = n
                 break
+        if hit is None or not _dispatch_evidence(body, hit):
+            continue
+        bucket = out.setdefault(entry, [])
+        for c in cands:
+            if c not in bucket:
+                bucket.append(c)
     return out
 
 
@@ -610,6 +757,14 @@ def _buf_is_global(ch: Challenge, d: "Dis", call_addr: int) -> Optional[int]:
             info = _mov_imm(ins)
             if info and _looks_writable(ch, info[1]):
                 return info[1]
+        elif ins.mnemonic == "lea":
+            # x64 PIE / -no-pie 的全局地址常以 `lea rdi, [rip+disp]` 传入
+            m = re.match(r"^(r[a-z0-9]+|e[a-z]{2}), \[rip \+ (0x[0-9a-f]+|\d+)\]$",
+                         ins.op_str)
+            if m:
+                val = int(ins.address) + int(ins.size) + _imm(m.group(2))
+                if _looks_writable(ch, val):
+                    return val
         elif ins.mnemonic == "push":
             try:
                 val = _imm(ins.op_str)
@@ -618,6 +773,95 @@ def _buf_is_global(ch: Challenge, d: "Dis", call_addr: int) -> Optional[int]:
             if _looks_writable(ch, val):
                 return val
     return None
+
+
+def _find_global_writes(ch: Challenge, d: "Dis", f: "Facts") -> list:
+    """(buf, sink, call, limit)：写全局缓冲区的 sink（v7.4.2 缺口 B）。
+
+    只收 `offset is None` 的写入点——能推出栈偏移的按栈溢出处理，
+    归到全局写会让「本来能打的题」多出无效计划。
+    """
+    out = []
+    for v in f.vulns:
+        if v.offset is not None:
+            continue
+        buf = _buf_is_global(ch, d, v.call_addr)
+        if buf:
+            out.append((int(buf), v.sink, int(v.call_addr), v.size_limit))
+    return out
+
+
+def _mem_slot_addr(ins) -> Optional[int]:
+    """指令操作数里的内存槽地址（i386 绝对 / x64 rip 相对）；不是内存槽返回 None。"""
+    m = re.search(r"\[rip ([+-]) (0x[0-9a-f]+|\d+)\]", ins.op_str)
+    if m:
+        delta = _imm(m.group(2))
+        return int(ins.address) + int(ins.size) + (delta if m.group(1) == "+" else -delta)
+    m = re.search(r"\[(0x[0-9a-f]+)\]", ins.op_str)
+    if m:
+        return int(m.group(1), 16)
+    return None
+
+
+def _same_reg(a: str, b: str) -> bool:
+    """rax/eax、rdi/edi 这类同一寄存器的不同位宽写法。"""
+    if a == b:
+        return True
+    return len(a) >= 3 and len(b) >= 3 and a[1:] == b[1:]
+
+
+def _call_slot(d: "Dis", n: int) -> Optional[int]:
+    """第 n 条 call/jmp 的间接调用槽地址（v7.4.2）。"""
+    ins = d.insns[n]
+    if ins.mnemonic not in ("call", "jmp") or not ins.operands:
+        return None
+    op = ins.operands[0]
+    if op.type == X86_OP_MEM:
+        return _mem_slot_addr(ins)
+    if op.type != X86_OP_REG:
+        return None
+    reg = ins.reg_name(op.reg)
+    for k in range(n - 1, max(-1, n - 6), -1):
+        prev = d.insns[k]
+        if prev.mnemonic != "mov" or len(prev.operands) < 2:
+            continue
+        dst = prev.operands[0]
+        if dst.type != X86_OP_REG or not _same_reg(prev.reg_name(dst.reg), reg):
+            continue
+        if prev.operands[1].type != X86_OP_MEM:
+            continue
+        return _mem_slot_addr(prev)
+    return None
+
+
+def _find_global_calls(ch: Challenge, d: "Dis") -> list:
+    """(slot, call)：可写全局槽上的间接调用（v7.4.2 缺口 B）。
+
+    覆盖 `call/jmp [0x…]`、`call/jmp [rip+disp]`、`call/jmp reg`
+    （回看 5 条内 `mov reg,[…]`）；槽必须是可写段。
+    """
+    out, seen = [], set()
+    for n, ins in enumerate(d.insns):
+        if ins.mnemonic not in ("call", "jmp"):
+            continue
+        slot = _call_slot(d, n)
+        if slot is None or slot in seen or not _looks_writable(ch, slot):
+            continue
+        seen.add(slot)
+        out.append((int(slot), int(ins.address)))
+    return out
+
+
+def _global_win_pairs(f: "Facts") -> list:
+    """可用的 (gap, buf, sink, slot) 对；距离超过可写窗口的不算证据。"""
+    out = []
+    for buf, sink, _call, limit in getattr(f, "global_writes", []) or []:
+        span = min(limit or 0x400, 0x400)
+        for slot, _icall in getattr(f, "global_calls", []) or []:
+            gap = slot - buf
+            if 0 < gap <= span:
+                out.append((gap, buf, sink, slot))
+    return out
 
 
 def _funcs_with_file_open(ch: Challenge, d: "Dis", entries: list) -> set:
@@ -664,7 +908,13 @@ def _audit_facts(ch: Challenge, d: "Dis", f: Facts, dropped: list) -> None:
     下游策略**不得**据此盲猜（_offsets 的无证据兜底已默认关闭）。
     """
     if not ch.plt_map:
-        f.unknowns["sink"] = "PLT 映射为空：桩形态未识别（如 32 位 PIC 的 jmp [ebx+N]）"
+        if ch.prot.static:
+            # v7.4.2 缺陷 C1：静态链接本来就没有 PLT，不能当「桩形态未识别」误诊
+            if not f.vulns:
+                f.unknowns["sink"] = (
+                    "静态链接：无 PLT（正常）；symbol 直呼未定位到可溢出调用点")
+        else:
+            f.unknowns["sink"] = "PLT 映射为空：桩形态未识别（如 32 位 PIC 的 jmp [ebx+N]）"
     elif not f.vulns:
         if dropped:
             f.unknowns["sink"] = "sink 命中但被 win 规则整批剔除：" + \
@@ -692,6 +942,19 @@ def _audit_facts(ch: Challenge, d: "Dis", f: Facts, dropped: list) -> None:
     if decoys and not any(w.kind in ("shell", "flag") for w in f.wins):
         f.unknowns["win"] = "仅存在诱饵 win（打中也不产出 flag）：" + \
             ", ".join(w.evidence for w in decoys[:2])
+
+    # v7.4.2 缺口 B：全局写存在且有 shell win，但没有可用的 (buf, slot) 对 —— 归因
+    if f.global_writes and f.shell_win and not _global_win_pairs(f):
+        buf = f.global_writes[0][0]
+        if not f.global_calls:
+            f.unknowns["global_win"] = (
+                f"有全局写 {hex(buf)} 且有 shell win，但未找到可写的全局间接调用槽")
+        else:
+            nearest = min((slot - buf for slot, _c in f.global_calls
+                           if slot > buf), default=None)
+            f.unknowns["global_win"] = (
+                f"全局写 {hex(buf)} 到最近间接槽的距离 "
+                f"{hex(nearest) if nearest is not None else 'n/a'} 超出 0x400 可写窗口")
 
     if f.fmt_buf is None and _fmt_suspect(d, ch):
         f.unknowns["fmt"] = "printf 前有栈缓冲区 lea，但未确认该缓冲来自用户输入"
@@ -921,6 +1184,118 @@ def _static_vuln(ch: Challenge, d: Dis) -> Optional[Vuln]:
     return None
 
 
+def _static_sym(ch: Challenge, name: str) -> Optional[int]:
+    """静态二进制里的函数符号地址（只认 .text）；动态/未定义符号返回 None。"""
+    addr = ch.var(name)
+    if addr and _in_text(ch, int(addr)):
+        return int(addr)
+    return None
+
+
+_SINK_ALIASES = {
+    "gets": ("gets", "_IO_gets"),
+    "fgets": ("fgets", "_IO_fgets"),
+    "scanf": ("__isoc99_scanf", "scanf"),
+    "__isoc99_scanf": ("__isoc99_scanf", "scanf"),
+    "read": ("read", "__libc_read"),
+}
+
+_STATIC_LIB_STOP = set(SINKS) | {
+    "printf", "puts", "fwrite", "write", "system", "malloc", "free",
+    "strlen", "strcmp", "strncmp", "strcpy", "strcat", "sprintf",
+    "memcpy", "memmove", "atoi", "exit", "abort", "fprintf", "snprintf",
+    "__libc_start_main", "open", "fopen", "fread", "fputs",
+}
+
+
+def _static_reachable(d: "Dis", entries: list, root: int, depth: int = 2) -> set:
+    """从 main 出发 depth 层直接 call 可达的函数入口（静态 win 扫描范围）。
+
+    静态链接的 .text 里包含整个 libc；不限范围会把 `do_system` 这类内部函数
+    误当 win，因此只扫用户代码邻近的两层调用图。
+    """
+    idx = {e: i for i, e in enumerate(entries)}
+    if root not in idx:
+        return {root}
+    eset = set(entries)
+    seen, frontier = {root}, {root}
+    for _ in range(depth):
+        nxt = set()
+        for e in frontier:
+            i = idx[e]
+            hi = entries[i + 1] if i + 1 < len(entries) else e + 0x100000
+            for ins in _body_range(d, e, hi):
+                if ins.mnemonic == "call" and ins.operands \
+                        and ins.operands[0].type == X86_OP_IMM:
+                    t = int(ins.operands[0].imm)
+                    if t in eset and t not in seen:
+                        nxt.add(t)
+        seen |= nxt
+        frontier = nxt
+        if not frontier:
+            break
+    return seen
+
+
+def _static_vulns(ch: Challenge, d: "Dis", entries: list) -> list:
+    """静态链接：main 及一层直接被调函数里对 sink 符号的直呼（v7.4.2c1）。
+
+    只在既有 `_static_vuln`（_start→main 的窄 fallback）没找到 vuln 时调用，
+    ch10_static32 的现有路径优先级不变。不进入库函数体（按符号名停表），
+    否则 `gets` 内部的 `read` 会被误当成用户漏洞点。
+    """
+    sink_addrs: dict[int, str] = {}
+    for sink in SINKS:
+        for alias in _SINK_ALIASES.get(sink, (sink,)):
+            a = _static_sym(ch, alias)
+            if a:
+                sink_addrs.setdefault(a, sink)
+                break
+    if not sink_addrs:
+        return []
+    root = ch.var("main") or _derive_main(ch, d)
+    if not root:
+        return []
+    idx = {e: i for i, e in enumerate(entries)}
+    if root not in idx:
+        return []
+    stop = set(sink_addrs)
+    for name, addr in ch.elf.symbols.items():
+        if name in _STATIC_LIB_STOP and addr:
+            stop.add(int(addr))
+
+    def body_of(e: int) -> list:
+        i = idx[e]
+        hi = entries[i + 1] if i + 1 < len(entries) else e + 0x100000
+        return _body_range(d, e, hi)
+
+    scan = {root}
+    for ins in body_of(root):
+        if ins.mnemonic == "call" and ins.operands \
+                and ins.operands[0].type == X86_OP_IMM:
+            t = int(ins.operands[0].imm)
+            if t in idx and t not in stop:
+                scan.add(t)
+
+    out = []
+    for e in sorted(scan):
+        body = body_of(e)
+        for n, ins in enumerate(body):
+            if ins.mnemonic != "call" or not ins.operands:
+                continue
+            op = ins.operands[0]
+            if op.type != X86_OP_IMM:
+                continue
+            t = int(op.imm)
+            sink = sink_addrs.get(t)
+            if sink is None:
+                continue
+            win = body[max(0, n - 25):n + 1]
+            offset, disp, limit = _derive_offset(ch, win, sink)
+            out.append(Vuln(sink, ins.address, disp, offset, limit, t))
+    return out
+
+
 def _derive_offset(ch: Challenge, win: list, sink: str):
     """从一个 sink 调用点回溯，推导 缓冲区→返回地址 的距离。"""
     ptr = ch.wordsize
@@ -1092,6 +1467,31 @@ def _alt_entry(body: list, lo: int) -> int:
     return alt if alt != lo else 0
 
 
+def _win_kind(text: str) -> Optional[str]:
+    """win 实参的语义分类（v7.4.2 缺陷 D）：shell / flag / decoy / None。
+
+    旧判据 `endswith("sh")` 会把 `fish`、`push`、`/bbbb…?/sh` 判成 shell。
+    新判据只认路径合法且可执行的 sh：
+      * 精确白名单：`sh` / `/bin/sh` / `/bin//sh` / `/usr/bin/sh`；
+      * 或 basename == `sh` 且 dirname 在当前镜像里真实存在。
+    不匹配时按 flag / decoy 命令词继续判，仍不匹配则丢弃（不往假地址跳）。
+    """
+    t = text.strip()
+    low = text.lower()
+    shell = t in ("sh", "/bin/sh", "/bin//sh", "/usr/bin/sh")
+    if not shell and "/" in t:
+        head, _sep, base = t.rpartition("/")
+        shell = base == "sh" and bool(head) and os.path.isdir(head)
+    if shell:
+        return "shell"
+    if any(low.startswith(x) or x in low for x in FILE_READ_CMD):
+        return "flag"      # system("cat /flag")：真读文件
+    if any(low.startswith(x) or x in low for x in NON_SHELL_CMD):
+        # v7.3.1：system("echo flag") 只打印常量，不读文件 —— 是诱饵不是 win。
+        return "decoy"
+    return None
+
+
 def _find_wins(ch: Challenge, d: Dis) -> list[Win]:
     """找「函数体里直接 system/execve 一个 shell 字符串」的函数。"""
     wins: list[Win] = []
@@ -1102,11 +1502,32 @@ def _find_wins(ch: Challenge, d: Dis) -> list[Win]:
     # 没有 system/execve 也不能直接放弃：还有一种 win 是自己 open+puts 打印 flag
     _io_in = {a for a, n in ch.plt_map.items() if n in ("open", "fopen", "fread", "read")}
     _io_out = {a for a, n in ch.plt_map.items() if n in ("puts", "printf", "write", "fwrite", "fputs")}
+    entries = _func_entries(ch, d)
+    static_scan = None
+    if ch.prot.static:
+        # v7.4.2c1：静态题没有 PLT，只能按符号地址识别直呼。
+        # 扫描范围限 main 两层内可达的用户函数，避免把静态 libc 内部
+        # （如 do_system）误当 win；拿不到 main 就不扫（宁缺勿滥）。
+        for name in ("system", "execve", "execl", "execv", "execvp", "popen"):
+            a = _static_sym(ch, name)
+            if a:
+                targets.setdefault(a, name)
+        for name in ("open", "fopen", "openat", "read", "fread"):
+            a = _static_sym(ch, name)
+            if a:
+                _io_in.add(a)
+        for name in ("puts", "printf", "write", "fwrite", "fputs"):
+            a = _static_sym(ch, name)
+            if a:
+                _io_out.add(a)
+        root = ch.var("main") or _derive_main(ch, d)
+        static_scan = _static_reachable(d, entries, root) if root else set()
     if not targets and not (_io_in and _io_out):
         return wins
-    entries = _func_entries(ch, d)
     bounds = list(zip(entries, entries[1:] + [ch.elf.entry + 0x100000]))
     for lo, hi in bounds:
+        if static_scan is not None and lo not in static_scan:
+            continue
         start = d.by_addr.get(lo)
         if start is None:
             continue
@@ -1125,18 +1546,11 @@ def _find_wins(ch: Challenge, d: Dis) -> list[Win]:
             if not arg:
                 continue
             text, addr = arg
-            low = text.lower()
-            if "/bin/sh" in text or text.strip().endswith("sh"):
-                kind = "shell"
-            elif any(low.startswith(x) or x in low for x in FILE_READ_CMD):
-                kind = "flag"      # system("cat /flag")：真读文件
-            elif any(low.startswith(x) or x in low for x in NON_SHELL_CMD):
-                # v7.3.1：system("echo flag") 只打印常量，不读文件 —— 是诱饵不是 win。
-                # 判成 flag 会让「puts("flag")」类题假通过（AGENTS L3 伪造验收）。
-                kind = "decoy"
-            else:
+            kind = _win_kind(text)
+            if kind is None:
                 continue
-            wins.append(Win(lo, kind, f"{targets[op.imm]}(\"{text}\")", _alt_entry(body, lo)))
+            wins.append(Win(lo, kind, f"{targets[op.imm]}(\"{text}\")",
+                            _alt_entry(body, lo), arg_addr=addr))
     # ---- 还有一种 win：程序自己 open()/fopen() 读文件再 puts()/write() 打出来
     io_in, io_out = _io_in, _io_out
     if io_in and io_out:

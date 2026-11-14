@@ -3,7 +3,7 @@
 > 口径：所有「已解出」都必须有**可复现证据**（`results/*.json` 里有真实回显）。
 > 「策略跑完没报错」不算完成。`SHELL` 与 `FLAG-ONLY` 分开统计。
 
-最后更新：2026-11-14（v7.2.0）
+最后更新：2026-11-14（v7.4.2）
 
 ## 1. 版本演进
 
@@ -37,8 +37,9 @@
 | `v7.3.0` | 失败可见化：`Facts.unknowns/unreachable` 三态 + `_offsets` 盲枚举兜底默认关闭（`--allow-brute` 显式开启）+ 零计划报 `UNRESOLVED` + win 剔除改判 `open` 语义 | 10 题样本外：盲试 **231 → 0**，attempts **461 → 195**，5 题从静默 FAILED 变可归因；基线不变（13/15、5+1、4/4） |
 | `v7.3.1` | 事实层形态补全：32 位 PIC 桩多数票解 ebx 基址 / `_frame_size` 认 `add esp,-N` 且不跨函数 / fmt 支持 esp 缓冲与 `mov [esp],reg` 传参 / `echo` 类诱饵 win / 数字菜单 `scanf("%d")` / 全局缓冲区措辞 | 题一 plt_map **0→8**、题七 `fmt_buf` **None→88** 且 `off` **None→84**、题三报出 `0x6010c0`；基线不变 |
 | `v7.4.0` | L0.5 守卫层（`guard.py`）：输入 → win 路径条件求解（长度/字节/dword/全局/`strlen`/跨 call 返回谓词/两级守卫）、`strncmp` 回填、fmt 全局门；新增 `guard_write` / `guard_fmt` / `guard_backfill` / `ret2decoy`；`judge_gate` / `judge_win_executed` 为非成功证据态 | 样本外 5 题：**3 SHELL**（492f/4ee0/71b6，各 1 次）+ **1 GATE**（434c，`good job!!`，不记 shell）+ **1 win_executed**（fdfaa93a，诱饵 `echo flag`）；`bench_extra/fmtstr1` 顺带解开（6+1）；基线 13/15、4/4 不变 |
+| `v7.4.2` | 样本外盲测四缺口：A 数字菜单判据（任意输入调用 + 编号横幅 + 小常数分派/跳表）、B 全局写 → 跳 win（`global_writes`/`global_calls` + `s_global_write_win`）、C1 静态归因 + `_static_sym`/`_static_vulns`、D shell 路径合法性收紧 | 9 题盲测 2/9 的归因修复；C2（i386 static ROP + binsh 自构造）登记 ⏳；基线数字见 §2 |
 
-## 2. 当前基线（2026-11-14 v7.4.0 实测，`--max-attempts 80`，盲试默认关闭）
+## 2. 当前基线（2026-11-14 v7.4.2 回归实测，`--max-attempts 80`，盲试默认关闭）
 
 | 题库 | 规模 | shell | flag-only | 未解 |
 |---|---|---|---|---|
@@ -86,6 +87,9 @@
 | 运行时串回填（`strncmp`） | ✅（仅 gate 证据） | `guard_backfill` | `434ced45`（v7.4.0） |
 | 诱饵 win 证据（`system("echo …")`） | ✅（不记 shell） | `ret2decoy` | `fdfaa93a`（v7.4.0） |
 | 菜单式（需前置 `'w'`） | ✅ | `interact` + `ret2win_flag` | `chellenges/note` |
+| 数字菜单（`read`+`atoi` / helper 分派 / 跳表） | ✅（v7.4.2 A） | `_find_numeric_menu` 双路径 | `scripts/test/v742_vectors.py` |
+| 全局写 → 函数指针槽 → win | ✅（v7.4.2 B） | `global_write_win` | `scripts/test/v742_vectors.py` |
+| 静态二进制事实（无 PLT 归因 / 符号直呼 sink） | ✅（v7.4.2 C1，事实层） | `_static_sym` / `_static_vulns` | `bench/ch10_static32 --facts-only`；C2 未覆盖 |
 | 交互层（`Send` / `Wait`） | ✅ | `interact.Interaction` | `scripts/test/interaction_vector.py`；菜单题 `note` |
 | canary + 回显泄漏（无 fmt） | ✅ | `canary_echo` | `chellenges/repeater` |
 | stripped（无 main 符号） | ✅ | `_start` 推 main | `chellenges/repeater` |

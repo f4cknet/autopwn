@@ -22,12 +22,38 @@
 
 ## 1. 基础环境（15 分钟，其中镜像构建最久）
 
+### 1.1 按发行版选一组
+
+**Debian / Ubuntu：**
+
 ```bash
 apt update && apt install -y docker.io git python3 python3-pip
 systemctl enable --now docker
 ```
 
-建镜像（**只做一次**，Dockerfile 里有 i386 多架构 + gdb/ropper，10–20 分钟）：
+**RHEL 系（TencentOS / CentOS / OpenCloudOS / openEuler）：**
+
+```bash
+dnf install -y docker git python3 python3-pip || yum install -y docker git python3 python3-pip
+systemctl enable --now docker
+
+# Python 必须 ≥3.7（脚本用了 `from __future__ import annotations`）
+python3 -V            # 若是 3.6，装高版本：
+dnf install -y python39 || dnf install -y python3.11
+# 之后所有 `python3` 换成 `python3.9`（或对应路径）
+```
+
+> **TencentOS 的三个额外坑**（Debian 系不会遇到）：
+>
+> | 坑 | 检查 | 处理 |
+> |---|---|---|
+> | SELinux Enforcing → docker 挂载被拒 | `getenforce` | `chcon -Rt container_file_t /srv/autopwn`（或临时 `setenforce 0` 验证） |
+> | 自带 Node 版本过低（Claude Code 要 ≥18） | `node -v` | `curl -fsSL https://rpm.nodesource.com/setup_20.x \| bash - && dnf install -y nodejs` |
+> | 没有 `apt`，也没有 `install -m` 的 BSD 语义差异 | — | `install` 是 coreutils，RHEL 上行为一致，`deploy.sh` 可直接用 |
+
+### 1.2 建镜像（**只做一次**，10–20 分钟）
+
+Dockerfile 里有 i386 多架构 + gdb/ropper，首次构建最久：
 
 ```bash
 cd /path/to/autopwn && bash docker/build.sh
@@ -36,7 +62,7 @@ cd /path/to/autopwn && bash docker/build.sh
 **验收**：
 ```bash
 docker run --rm autopwn:pwn22 python3 -c "import pwn;print('pwn ok')"
-# 期望打印 pwn ok
+# 期望打印 pwn ok（这一步与宿主发行版无关）
 ```
 
 ---
@@ -44,6 +70,7 @@ docker run --rm autopwn:pwn22 python3 -c "import pwn;print('pwn ok')"
 ## 2. 装 Claude Code（每个用户各自一份配置）
 
 ```bash
+node -v            # 必须 ≥18，RHEL 系常见是 10/16，需要先升级
 npm i -g @anthropic-ai/claude-code   # 或按官方脚本
 claude --version
 ```

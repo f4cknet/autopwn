@@ -51,14 +51,15 @@
 | `v7.0.0` | 架构提案：四层管线（目标模型 / 交互规划 / 能力注册 / 判定归因） | 📝 | 3h | @Minzhi_Zhou | [`v7.0.0`](./upgraded/v7.0.0.md) |
 | `v7.0.2` | **P0**：三处判定合并为统一 `Oracle`（`verify_shell` / `probe_flag` / `_try_pie_partial`） | ✅ | 1.5h | @Minzhi_Zhou | [`v7.0.2`](./upgraded/v7.0.2.md) |
 | `v7.0.3` | P1：repeater 解锁——`_find_fmt` 误报修复（printf 参数是常量串）、`_start` 推导 main、canary-echo 泄漏 + 对齐重入 ret2libc 策略 | ✅ | 5h | @Minzhi_Zhou | [`v7.0.3`](./upgraded/v7.0.3.md) |
-| `v7.0.4` | P1：远程 libc 识别——双符号 low12 指纹（LibcSearcher / libc.rip）自动匹配 libc，解锁「无自带 libc 的远程 ret2libc」 | 🚧 | 4h | @Minzhi_Zhou | [`v7.0.4`](./upgraded/v7.0.4.md) |
+| `v7.0.4` | P1：远程 libc 识别——双符号 low12 指纹（LibcSearcher / libc.rip）自动匹配 libc，解锁「无自带 libc 的远程 ret2libc」 | ✅ | 3.5h | @Minzhi_Zhou | [`v7.0.4`](./upgraded/v7.0.4.md) |
 
-> `v7.0.4` 实施中：远程 repeater 已真取 flag，本地回归已过，待收尾提交。
+> `v7.0.4` 已完成：远程 repeater 真取 flag（2/2），本地回归全部保持基线。
 
 ### 2.2 已完成（v6 系列）
 
 | ID | 摘要 | 状态 | 实际 | 详情 |
 |---|---|---|---|---|
+| `v7.0.4` | 远程 libc 识别：`libcsearch.py` low12 指纹 + 候选轮换；repeater 远程真取 flag | ✅ | 3.5h | [`v7.0.4`](./upgraded/v7.0.4.md) |
 | `v7.0.3` | repeater 解锁：fmt 误报修复 + `_start` 推 main + `canary_echo` 策略（真拿 shell 3/3） | ✅ | 5h | [`v7.0.3`](./upgraded/v7.0.3.md) |
 | `v7.0.2` | L3 判定统一：`oracle.py`（`judge_shell`/`judge_flag`）+ 全仓库唯一 `FLAG_RE` + `cause` 留痕 | ✅ | 1.5h | [`v7.0.2`](./upgraded/v7.0.2.md) |
 | `v7.0.1` | L1 交互层：`Plan.steps`（`Send`/`Wait`）、统一收发时序、修复 ret2libc 前缀丢失 | ✅ | 2h | [`v7.0.1`](./upgraded/v7.0.1.md) |

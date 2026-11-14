@@ -67,6 +67,7 @@
 | `v7.4.2c1` | 缺陷 C1：静态题不再误报「PLT 映射为空」+ `_static_sym` / `_static_vulns` / 静态 win 符号 | ✅ | 1.5h | @Minzhi_Zhou | [`v7.4.2c1`](./upgraded/v7.4.2c1.md) |
 | `v7.4.2c2` | 缺陷 C2：i386 static ROP + `/bin/sh` 自构造（目标样本 static/bits=32/binsh=None） | ⏳ | 3h | @Minzhi_Zhou | [`v7.4.2`](./upgraded/v7.4.2.md) §6 |
 | `v7.4.1` | P1：payload 变换感知——题四/九 的输入经过字符变换（`'A'`→`'O'`），原样 payload 到不了返回地址；另并入 2 题交互观察（tail 只有 `Input: \nInput: \n` / 只到 banner，疑似多轮 prompt 对齐） | ⏳ | 3h | @Minzhi_Zhou | 见 [`v7.3.1`](./upgraded/v7.3.1.md) §7.2、[`v7.4.2`](./upgraded/v7.4.2.md) §6 |
+| `v7.6.0` | P1：多 agent 无人值守迭代框架——`scripts/agent/`（supervisor 纯 Python 裁决 / 冻结评测器 / 双角色 prompt / deploy）+ 服务器部署指南；裁决权归脚本，Agent 只交代码与归因 | 🔄 | 4h | @Minzhi_Zhou | [`v7.6.0`](./upgraded/v7.6.0.md) |
 
 > `v7.3.0` 起因：2026-11-14 用 10 道新赛题做样本外测试得 **0 shell / 0 flag**；
 > 461 次尝试中 231 次为盲枚举偏移，且失败原因无法归因。结论：`Facts` 的 `None` 同时表示

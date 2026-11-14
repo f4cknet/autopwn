@@ -36,20 +36,24 @@
 | `v7.2.0` | canary_fmt 五 bug 修复 + hints 排序 + ret2libc_write 远程识别（csu 双块链修复 + write 型双段解析） | **cannary/ae3f 本地远程全解**；cc7e 判定能力边界；基线不变 |
 | `v7.3.0` | 失败可见化：`Facts.unknowns/unreachable` 三态 + `_offsets` 盲枚举兜底默认关闭（`--allow-brute` 显式开启）+ 零计划报 `UNRESOLVED` + win 剔除改判 `open` 语义 | 10 题样本外：盲试 **231 → 0**，attempts **461 → 195**，5 题从静默 FAILED 变可归因；基线不变（13/15、5+1、4/4） |
 | `v7.3.1` | 事实层形态补全：32 位 PIC 桩多数票解 ebx 基址 / `_frame_size` 认 `add esp,-N` 且不跨函数 / fmt 支持 esp 缓冲与 `mov [esp],reg` 传参 / `echo` 类诱饵 win / 数字菜单 `scanf("%d")` / 全局缓冲区措辞 | 题一 plt_map **0→8**、题七 `fmt_buf` **None→88** 且 `off` **None→84**、题三报出 `0x6010c0`；基线不变 |
+| `v7.4.0` | L0.5 守卫层（`guard.py`）：输入 → win 路径条件求解（长度/字节/dword/全局/`strlen`/跨 call 返回谓词/两级守卫）、`strncmp` 回填、fmt 全局门；新增 `guard_write` / `guard_fmt` / `guard_backfill` / `ret2decoy`；`judge_gate` / `judge_win_executed` 为非成功证据态 | 样本外 5 题：**3 SHELL**（492f/4ee0/71b6，各 1 次）+ **1 GATE**（434c，`good job!!`，不记 shell）+ **1 win_executed**（fdfaa93a，诱饵 `echo flag`）；`bench_extra/fmtstr1` 顺带解开（6+1）；基线 13/15、4/4 不变 |
 
-## 2. 当前基线（2026-11-14 v7.3.1 实测，`--max-attempts 80`，盲试默认关闭）
+## 2. 当前基线（2026-11-14 v7.4.0 实测，`--max-attempts 80`，盲试默认关闭）
 
 | 题库 | 规模 | shell | flag-only | 未解 |
 |---|---|---|---|---|
 | `bench/` | 15 | **13** | 0 | `ch07_acae`、`ch14_easyheap`（菜单式堆） |
-| `bench_extra/` | 8 | **5** | 1 | `chall`（SROP）、`fmtstr1`（20 字节 fmt） |
+| `bench_extra/` | 8 | **6** | 1 | `chall`（SROP） |
 | `bench_sys/` | 4 | **4** | 0 | — |
-| `chellenges/`（原始赛题，**样本外**） | 33 | **0** | 0 | 见下 |
+| `chellenges/`（原始赛题，**样本外**） | 33 | **3+（抽测）** | 0 | 全量未逐题重跑 |
 
 > **`chellenges/` 自 v7.0.3 起是样本外题目，不是验收集。**
-> 2026-11-14 抽 10 题实测 **0 shell / 0 flag**，逐题归因见
+> v7.3.0 抽 10 题实测 0 shell / 0 flag，逐题归因见
 > [`upgraded/v7.3.0.md`](./upgraded/v7.3.0.md) §1.1 与 [`v7.3.1`](./upgraded/v7.3.1.md) §7.2。
-> 现存已知可解项：`repeater`（v7.0.3 `canary_echo`）、`note`/`pwn`（flag-only）。
+> **v7.4.0 抽 5 题（样本外）**：`492fad50` / `4ee0fc91` / `71b6d3ae` → **SHELL**（各 1 次），
+> `434ced45` → **GATE**（`good job!!`，不记 SHELL），`fdfaa93a` → **win_executed**（诱饵 win，不记 AC）。
+> 其余题未逐题重跑，不写「已覆盖」。现存已知可解项：`repeater`（v7.0.3 `canary_echo`）、
+> `note`/`pwn`（flag-only）、上述 5 题（v7.4.0）。
 
 逐题明细：`bench/RESULTS.md`（含每题的策略、偏移、关键参数）；远程实打记录：`results/remote/FLAGS.md`。
 
@@ -75,6 +79,10 @@
 | fmt 改 GOT | ✅ | `fmtstr` | ch02 |
 | 只出 flag（`system("cat flag")`） | ✅ | `ret2win_flag` | ch04 备用路径 |
 | 只出 flag（自读 `open`+`puts`） | ✅ | `ret2win_flag` | `bench_extra/ret2win` |
+| 逻辑校验（长度/字节/dword/全局/跨 call 返回谓词） | ✅ | `guard_write` | `492fad50`、`4ee0fc91`（v7.4.0） |
+| fmt 写全局门 | ✅ | `guard_fmt` | `71b6d3ae`、`bench_extra/fmtstr1`（v7.4.0） |
+| 运行时串回填（`strncmp`） | ✅（仅 gate 证据） | `guard_backfill` | `434ced45`（v7.4.0） |
+| 诱饵 win 证据（`system("echo …")`） | ✅（不记 shell） | `ret2decoy` | `fdfaa93a`（v7.4.0） |
 | 菜单式（需前置 `'w'`） | ✅ | `interact` + `ret2win_flag` | `chellenges/note` |
 | 交互层（`Send` / `Wait`） | ✅ | `interact.Interaction` | `scripts/test/interaction_vector.py`；菜单题 `note` |
 | canary + 回显泄漏（无 fmt） | ✅ | `canary_echo` | `chellenges/repeater` |
@@ -97,11 +105,15 @@
 | `bench_extra/fmtstr1` | 输入限制 20 字节，写不动 GOT |
 | `chellenges/repeater` | ✅ v7.0.3 已解（`canary_echo`）；远程形态 v7.0.4 已解（`libcsearch` 自动识别 2.23，dasctf TLS 实例真取 flag）。复盘结论：①stripped 无 main 符号 → `_start` 推导；②`fmt=48` 是误报（`_find_fmt` 已修）；③canary 在 buf+40 → 盖 LSB 后 puts 回显带出高 7 字节；④远程 libc≠本地 → 双符号 low12 指纹 + 候选轮换 |
 | ORW 型 | 需要自拼 open/read/write，属人工范畴（见 v7 文档 §5「明确不做的事」） |
+| `434ced45`（gate 后无命令执行） | `win_func@0x80485bd`（`mov eax,[ebp+8]; call system`）是**参数化 win**，`_find_wins` 只认常量串实参；off=23 的栈溢出路径未纳入 v7.4.0 范围。本轮只记 `gate_passed` 证据，不伪造 SHELL |
+| PIE 全局 fmt 门 | 无泄漏拿不到全局运行时地址 → `status="unsupported"`，不产假计划 |
+| 回填「未打印」边界 | 调用者不打印待比较串 → `status="unprinted"`，运行期报「未观察到可回填的打印串」，不盲猜 token |
 
 ## 5. 下一步（按投入产出）
 
 | 优先级 | 任务 | 理由 |
 |---|---|---|
+| P1 | 参数化 win / ret2win-with-arg（`system(用户参数)` + `cat flag`） | 434c 的 facts 缺口（v7.4.0 B2）；也是「gate 后执行命令」类题的通用能力 |
 | P1 | prompt→read 绑定校验（同函数多 prompt 时选对） | v7.1.0 遗留；先取最外层入口提示的启发式已可用 |
 | P1 | L2 能力声明式注册（`requires`/`forbids`/`evidence`） | 去掉「策略顺序 + 各自 early-return」的隐式耦合（`_find_wins` 曾因此埋掉一整类题） |
 | P1 | 补 libc-database / 或支持「按泄漏找 libc」 | 解锁 `repeater` 这类题 |

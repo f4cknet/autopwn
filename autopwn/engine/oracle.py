@@ -25,8 +25,8 @@ UID_RE = re.compile(rb"uid=\d+\([^)]*\)")
 @dataclass
 class Verdict:
     ok: bool
-    kind: str          # "shell" | "flag" | "file" | "none"
-    cause: str         # marker | uid | flag_re | no_flag_file | no_match
+    kind: str          # "shell" | "flag" | "file" | "gate" | "win" | "none"
+    cause: str         # marker | uid | flag_re | no_flag_file | gate_passed | win_executed | no_match
     detail: str = ""   # 命中的 flag / uid 串（拼接进 note 用）
 
 
@@ -37,6 +37,31 @@ def judge_shell(out: bytes) -> Verdict:
     m = UID_RE.search(out)
     if m:
         return Verdict(True, "shell", "uid", m.group(0).decode("latin-1", "replace"))
+    return Verdict(False, "none", "no_match")
+
+
+def judge_gate(out: bytes, marker: bytes = b"") -> Verdict:
+    """门控通过：**证据态，不是成功**（`ok=False`，不参与 shell/flag 记账）。
+
+    只认调用方从静态事实里拿到的门控串（如 434c 的 `good job!!`）；
+    程序随机输出/提示语不算。门控通过后是否真执行了命令，由调用方
+    继续交给 judge_shell 判（A3）。
+    """
+    if marker and marker in out:
+        return Verdict(False, "gate", "gate_passed",
+                       "gate passed: " + marker.decode("latin-1", "replace").strip())
+    return Verdict(False, "none", "no_match")
+
+
+def judge_win_executed(out: bytes, marker: bytes = b"") -> Verdict:
+    """诱饵 win 真的被执行：**证据态，不是成功**（`ok=False`）。
+
+    只证明控制流到达 win（如 `system("echo flag")` 的回显），不产出 flag；
+    不参与 shell/flag 记账。
+    """
+    if marker and marker in out:
+        return Verdict(False, "win", "win_executed",
+                       "win executed: " + marker.decode("latin-1", "replace").strip())
     return Verdict(False, "none", "no_match")
 
 

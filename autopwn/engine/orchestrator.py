@@ -12,7 +12,7 @@ from typing import Optional
 from .facts import Facts, analyse
 from .interact import Interaction, StepError
 from .model import Challenge
-from .oracle import judge_flag
+from .oracle import judge_flag, judge_gate, judge_win_executed
 from .run import Result, execute, execute_flag, spawn, verify_shell, _verify_timeout
 from . import strategies as S
 
@@ -205,6 +205,18 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
                 ok, detail, out = r.ok, r.note, r.output
                 att = Attempt(plan.strategy, plan.desc, ok, time.time() - t1,
                               r.output, r.error, cause=r.cause)
+            elif plan.tag.startswith("decoy:"):
+                # A3：诱饵 win 显式打 1 次。控制流到达 = 证据，但 ok 恒为 False，
+                # 不参与 SHELL/FLAG 记账（echo 参数不是 flag，更不是命令执行）。
+                r = execute_flag(ch, plan.steps)
+                try:
+                    marker = bytes.fromhex(plan.tag.partition("decoy:")[2])
+                except ValueError:
+                    marker = b""
+                v = judge_win_executed(r.output, marker)
+                ok, detail, out = False, v.detail, r.output
+                att = Attempt(plan.strategy, plan.desc, False, time.time() - t1,
+                              out, v.detail, cause=v.cause)
             else:
                 r = execute(ch, plan.steps, post_cmds=post_cmds)
                 if not r.ok and r.error:
@@ -246,6 +258,12 @@ def solve(ch: Challenge, max_attempts: int = 80, verbose: bool = True,
             ev = "GATE: 门控通过但未执行命令；不记为 SHELL/FLAG"
             res.error = (res.error + "；" + ev) if res.error else ev
             res.detail = gate.output[-200:].decode("latin-1", "replace").strip()
+        # v7.4.0：诱饵 win 被执行 -> 只证明控制流到达，同样不置 ok=True
+        win = next((a for a in res.attempts if a.cause == "win_executed"), None)
+        if win is not None:
+            ev = "WIN: 诱饵 win 已执行（仅回显固定串）；不记为 SHELL/FLAG"
+            res.error = (res.error + "；" + ev) if res.error else ev
+            res.detail = win.output[-200:].decode("latin-1", "replace").strip()
     return res
 
 
@@ -311,14 +329,14 @@ def _try_guard_backfill(ch: Challenge, f: Facts, plan: S.Plan):
             except Exception:
                 break
             if not chunk:
-                if marker and marker in out:
+                if judge_gate(out, marker).cause == "gate_passed":
                     break
                 continue
             out += chunk
-            if marker and marker in out:
+            if judge_gate(out, marker).cause == "gate_passed":
                 break
 
-        if marker and marker in out:
+        if judge_gate(out, marker).cause == "gate_passed":
             # 3) A3：门控通过后继续判 shell；只有真回显才记 SHELL
             r = verify_shell(p, timeout=_verify_timeout(ch))
             combined = out + r.output

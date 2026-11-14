@@ -30,7 +30,7 @@
                     └──────┬───────┘
                            ▼
                     ┌──────────────┐
-                    │ strategies.py│  20 个策略：facts → Plan 候选（纯函数，不产生副作用）
+                    │ strategies.py│  21 个策略：facts → Plan 候选（纯函数，不产生副作用）
                     └──────┬───────┘
                            ▼
                     ┌──────────────┐
@@ -46,7 +46,7 @@
                     └──────┬───────┘
                            ▼
                     ┌──────────────┐
-                    │  oracle.py   │  判定唯一实现：judge_shell / judge_flag / Verdict(cause)
+                    │  oracle.py   │  判定唯一实现：judge_shell / judge_flag / judge_gate / judge_win_executed / Verdict(cause)
                     └──────────────┘
 ```
 
@@ -107,10 +107,12 @@ Plan(strategy: str, steps: list, desc: str = "", tag: str = "")
 | `pie:<tgt>:<nib>:<kind>` | PIE 部分覆盖 | `_try_pie_partial()` |
 | `guard:shell` / `guard:flag` | **v7.4.0** 输入直接满足 win 前判定条件（write/fmt 两种载荷） | `execute()` / `execute_flag()`，失败不重试 |
 | `guard:backfill:<n>:<marker_hex>` | **v7.4.0** 回填运行时打印的串；只产出 gate 证据（除非随后真拿到 shell） | `_try_guard_backfill()` |
+| `decoy:<marker_hex>` | **v7.4.0** 诱饵 win 显式打 1 次，只证明控制流到达（`win_executed`，不记 SHELL/FLAG） | `execute_flag()` + `judge_win_executed()` |
 
 ### `run.Result` / `orchestrator.SolveResult`
 `Result(ok, output, note, error, cause, cmds)`；`cause` 来自 oracle（`marker` / `uid` / `flag_re` /
-`no_flag_file` / `no_match`），落到 `attempts[].cause` 供归因。
+`no_flag_file` / `gate_passed` / `win_executed` / `no_match`），落到 `attempts[].cause` 供归因。
+后两者是**证据态**（`ok=False`）：gate 通过没执行命令、诱饵 win 被执行，都不参与 shell/flag 记账。
 `SolveResult` 额外含 `strategy/detail/elapsed/attempts/facts/flag_only`，
 整体序列化到 `results/<题名>.json`（含每次尝试的 tail，复盘用）。
 
@@ -138,6 +140,7 @@ Plan(strategy: str, steps: list, desc: str = "", tag: str = "")
 | 18 | `canary_echo` | canary + `read` 溢出 + `puts(同 buf)` | 回显泄漏 canary → 对齐重入 ret2libc |
 | 19 | `fmtstr` | `printf(buf)` + 可写 GOT | `fmtstr_payload` 改 GOT |
 | 20 | `ret2win_flag` | 只出 flag 的题（兜底） | 不算 shell，记 `FLAG-ONLY` |
+| 21 | `ret2decoy` | **v7.4.0** 只有诱饵 win（`system("echo flag")`） | 显式打 **1 次**，只记 `win_executed` 证据，不算 shell/flag |
 
 ## 5. 判定链（`run.py`）
 
@@ -156,6 +159,8 @@ send 分阶段（`interact.Interaction.run_steps`，唯一实现）：
 判定（`oracle.py`，唯一实现）：
   ├── judge_shell(out): PWNED_42 回显（marker）或 uid=…（uid）→ ok；cause 记来源
   ├── judge_flag(out):  FLAG_RE 真 flag 优先，其次 No such file → win reached（no_flag_file）
+  ├── judge_gate(out, marker):     门控串命中 → gate_passed（ok=False，仅证据）
+  ├── judge_win_executed(out, marker): echo 参数回显 → win_executed（ok=False，仅证据）
   └── 判定函数是纯函数：喂累积输出，返回 Verdict；I/O 时序留在 run.py
 ```
 
@@ -188,6 +193,8 @@ GitHub 直连受限，`pwndbg` / `pwninit` / `libc-database` 三项构建时跳�
 | ORW 型（无现成 win） | ✗ | 需要自拼 open/read/write，等同普通 ROP，属人工范畴 |
 | 多轮交互（prompt 驱动） | △ | `Wait(prompt)` 已能表达；但 `facts.py` 还不提取 prompt，策略目前只自动插静默 Wait |
 | 运行时地址占位的多阶段 | △ | `_try_canary_fmt` / `_try_pie_partial` 仍用专用流程（payload 含运行时 canary / PIE base） |
+| 参数化 win（`system(用户参数)`） | ✗ | `_find_wins` 只认常量串实参；434c 的 `win_func@0x80485bd`（`mov eax,[ebp+8]; call system`）因此 `wins=0`，登记为后续能力 |
+| PIE 全局 fmt 门 | ✗ | 无泄漏拿不到全局运行时地址；guard 记 `unsupported`，不产假计划 |
 
 ## 8. 与 v7 提案的差距
 

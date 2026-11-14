@@ -343,3 +343,49 @@ fmt 判定矩阵（修复后）：
 | 修复 ⑤ | **cannary 远程打穿**：win 直跳分支原限定 `not host`（本地），远程落到 ret2libc 分支需要 pop_rdi（cannary 没有）→ 必败。修正为本地/远程通吃（backdoor 自带 execve，无参数需求，不依赖 libc）→ 远程 `=> SHELL canary_fmt -> win`，`cat /flag` 真取 `CTF2{891eecf6-…}` |
 | 修复 ⑥ | `verify_shell` 加空读容忍：远程 TLS/socat 的 shell 输出可能延迟超过 1 个 wait 窗口，首个空读直接 break 会把活 shell 判负；timeout>3s（远程）时空读容忍 1 次 |
 | 修复 ⑦ | **ae3f24d3 远程打穿**：`ret2libc_write`（csu 泄漏型）没有接 v7.0.4 的远程 libc 识别——本地 2.35 偏移打远程 2.23 → core dump。三处补齐：①`s_ret2libc_write` 远程无 libc 时双泄（write + read/printf GOT）；②**csu 双块连用的链错位修复**——第二块不能重复 `p64(A)`（pop 槽会把它当值消费），直接续 6 参数 + call 块（手工 GDB 实证）；③`_parse_leaks` 支持 write 型连续 16 字节双段解析（原只认 puts 行分隔）→ 远程 `remote-libc[libc6_2.23]` 自动识别，真取 `CTF2{163031b6-…}` |
+
+---
+
+## 17. v7.4.0 守卫分析：逻辑校验 / 回填 / 诱饵 win（2026-11-14）
+
+> 全部为**样本外**赛题（`chellenges/`，未参与调参）。命令在仓库根目录执行；
+> `--facts-only` 可先看 `guards` / `backfil` / `unknown`，再真打。
+
+| # | 二进制 | 策略 | 载荷 / 交互 | 期望结果 |
+|---|---|---|---|---|
+| 1 | `chellenges/492fad5075a97028c5d87632a6012695e984851ccdd7474d02fcfb9b4e9fed28` | `guard_write` | 121 B：`dead-` + 111 字节 + `-beef`（约束构造，不写死） | `=> SHELL guard_write uid=0(root)`，1 次 |
+| 2 | `chellenges/4ee0fc91df7c8128f4b660c68e40ca64fc2064ef45505ee387d398628a0be453` | `guard_write` | 53 B：`A*0x34 + \x11`；`dword[0x38]` 由 `.bss` 零值保证 | `=> SHELL guard_write uid=0(root)`，1 次 |
+| 3 | `chellenges/71b6d3ae9f85667e0f275d9f41ac4d8c96e2b366744ad3942049a3175a65ebf8` | `guard_fmt` | `%p` 探针 arg#11；`fmtstr_payload` `write_size=byte` 写 `0x804a02c=4` | `=> SHELL guard_fmt uid=0(root)`，1 次 |
+| 4 | `chellenges/434ced4523885b245513a32a867390f445565390be82abb520a94af1e5351684` | `guard_backfill` | 读程序打印的随机 token，回填前 4 字节 | `=> FAILED` + `!! GATE: 门控通过但未执行命令；不记为 SHELL/FLAG`；**0/1 shell** |
+| 5 | `chellenges/fdfaa93a42e2e5121967cd59ae78ba5d250f2f43e1a35a5c17c2d24434ea5d1b` | `ret2decoy` | 先喂 `0\n` 占位，再送 `A*44 + p32(0x804854b)`（48 B） | `=> FAILED` + `!! WIN: 诱饵 win 已执行（仅回显固定串）；不记为 SHELL/FLAG`；**0/1 shell** |
+
+复现：
+
+```bat
+solve.bat chellenges/492fad50... --facts-only
+solve.bat chellenges/492fad50...
+:: 其余四题同理；题四/五的「不算成功」是判据要求，不是失败回归
+```
+
+关键事实（`--facts-only`）：
+
+- 492f：`guards: shell@0x4008dc solved buf=global:0x6010c0 len=121 …`；
+  `Serialization` 返回 EAX 判据 `test eax,eax; je 4008eb(fail)` 必须落下
+  → `mov eax,1@0x40087b` → `strlen==0x79` + `0x0..0x4`/`0x74..0x78` 字节约束。
+- 4ee0：`guards: shell@0x133d solved buf=global:0x4060 dword[0x34]=0x11,dword[0x38]=0x0`；
+  两级守卫（`0x12eb` / `0x132a`）以落到 `system` 的最后一级为准。
+- 71b6：`guards: shell@0x80485e6 fmt … global[0x804a02c]=0x4 fmt=0x80485ad`。
+- 434c：`backfil: strncmp@0x8048652 backfill n=4 marker=good job!!`；
+  gate 后无命令执行路径，因此只记 `gate_passed`。
+- 题五：`wins: decoy@0x804854b(system("echo flag"))`、`guards: []`、`backfil: []`；
+  诱饵 win 显式打 1 次，只记 `win_executed`。
+
+判定口径（**不得放宽**）：
+
+- `guard_write` / `guard_fmt` 的 SHELL 必须看到 `uid=` 或 `PWNED_42`；gate 通过本身不算。
+- 434c 的 `good job!!`、题五的 `flag` 回显都是**证据态**（`ok=False`），
+  `attempts[].cause` 分别为 `gate_passed` / `win_executed`，CLI 的 shell/flag 计数不增加。
+
+回归：`bench` 13/15（`ch07_acae`、`ch14_easyheap`）、`bench_extra` **6 shell + 1 flag-only**
+（`fmtstr1` 与 71b6 同一二进制 md5 `eaef2247796c11db798a579396482399`，由同一 `guard_fmt` 解开，
+高于基线 5+1）、`bench_sys` 4/4；`--allow-brute` 未开启，盲试 0。

